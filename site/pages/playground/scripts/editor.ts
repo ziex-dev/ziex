@@ -415,6 +415,11 @@ function loadTemplateFiles() {
     fileManager.addFile("style.css", zxstylecss);
 }
 
+function clearSharedDataHashFromUrl() {
+    if (!location.hash.startsWith("#data=")) return;
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+}
+
 
 window.addEventListener("DOMContentLoaded", async () => {
     await client.initialize();
@@ -442,6 +447,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             if (editorView && files[initialFileIndex]) {
                 editorView.setState(files[initialFileIndex].state);
             }
+            clearSharedDataHashFromUrl();
             return;
         }
     }
