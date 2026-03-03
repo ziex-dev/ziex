@@ -1,7 +1,7 @@
 id = "zx"
 name = "Ziex"
 description = "ZX support."
-version = "0.1.0-dev.727"
+version = "0.1.0-dev.751"
 schema_version = 1
 authors = ["Nurul Huda (Apon) <me@nurulhudaapon.com>"]
 repository = "https://github.com/nurulhudaapon/ziex"

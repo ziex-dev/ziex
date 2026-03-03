@@ -1,7 +1,7 @@
 .{
     .name = .tree_sitter_mdzx,
     .fingerprint = 0xfba737bb8e0d19e0,
-    .version = "0.1.0-dev.727",
+    .version = "0.1.0-dev.751",
     .dependencies = .{
         .tree_sitter = .{
             .path = "../../vendor/zig-tree-sitter",

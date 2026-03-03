@@ -2,7 +2,7 @@
   "name": "ziex",
   "displayName": "Ziex",
   "description": "Ziex let's you write HTML within your Zig code.",
-  "version": "0.1.727",
+  "version": "0.1.751",
   "publisher": "ziex",
   "icon": "images/zx-icon.png",
   "private": true,
