@@ -88,8 +88,8 @@ module.exports = grammar(zig, {
       '</>',
     ),
 
-    // HTML tag name (e.g., div, main, button, CustomComponent)
-    zx_tag_name: _$ => /[a-zA-Z_][a-zA-Z0-9_]*/,
+    // HTML tag name (e.g., div, main, button, CustomComponent, icons.GitHub)
+    zx_tag_name: _$ => /[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*/,
 
     // HTML/ZX attributes
     zx_attribute: $ => choice(

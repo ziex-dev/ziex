@@ -1,0 +1,16 @@
+pub fn Page(allocator: zx.Allocator) zx.Component {
+    return (
+        <main @allocator={allocator}>
+            <components.Button title="Custom Button" />
+        </main>
+    );
+}
+
+const components = struct {
+    const ButtonProps = struct { title: []const u8 };
+    pub fn Button(allocator: zx.Allocator, props: ButtonProps) zx.Component {
+        return (<button @allocator={allocator}>{props.title}</button>);
+    }
+};
+
+const zx = @import("zx");

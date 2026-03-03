@@ -310,6 +310,10 @@ test "component_basic" {
     try test_transpile("component/basic");
     try test_render("component/basic", @import("./../data/component/basic.zig").Page);
 }
+test "component_namespace" {
+    try test_transpile("component/namespace");
+    try test_render("component/namespace", @import("./../data/component/namespace.zig").Page);
+}
 test "component_multiple" {
     try test_transpile("component/multiple");
     try test_render("component/multiple", @import("./../data/component/multiple.zig").Page);
@@ -540,6 +544,7 @@ fn getPageFn(comptime path: []const u8) ?fn (std.mem.Allocator) zx.Component {
         .{ "expression/optional", @import("./../data/expression/optional.zig") },
         .{ "expression/template", @import("./../data/expression/template.zig") },
         .{ "component/basic", @import("./../data/component/basic.zig") },
+        .{ "component/namespace", @import("./../data/component/namespace.zig") },
         .{ "component/multiple", @import("./../data/component/multiple.zig") },
         .{ "component/nested", @import("./../data/component/nested.zig") },
         .{ "component/children_only", @import("./../data/component/children_only.zig") },

@@ -6689,7 +6689,7 @@
     },
     "zx_tag_name": {
       "type": "PATTERN",
-      "value": "[a-zA-Z_][a-zA-Z0-9_]*"
+      "value": "[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*"
     },
     "zx_attribute": {
       "type": "CHOICE",

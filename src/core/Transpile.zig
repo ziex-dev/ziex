@@ -691,7 +691,17 @@ pub fn transpileFragment(self: *Ast, node: ts.Node, ctx: *TranspileContext, is_r
 }
 
 pub fn isCustomComponent(tag: []const u8) bool {
+    // Namespaced components (e.g., components.Button, icons.GitHub) are always custom
+    if (std.mem.indexOfScalar(u8, tag, '.') != null) return true;
     return tag.len > 0 and std.ascii.isUpper(tag[0]);
+}
+
+/// Extract the component display name from a tag (part after the last dot, or the full tag)
+fn componentDisplayName(tag: []const u8) []const u8 {
+    if (std.mem.lastIndexOfScalar(u8, tag, '.')) |dot_pos| {
+        return tag[dot_pos + 1 ..];
+    }
+    return tag;
 }
 
 /// Check if element is a <pre> tag (preserve whitespace but still process children)
@@ -883,7 +893,7 @@ fn writeCustomComponent(self: *Ast, node: ts.Node, tag: []const u8, attributes: 
         // Write _zx.client(.{ .name = "Name", .path = "path", .id = "id" }, .{ props })
         try ctx.writeM("_zx.client", node.startByte(), self);
         try ctx.write("(.{ .name = \"");
-        try ctx.write(tag);
+        try ctx.write(componentDisplayName(tag));
         try ctx.write("\", .path = \"");
         try ctx.write(full_path);
         try ctx.write("\", .id = \"");
@@ -951,9 +961,9 @@ fn writeCustomComponent(self: *Ast, node: ts.Node, tag: []const u8, attributes: 
         try ctx.write(tag);
         try ctx.write(", ");
         try ctx.write(".{ .name = \"");
-        try ctx.write(tag);
+        try ctx.write(componentDisplayName(tag));
         try ctx.write("\", .client = .{ .name = \"");
-        try ctx.write(tag);
+        try ctx.write(componentDisplayName(tag));
         // try ctx.write("\", .path = \"");
         // try ctx.write(full_path);
         try ctx.write("\", .id = \"");
@@ -1017,7 +1027,7 @@ fn writeCustomComponent(self: *Ast, node: ts.Node, tag: []const u8, attributes: 
 
         // Write options parameter first (name + builtin attributes)
         try ctx.write(".{ .name = \"");
-        try ctx.write(tag);
+        try ctx.write(componentDisplayName(tag));
         try ctx.write("\"");
         try writeComponentBuiltinOptions(self, builtin_attrs.items, ctx, true);
         try ctx.write(" }, ");

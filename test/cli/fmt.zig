@@ -199,6 +199,11 @@ test "expression_multiline_string" {
 test "component_basic" {
     try test_fmt("component/basic");
 }
+
+test "component_namespace" {
+    try test_fmt("component/namespace");
+}
+
 test "component_multiple" {
     try test_fmt("component/multiple");
 }
