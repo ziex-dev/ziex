@@ -1,0 +1,12 @@
+.{
+    .name = .jetzig_demo,
+    .version = "0.15.2",
+    .dependencies = .{
+        .jetzig = .{
+            .url = "https://github.com/jetzig-framework/jetzig/archive/22ebb15a8e07eb4564b477a8fe717c4b923a4304.tar.gz",
+            .hash = "jetzig-0.0.0-IpAgLQkZEAAARa0zfLl4zGEapqhjxpKul8JGg1pdZJbl",
+        },
+    },
+    .paths = .{""},
+    .fingerprint = 0x3877c19707eea0d4,
+}
