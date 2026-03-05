@@ -1,0 +1,42 @@
+pub fn Playground(allocator: zx.Allocator) zx.Component {
+    const is_loading = true;
+    var i: usize = 0;
+
+    return (
+        <main @allocator={allocator}>
+            <h1>Hello, Ziex!</h1>
+
+            {for (users) |user| (
+                <Profile name={user.name} age={user.age} role={user.role} />
+            )}
+
+            {if (is_loading) (<p>Loading...</p>) else (<p>Loaded</p>)}
+
+            {while (i < 5) : (i += 1) (<i>{i}</i>)}
+        </main>
+    );
+}
+
+fn Profile(ctx: *zx.ComponentCtx(User)) zx.Component {
+    return (
+        <div @allocator={ctx.allocator}>
+            <h3>{ctx.props.name}</h3>
+            <div>{ctx.props.age}</div>
+            <strong>
+                {switch (ctx.props.role) {
+                    .admin => "Admin",
+                    .member => "Member",
+                }}
+            </strong>
+        </div>
+    );
+}
+
+const User = struct { name: []const u8, age: u32, role: enum { admin, member } };
+
+const users = [_]User{
+    .{ .name = "John", .age = 20, .role = .admin },
+    .{ .name = "Jane", .age = 21, .role = .member },
+};
+
+const zx = @import("zx");

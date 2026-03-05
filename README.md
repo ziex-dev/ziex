@@ -25,51 +25,45 @@ winget install -e --id zig.zig # Windows
 ```
 [_See for other platforms →_](https://ziglang.org/learn/getting-started/)
 
-## Quick Example
 
-```tsx site/pages/examples/overview.zx
-pub fn QuickExample(allocator: zx.Allocator) zx.Component {
+## At a Glance
+
+```tsx site/pages/examples/playground.zx
+pub fn Playground(allocator: zx.Allocator) zx.Component {
     const is_loading = true;
-    const chars = "Hello, Ziex Dev!";
     var i: usize = 0;
+
     return (
         <main @allocator={allocator}>
-            <section>
-                {if (is_loading) (<h1>Loading...</h1>) else (<h1>Loaded</h1>)}
-            </section>
-        
-            <section>
-                {for (chars) |char| (<span>{char}</span>)}
-            </section>
-        
-            <section>
-                {for (users) |user| (
-                    <Profile name={user.name} age={user.age} role={user.role} />
-                )}
-            </section>
+            <h1>Hello, Ziex!</h1>
 
-            <section>
-                {while (i < 10) : (i += 1) (<p>{i}</p>)}
-            </section>
+            {for (users) |user| (
+                <Profile name={user.name} age={user.age} role={user.role} />
+            )}
+
+            {if (is_loading) (<p>Loading...</p>) else (<p>Loaded</p>)}
+
+            {while (i < 5) : (i += 1) (<i>{i}</i>)}
         </main>
     );
 }
 
-fn Profile(allocator: zx.Allocator, user: User) zx.Component {
+fn Profile(ctx: *zx.ComponentCtx(User)) zx.Component {
     return (
-        <div @allocator={allocator}>
-            <h1>{user.name}</h1>
-            <p>{user.age}</p>
-            {switch (user.role) {
-                .admin => (<p>Admin</p>),
-                .member => (<p>Member</p>),
-            }}
+        <div @allocator={ctx.allocator}>
+            <h3>{ctx.props.name}</h3>
+            <div>{ctx.props.age}</div>
+            <strong>
+                {switch (ctx.props.role) {
+                    .admin => "Admin",
+                    .member => "Member",
+                }}
+            </strong>
         </div>
     );
 }
 
-const UserRole = enum { admin, member };
-const User = struct { name: []const u8, age: u32, role: UserRole };
+const User = struct { name: []const u8, age: u32, role: enum { admin, member } };
 
 const users = [_]User{
     .{ .name = "John", .age = 20, .role = .admin },
@@ -78,90 +72,101 @@ const users = [_]User{
 
 const zx = @import("zx");
 ```
-## Feature Checklist
 
-- [x] Server Side Rendering (SSR)
-    - [x] Streaming
-- [x] Static Site Generation (SSG)
-    - [x] `options.static.params`, `options.static.getParams`
-- [ ] Client Side Rendering (CSR) via WebAssembly (_Alpha_)
-    - [x] Virtual DOM and diffing
-    - [x] Rendering only changed nodes
-    - [x] `on`event handler
-    - [x] State managment
-    - [x] Hydration
-    - [ ] Lifecycle hook
-    - [ ] Server Actions
-    - [ ] Rendering performance
-- [x] Client Side Rendering (CSR) via React
-- [ ] MDZX (Markdown + ZX) (MDX eqiuvalent)
-- [ ] Render page as markdown via .md
-- [x] Routing
-    - [x] File-system Routing
-    - [x] Search Parameters
-    - [x] Path Segments
-- [x] Components
-- [x] Control Flow
-    - [x] `if`
-    - [x] `if/else`
-    - [x] `for`
-    - [x] `switch`
-    - [x] `while`
-    - [x] nesting control flows
-    - [x] error/optional captures in `while` and `if`
-- [x] Assets
-    - [x] Copying
-    - [x] Serving
-- [ ] Assets Optimization
-    - [ ] Image
-    - [x] CSS (via plugins such as Tailwind)
-    - [x] JS/TS (via esbuild)
-    - [x] HTML (optimized by default)
-- [x] Proxy/Middleware
-- [ ] Caching (configurable)
-    - [x] Component
-    - [ ] Layout
-    - [x] Page
-    - [ ] Assets
-- [x] API Route
-    - [x] Websocket Route
-- [ ] Plugin (_Alpha_)
-    - [x] Builtin TailwindCSS and Esbuild
-    - [x] Command based plugin system
-    - [ ] Source based plugin system
-- [x] Context (configurable)
-    - [x] App
-    - [x] Layout
-    - [x] Page
-    - [x] Component
-- [x] `error.zx` for default and per-route error page
-- [x] `notfound.zx` for default and per-route error page
-- [x] CLI
-    - [x] `init` Project Template
-    - [x] `transpile` Transpile .zx files to Zig source code
-    - [x] `serve` Serve the project
-    - [x] `dev` HMR or Rebuild on Change
-    - [x] `fmt` Format the ZX source code
-    - [x] `export` Generate static site assets
-    - [x] `bundle` Bundle the ZX executable with public/assets and exe
-    - [x] `version` Show the version of the ZX CLI
-    - [x] `update` Update the version of ZX dependency
-    - [x] `upgrade` Upgrade the version of ZX CLI
-- [ ] Platform
-    - [x] Server
-    - [x] Browser
-    - [ ] Edge Runtime (Cloudflare Workers, Vercel Function, etc)
-    - [ ] iOS
-    - [ ] Android
-    - [ ] macOS
-    - [ ] Windows
+Try this in [Playground →](https://ziex.dev/playground#data=eF59U01vnDAQ_StTTtAiyGZVqSKAEuVSVa2USy8NUUTAu2sJbGQgoUv83ztjlo-y2_rCfLx5zMyze-uhSH_vlWxF7h07K7Cq9gV2AuawnRaFzNJGqgCOnXc3eg5597KspGCigT4RgCeTom6A18-FTHMu9hBBo1p2M2RfUwU8gLbmR4aZKwwPCcWaVgmwB49OWKZcwO3086ifTB3PMAM9bOKvDLMu_OKs-xD6GBiZx9PvpAK7rZmqHXin7_vydxPXg5I7XjAQacminnAemRrS_eijpUHJYvTJ1OCvunL0WQt8B_a8GgfssIq_D47neaFfxQ6womZTguUmeM70dqAebQ4hfHYgIOtTBBui5HHPdehzUzYWhD6t89Shg2s3lKTzMK6dNV0AH5eK3jed_RPHcy4LfUGxnL_-JRhyev8RbRsbRKVkVQ87RuG2axiSLnG0-9Cn4ApXN0qK_SpKp6_feJMdwJ5JSDBnHGR9vDQv8eZFMSTWHZmJ5f4DWbLyhakB-sPYF7Far3r1z5pdjjTJM7wl0gDfCpa0GW7fXMwAHp-GbPvFpZuJb2p77ZpLGQATbYlAM4cLpyY16JuZ1LwDZH18fiL-0yq8HowQmEisb_JAowOtHAPXV2gSP9qnFWn3Ulkq2LJssygbW8G6ZTPHDpO3HC-YauzEOnaJRTuw9B927V4U)!
 
-#### Editor Support
+<details>
+<summary>Explanation →</summary>
 
-- ##### [VSCode](https://marketplace.visualstudio.com/items?itemName=ziex.ziex)/[VSCode Forks](https://open-vsx.org/extension/ziex/ziex) Extension
-- ##### [Neovim](/ide/neovim/)
-- ##### [Helix](/ide/helix/)
-- ##### [Zed](/ide/zed/)
+```tsx site/pages/examples/playground.zx
+// A Zig function that returns a `zx.Component`.
+pub fn Playground(allocator: zx.Allocator) zx.Component {
+    const is_loading = true;
+    var i: usize = 0;
+
+    // HTML Block is always surrounded by parentheses and can contain HTML elements and control flow statements.
+    return (
+        // @allocator or any other attribute starting with `@` is called builtin attribute
+        // `@allocator` is used to specify the allocator for the component and its children for mem allocation.
+        <main @allocator={allocator}>
+            <h1>Hello, Ziex!</h1>
+
+            // `for` loop to iterate over `users` array and render a `Profile` component for each user.
+            // Since this is an expression the HTMLs are inside parenteses not curly braces.
+            {for (users) |user| (
+                // `Profile` component is called with props: name, age, and role.
+                // Optional props can be omitted, and the component will receive default values for them.
+                <Profile name={user.name} age={user.age} role={user.role} />
+            )}
+
+            // `if` statement works just like other control flow statements.
+            {if (is_loading) (<p>Loading...</p>) else (<p>Loaded</p>)}
+
+            // `while` loop with an optional increment statement.
+            {while (i < 5) : (i += 1) (<i>{i}</i>)}
+        </main>
+    );
+}
+
+// A Ziex Component is a Zig function that returns a `zx.Component`.
+// It can have signatures like:
+// - `pub fn ComponentName(allocator: zx.Allocator) zx.Component`
+// - `pub fn ComponentName(ctx: *zx.ComponentCtx<PropsType>) zx.Component`
+// - `pub fn ComponentName(allocator: zx.Allocator, props: PropsType) zx.Component`
+fn Profile(ctx: *zx.ComponentCtx(User)) zx.Component {
+    return (
+        <div @allocator={ctx.allocator}>
+        // Exrepssion starts with `{` and ends with `}`. You can use it to access props, call functions, any valid Zig expression
+            <h3>{ctx.props.name}</h3>
+            <div>{ctx.props.age}</div>
+            <strong>
+                {switch (ctx.props.role) {
+                    .admin => "Admin",
+                    .member => "Member",
+                }}
+            </strong>
+        </div>
+    );
+}
+
+const User = struct { name: []const u8, age: u32, role: enum { admin, member } };
+
+const users = [_]User{
+    .{ .name = "John", .age = 20, .role = .admin },
+    .{ .name = "Jane", .age = 21, .role = .member },
+};
+
+const zx = @import("zx");
+```
+
+</details>
+
+## Features
+- **JSX-like Syntax**: Write declarative UI components using familiar JSX patterns, transpiled to efficient Zig code.
+- **Full-Stack Capabilities**: Build both frontend and backend of your web application using
+- **It's Fast**: Significantly faster at SSR than many other frameworks.
+- **Compile-time Safety**: Zig's type system catches bugs at compile time. No runtime surprises, no GC.
+- **Familiar Syntax**: Familiar JSX-like syntax, or plain HTML-style markup, with full access to Zig's control flow.
+- **Server-side Rendering**: Render per request on the server for dynamic data, auth, and personalized pages for best performance and SEO.
+- **Static Site Generation**: Pre-render pages at build/export time into static HTML for fast CDN delivery.
+- **File System Routing**: Folder structure defines routes. No configs, no magic strings, just files in folders.
+- **Client-side Rendering**: Optional client-side rendering for interactive experiences when you need it.
+- **Control Flow in Zig's Syntax**: if/else, for/while, and switch all work as expected. It's just Zig.
+- **Developer Tooling**: CLI, hot reload, and editor extensions for the best DX.
+
+## Roadmap
+
+We track our feature roadmap and bugs using GitHub Issues. 
+You can view our current progress and planned features here:
+
+**[Check out the Ziex Issue Tracker →](https://github.com/ziex-dev/ziex/issues)**
+
+## Editor Support
+
+* [VSCode](https://marketplace.visualstudio.com/items?itemName=ziex.ziex)/[VSCode Forks](https://open-vsx.org/extension/ziex/ziex) Extension
+* [Neovim](/ide/neovim/)
+* [Helix](/ide/helix/)
+* [Zed](/ide/zed/)
 
 ## Community
 
@@ -169,16 +174,14 @@ const zx = @import("zx");
 - [Topic on Ziggit](https://ziex.dev/r/ziggit)
 - [Project on Zig Discord Community](https://ziex.dev/r/zig-discord) (Join Zig Discord first: https://discord.gg/zig)
 
-## Similar Projects
 
-- [Ziex VS →](https://ziex.dev/vs)
-
-## Related Projects
+## Links
 
 * [Codeberg Mirror](https://codeberg.org/ziex-dev/ziex) - ZX repository mirror on Codeberg
 * [ziex.dev](https://github.com/ziex-dev/ziex/tree/main/site) - Official documentation site of ZX made using ZX.
 * [example-blog](https://github.com/ziex-dev/example-blog) - Demo blog web application built with ZX
 * [zx-numbers-game](https://github.com/Andrew-Velox/zx-numbers-game) - ZX numbers game
+* [Comparision with other frameworks](https://ziex.dev/vs)
 
 ## Contributing
 
