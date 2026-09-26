@@ -10,8 +10,8 @@
         .ui = .{ .path = "../pkg/ui" },
         .ziex_jsbindings = .{ .path = "../pkg/ziex" },
         .zig = .{
-            .url = "git+https://github.com/ziex-dev/zig.git#cc0e300d0b487f49ad9759e33aff29d8fb654085",
-            .hash = "zig-0.0.0-Fp4XJOZoIg44LbIsnTiwLCUJLP90KphID1UYPPBPbOFX",
+            .url = "git+https://codeberg.org/ziglang/zig.git#9a810ff16e1969b7be4a3e0799741fda0077b2f7",
+            .hash = "zig-0.0.0-Fp4XJEeZPA7ySpDp3A2xfhdn4peGgchzOXcvNVydEUBl",
             .lazy = true,
         },
         .branding = .{
@@ -23,9 +23,14 @@
             .url = "git+https://github.com/nuhulabs/lunasvg.git#3a977d33d137795f04f3dd7df00298f1d1b729de",
             .hash = "lunasvg-0.0.0-9mEwLqAcAABMUDN1zRkpqiP0vtANX3cPTcomKCm-9X6w",
         },
-        .assets = .{
-            .url = "git+https://github.com/ziex-dev/ziex.dev#91dc22d8c614d64e1520ec3e013f99f971b02c82",
-            .hash = "N-V-__8AAB-z_gBcvY0oY6WVsPWF6kU9Rn6Q2b9H9LCdEzk9",
+        .zigc_wasm = .{
+            .url = "https://registry.npmjs.org/@zigc/wasm32-wasi/-/wasm32-wasi-0.17.0-dev.2307.tgz",
+            .hash = "N-V-__8AAP_KzABjnRpGl_Di5Yu8BYRZ_3wcz3UAz9ATpqUk",
+            .lazy = true,
+        },
+        .zigc_lib = .{
+            .url = "https://registry.npmjs.org/@zigc/lib/-/lib-0.17.0-dev.2307.tgz",
+            .hash = "N-V-__8AANGBIgvu47Bh2fCmD5y_iADO-_giXQXx9lVgZsLH",
             .lazy = true,
         },
     },

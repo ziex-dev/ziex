@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     const pg_step = b.step("pg", "Install playground assets");
-    const playground_zig_version = "0.17.0-dev.1456";
+    const playground_zig_version = "0.17.0-dev.2307";
 
     // --- Playground Assets --- //
     {
@@ -122,23 +122,51 @@ pub fn build(b: *std.Build) !void {
             const zig_tar_gz = run_tar.addOutputFileArg("zig.tar.gz");
             run_tar.addArg("-C");
             run_tar.addDirectoryArg(zig_dep.path("."));
-            run_tar.addArg("lib/std");
+            run_tar.addArgs(&.{ "lib/std", "lib/ubsan_rt.zig", "lib/compiler_rt.zig", "lib/compiler_rt", "lib/c.zig", "lib/fuzzer.zig", "lib/zig.h" });
 
             _ = playground_assets.addCopyFile(zig_exe.getEmittedBin(), b.fmt("zig-{s}.wasm", .{playground_zig_version}));
             _ = playground_assets.addCopyFile(lib_compiler_rt.getEmittedBin(), b.fmt("libcompiler_rt-{s}.a", .{playground_zig_version}));
             _ = playground_assets.addCopyFile(zig_tar_gz, b.fmt("zig-{s}.tar.gz", .{playground_zig_version}));
         } else {
-            const assets_dep = try b.dependencyLazy("assets", .{});
+            const zigc_wasm = try b.dependencyLazy("zigc_wasm", .{});
+            const zigc_lib = try b.dependencyLazy("zigc_lib", .{});
+
+            const lib_compiler_rt = b.addLibrary(.{
+                .linkage = .static,
+                .name = "compiler_rt",
+                .root_module = b.createModule(.{
+                    .root_source_file = zigc_lib.path("compiler_rt.zig"),
+                    .target = wasm_target,
+                    .optimize = wasm_optimize,
+                }),
+            });
+
+            const lib_stage = b.addWriteFiles();
+            _ = lib_stage.addCopyDirectory(zigc_lib.path("std"), "lib/std", .{});
+            _ = lib_stage.addCopyDirectory(zigc_lib.path("compiler_rt"), "lib/compiler_rt", .{});
+            _ = lib_stage.addCopyFile(zigc_lib.path("ubsan_rt.zig"), "lib/ubsan_rt.zig");
+            _ = lib_stage.addCopyFile(zigc_lib.path("compiler_rt.zig"), "lib/compiler_rt.zig");
+            _ = lib_stage.addCopyFile(zigc_lib.path("c.zig"), "lib/c.zig");
+            _ = lib_stage.addCopyFile(zigc_lib.path("fuzzer.zig"), "lib/fuzzer.zig");
+            _ = lib_stage.addCopyFile(zigc_lib.path("zig.h"), "lib/zig.h");
+
+            const run_tar = b.addSystemCommand(&.{ "tar", "-czf" });
+            run_tar.setName("pack zig stdlib (playground)");
+            const zig_tar_gz = run_tar.addOutputFileArg("zig.tar.gz");
+            run_tar.addArg("-C");
+            run_tar.addDirectoryArg(lib_stage.getDirectory());
+            run_tar.addArg("lib");
+
             _ = playground_assets.addCopyFile(
-                assets_dep.path(b.fmt("assets/zig-{s}.wasm", .{playground_zig_version})),
+                zigc_wasm.path("bin/zig.wasm"),
                 b.fmt("zig-{s}.wasm", .{playground_zig_version}),
             );
             _ = playground_assets.addCopyFile(
-                assets_dep.path(b.fmt("assets/libcompiler_rt-{s}.a", .{playground_zig_version})),
+                lib_compiler_rt.getEmittedBin(),
                 b.fmt("libcompiler_rt-{s}.a", .{playground_zig_version}),
             );
             _ = playground_assets.addCopyFile(
-                assets_dep.path(b.fmt("assets/zig-{s}.tar.gz", .{playground_zig_version})),
+                zig_tar_gz,
                 b.fmt("zig-{s}.tar.gz", .{playground_zig_version}),
             );
         }
