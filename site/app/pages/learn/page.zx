@@ -397,10 +397,12 @@ fn EditorSetup(allocator: zx.Allocator) zx.Component {
                     <input type="radio" id="tab-editor-neovim" name="editor-setup" class="simple-tab-radio" aria-label="Neovim" />
                     <input type="radio" id="tab-editor-helix" name="editor-setup" class="simple-tab-radio" aria-label="Helix" />
                     <input type="radio" id="tab-editor-zed" name="editor-setup" class="simple-tab-radio" aria-label="Zed" />
+                    <input type="radio" id="tab-editor-emacs" name="editor-setup" class="simple-tab-radio" aria-label="Emacs" />
                     <label for="tab-editor-vscode" class="simple-tab-label">VS Code</label>
                     <label for="tab-editor-neovim" class="simple-tab-label">Neovim</label>
                     <label for="tab-editor-helix" class="simple-tab-label">Helix</label>
                     <label for="tab-editor-zed" class="simple-tab-label">Zed</label>
+                    <label for="tab-editor-emacs" class="simple-tab-label">Emacs</label>
                 </div>
                 <div class="simple-tab-content" id="content-editor-vscode">
                     <p>Install the official ZX extension for the best development experience.</p>
@@ -430,6 +432,11 @@ fn EditorSetup(allocator: zx.Allocator) zx.Component {
                         <li>Navigate to <code>ide/zed</code> in the cloned repo</li>
                     </ol>
                     <p>See the <a href=`{zx.info.repository}/tree/main/ide/zed` target="_blank" rel="noopener noreferrer">Zed setup guide</a> for details.</p>
+                </div>
+                <div class="simple-tab-content" id="content-editor-emacs">
+                    <p>Add <code>ide/emacs</code> from a checkout to your <code>load-path</code> and run <code>M-x zx-ts-mode-install-grammar</code> once to build the grammar.</p>
+                    <p>See the <a href=`{zx.info.repository}/tree/main/ide/emacs` target="_blank" rel="noopener noreferrer">Emacs setup guide</a> for the full configuration, including the required <code>libtree-sitter</code> version.</p>
+                    <p><strong>Features:</strong> Tree-sitter syntax highlighting, indentation, imenu, and LSP support via Eglot.</p>
                 </div>
             </div>
 
