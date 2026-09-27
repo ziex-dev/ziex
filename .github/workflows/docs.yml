@@ -65,23 +65,33 @@ jobs:
   deploy_ssg:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.url.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: [build_ssg, pre_deploy]
     name: Deploy (SSG)
     outputs:
-      page_url: ${{ steps.deployment.outputs.page_url }}
+      page_url: ${{ steps.url.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Normalize page URL
+        id: url
+        run: |
+          raw='${{ steps.deployment.outputs.page_url }}'
+          url="${raw%/}"
+          case "$url" in
+            http://*) url="https://${url#http://}" ;;
+          esac
+          echo "page_url=$url" >> "$GITHUB_OUTPUT"
 
   post_deploy:
     name: Post-deploy
     needs: [deploy_ssg, deploy_edge]
     uses: ./.github/workflows/e2e.yml
     with:
-      base_url: ${{ replace(needs.deploy_ssg.outputs.page_url, 'http://', 'https://') }}
+      base_url: ${{ needs.deploy_ssg.outputs.page_url }}
       report_name: playwright-report-post-deploy
 
   build_ssr:
