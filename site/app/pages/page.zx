@@ -1,13 +1,13 @@
 const features = [_]Feature{
-    .{ .icon_fn = icons.Lightning, .title = "Fast Performance", .description = "Significantly faster at SSR than many other frameworks. Optimized for speed and low latency." },
-    .{ .icon_fn = icons.Code, .title = "Familiar Syntax", .description = "Familiar plain HTML-style markup, with full access to Zig's control flow." },
-    .{ .icon_fn = icons.Folder, .title = "File System Routing", .description = "Just files in folders to create routes." },
-    .{ .icon_fn = icons.Server, .title = "API Routes", .description = "Create API endpoints by adding route.zig files to your project." },
-    .{ .icon_fn = icons.Monitor, .title = "Hybrid Rendering", .description = "Client-side rendering for interactive experiences when you need it." },
-    .{ .icon_fn = icons.Flow, .title = "Control Flow", .description = "if/else, for/while, and switch all work as expected. It's just Zig syntax." },
-    .{ .icon_fn = icons.Wrench, .title = "Developer Tooling", .description = "CLI, hot reload, and editor extensions for the best development experience." },
-    .{ .icon_fn = icons.Rocket, .title = "Deploy Anywhere", .description = "Standalone binaries, Cloudflare, Vercel, or any edge runtime host. Build once, run anywhere." },
-    .{ .icon_fn = icons.Layers, .title = "Predictable Memory", .description = "Explicit memory management of Zig, no hidden allocations." },
+    .{ .id = "performance", .label = "Performance", .icon_fn = icons.Lightning, .title = "Fast Performance", .description = "Significantly faster at SSR than many other frameworks. Optimized for speed and low latency." },
+    .{ .id = "syntax", .label = "Syntax", .icon_fn = icons.Code, .title = "Familiar Syntax", .description = "Familiar plain HTML-style markup, with full access to Zig's control flow." },
+    .{ .id = "routing", .label = "Routing", .icon_fn = icons.Folder, .title = "File System Routing", .description = "Just files in folders to create routes." },
+    .{ .id = "api-routes", .label = "API Routes", .icon_fn = icons.Server, .title = "API Routes", .description = "Drop a route.zig beside your pages. Same file-based routing for GET, POST, and more." },
+    .{ .id = "hybrid", .label = "Hybrid", .icon_fn = icons.Monitor, .title = "Hybrid Rendering", .description = "SSR by default. Opt into client rendering where interaction matters." },
+    .{ .id = "control-flow", .label = "Control Flow", .icon_fn = icons.Flow, .title = "Control Flow", .description = "Use Zig if, for, while, and switch directly in your markup—no template DSL." },
+    .{ .id = "tooling", .label = "Tooling", .icon_fn = icons.Wrench, .title = "Developer Tooling", .description = "CLI, hot reload, and editor extensions for the best development experience." },
+    .{ .id = "deploy", .label = "Deploy", .icon_fn = icons.Rocket, .title = "Deploy Anywhere", .description = "Native binaries for servers; WASI modules for Cloudflare and Vercel. Pick the artifact that fits the host." },
+    .{ .id = "memory", .label = "Memory", .icon_fn = icons.Layers, .title = "Predictable Memory", .description = "Explicit memory management of Zig, no hidden allocations." },
 };
 
 const deployments = [_]Deployment{
@@ -270,6 +270,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
     };
 
     const feature_examples = @embedFile("./examples/feature_examples.zx");
+    const feature_canvas_json = buildFeatureCanvasJson(allocator);
 
     const control_tabs = [_]CodeTab{
         .{ .id = "control-tab-if", .label = "If", .section = "Control Flow: if", .code = "", .checked = true },
@@ -363,15 +364,32 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                         </div>
                     </div>
                 </section>
-                <section class="features">
+                <section class="features" id="features">
+                    <script type="application/json" id="feature-canvas-data" @escaping={.none}>{feature_canvas_json}</script>
                     <div class="features-header">
                         <h2 class="section-title">Features</h2>
                         <p class="section-subtitle">
                             Everything you need to build fast, safe, and deployable web applications.
                         </p>
                     </div>
-                    <div class="features-grid">
-                        {for (features) |f| (<FeatureCard icon_fn={f.icon_fn} title={f.title} description={f.description} />)}
+                    <div class="features-stack">
+                        <nav class="features-nav" aria-label="Feature list">
+                            <ul class="features-nav-list">
+                                {for (features, 0..) |f, i| (
+                                    <li class="features-nav-item" data-feature-index={std.fmt.allocPrint(allocator, "{d}", .{i}) catch unreachable}>
+                                        <button type="button" class="features-nav-btn" data-feature-target={std.fmt.allocPrint(allocator, "feature-{s}", .{f.id}) catch unreachable}>
+                                            <span class="features-nav-icon">{f.icon_fn(allocator)}</span>
+                                            <span class="features-nav-label">{f.label}</span>
+                                        </button>
+                                    </li>
+                                )}
+                            </ul>
+                        </nav>
+                        <div class="features-panels">
+                            {for (features, 0..) |f, i| (
+                                <FeaturePanel id={f.id} label={f.label} title={f.title} description={f.description} index={i} show_code={std.mem.eql(u8, f.id, "syntax")} code_source={feature_examples} code_section="Control Flow: if" />
+                            )}
+                        </div>
                     </div>
                 </section>
                 <BenchmarksSection eyebrow="" title="Performance" subtitle=`<a href='{zx.info.repository}/tree/main/bench' target='_blank' class='bench-label-link'>View benchmark →</a> <br/> Each framework runs in a Docker container limited to 2 CPU cores and 2 GB RAM.` tabs={benchmark_tabs[0..]} run_url={bench_run.url} run_date={bench_run.date} />
@@ -411,16 +429,140 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
     );
 }
 
+fn buildFeatureCanvasJson(allocator: zx.Allocator) []const u8 {
+    const PerfBar = struct {
+        label: []const u8,
+        value: f64,
+        display: []const u8,
+        self: bool = false,
+    };
+
+    const bar_count = @min(4, benchmark_ssr_rows.len);
+    var bars: [4]PerfBar = undefined;
+    for (0..bar_count) |i| {
+        bars[i] = .{
+            .label = benchmark_ssr_rows[i].label,
+            .value = benchmark_ssr_rows[i].value,
+            .display = benchmark_ssr_rows[i].display,
+            .self = benchmark_ssr_rows[i].url.len == 0,
+        };
+    }
+
+    const payload = .{
+        .performance = bars[0..bar_count],
+        .routing = [_]struct { file: []const u8, kind: []const u8, url: []const u8, note: []const u8 }{
+            .{ .file = "page.zx", .kind = "page", .url = "/", .note = "Page route" },
+            .{ .file = "layout.zx", .kind = "layout", .url = "/*", .note = "Wraps children" },
+            .{ .file = "about/page.zx", .kind = "page", .url = "/about", .note = "Nested page" },
+            .{ .file = "api/route.zig", .kind = "route", .url = "/api", .note = "API handler" },
+            .{ .file = "error.zx", .kind = "error", .url = "error", .note = "Error boundary" },
+            .{ .file = "notfound.zx", .kind = "notfound", .url = "404", .note = "Not found" },
+        },
+        .deploy = [_]struct { name: []const u8, artifact: []const u8 }{
+            .{ .name = "Cloudflare", .artifact = "wasi" },
+            .{ .name = "Vercel", .artifact = "wasi" },
+            .{ .name = "Standalone", .artifact = "binary" },
+            .{ .name = "Any Server", .artifact = "binary" },
+        },
+    };
+
+    const raw = std.json.Stringify.valueAlloc(allocator, payload, .{}) catch "{}";
+    var out = std.array_list.Managed(u8).init(allocator);
+    defer out.deinit();
+    for (raw) |c| {
+        if (c == '<') {
+            out.appendSlice("\\u003c") catch unreachable;
+        } else {
+            out.append(c) catch unreachable;
+        }
+    }
+    return allocator.dupe(u8, out.items) catch raw;
+}
+
 const Deployment = struct { icon_fn: *const fn (zx.Allocator) zx.Component, title: []const u8, description: []const u8 };
-const Feature = struct { icon_fn: *const fn (zx.Allocator) zx.Component, title: []const u8, description: []const u8 };
-fn FeatureCard(allocator: zx.Allocator, props: Feature) zx.Component {
-    const IconComponent = props.icon_fn(allocator);
+const Feature = struct {
+    id: []const u8,
+    label: []const u8,
+    icon_fn: *const fn (zx.Allocator) zx.Component,
+    title: []const u8,
+    description: []const u8,
+};
+const FeaturePanelProps = struct {
+    id: []const u8,
+    label: []const u8,
+    title: []const u8,
+    description: []const u8,
+    index: usize,
+    show_code: bool = false,
+    code_source: []const u8 = "",
+    code_section: []const u8 = "",
+};
+fn FeaturePanel(allocator: zx.Allocator, props: FeaturePanelProps) zx.Component {
+    const layer_id = std.fmt.allocPrint(allocator, "feature-{s}", .{props.id}) catch unreachable;
+    const index_str = std.fmt.allocPrint(allocator, "{d}", .{props.index}) catch unreachable;
+
+    if (props.show_code) {
+        const code_html = resolveCode(allocator, props.code_source, props.code_section, "");
+        if (props.index == 0) {
+            return (
+                <article @allocator={allocator} class="feature-panel" id={layer_id} data-feature={props.id} data-feature-index={index_str}>
+                    <div class="feature-panel-copy">
+                        <div class="feature-panel-copy-main">
+                            <span class="feature-panel-label">{props.label}</span>
+                            <h3 class="feature-panel-title">{props.title}</h3>
+                            <p class="feature-panel-description">{props.description}</p>
+                        </div>
+                    </div>
+                    <div class="feature-panel-visual feature-panel-visual--code" aria-hidden="true">
+                        <pre class="feature-syntax"><code class="hljs" @escaping={.none}>{code_html}</code></pre>
+                    </div>
+                </article>
+            );
+        }
+        return (
+            <article @allocator={allocator} class="feature-panel feature-panel--bordered" id={layer_id} data-feature={props.id} data-feature-index={index_str}>
+                <div class="feature-panel-copy">
+                    <div class="feature-panel-copy-main">
+                        <span class="feature-panel-label">{props.label}</span>
+                        <h3 class="feature-panel-title">{props.title}</h3>
+                        <p class="feature-panel-description">{props.description}</p>
+                    </div>
+                </div>
+                <div class="feature-panel-visual feature-panel-visual--code" aria-hidden="true">
+                    <pre class="feature-syntax"><code class="hljs" @escaping={.none}>{code_html}</code></pre>
+                </div>
+            </article>
+        );
+    }
+    if (props.index == 0) {
+        return (
+            <article @allocator={allocator} class="feature-panel" id={layer_id} data-feature={props.id} data-feature-index={index_str}>
+                <div class="feature-panel-copy">
+                    <div class="feature-panel-copy-main">
+                        <span class="feature-panel-label">{props.label}</span>
+                        <h3 class="feature-panel-title">{props.title}</h3>
+                        <p class="feature-panel-description">{props.description}</p>
+                    </div>
+                </div>
+                <div class="feature-panel-visual" aria-hidden="true">
+                    <canvas class="feature-canvas" data-feature={props.id}></canvas>
+                </div>
+            </article>
+        );
+    }
     return (
-        <div @allocator={allocator} class="feature-card">
-            <div class="feature-icon">{IconComponent}</div>
-            <h3 class="feature-title">{props.title}</h3>
-            <p class="feature-description">{props.description}</p>
-        </div>
+        <article @allocator={allocator} class="feature-panel feature-panel--bordered" id={layer_id} data-feature={props.id} data-feature-index={index_str}>
+            <div class="feature-panel-copy">
+                <div class="feature-panel-copy-main">
+                    <span class="feature-panel-label">{props.label}</span>
+                    <h3 class="feature-panel-title">{props.title}</h3>
+                    <p class="feature-panel-description">{props.description}</p>
+                </div>
+            </div>
+            <div class="feature-panel-visual" aria-hidden="true">
+                <canvas class="feature-canvas" data-feature={props.id}></canvas>
+            </div>
+        </article>
     );
 }
 

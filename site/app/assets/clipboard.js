@@ -51,6 +51,8 @@ function setupCopyButtons() {
     if (!preElement || preElement.querySelector('.copy-button')) return;
     if (preElement.closest('.feature-examples')) return;
     if (preElement.closest('.code-section')) return;
+    if (preElement.closest('.feature-panel-visual')) return;
+    if (preElement.classList.contains('feature-syntax')) return;
 
     const copyButton = document.createElement('button');
     copyButton.className = 'copy-button';
