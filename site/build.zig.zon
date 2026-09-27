@@ -9,19 +9,19 @@
         .tailwindcss = .{ .path = "../pkg/plugin-tailwindcss" },
         .ui = .{ .path = "../pkg/ui" },
         .ziex_jsbindings = .{ .path = "../pkg/ziex" },
-        .zig = .{
-            .url = "git+https://codeberg.org/ziglang/zig.git#9a810ff16e1969b7be4a3e0799741fda0077b2f7",
-            .hash = "zig-0.0.0-Fp4XJEeZPA7ySpDp3A2xfhdn4peGgchzOXcvNVydEUBl",
-            .lazy = true,
-        },
         .branding = .{
             .url = "git+https://github.com/ziex-dev/branding.git#04a22af76e2198d06c429e4025f960f76d93bf9f",
             .hash = "N-V-__8AACJRHgCH8MXnlovqXGaz3lrGQkWP6HqE81M04zkV",
         },
         .lunasvg = .{
-            .lazy = true,
             .url = "git+https://github.com/nuhulabs/lunasvg.git#3a977d33d137795f04f3dd7df00298f1d1b729de",
             .hash = "lunasvg-0.0.0-9mEwLqAcAABMUDN1zRkpqiP0vtANX3cPTcomKCm-9X6w",
+            .lazy = true,
+        },
+        .zig = .{
+            .url = "git+https://codeberg.org/ziglang/zig.git#3f6a02acdda41190eab7d57a9f037df9d4853631",
+            .hash = "zig-0.0.0-Fp4XJGLgOg6H0Vfv5rGBIFiTdt_OclrSeOrf8HevP76N",
+            .lazy = true,
         },
         .zigc_wasm = .{
             .url = "https://registry.npmjs.org/@zigc/wasm32-wasi/-/wasm32-wasi-0.17.0-dev.2307.tgz",
