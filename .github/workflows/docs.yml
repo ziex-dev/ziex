@@ -81,7 +81,7 @@ jobs:
     needs: [deploy_ssg, deploy_edge]
     uses: ./.github/workflows/e2e.yml
     with:
-      base_url: ${{ needs.deploy_ssg.outputs.page_url }}
+      base_url: ${{ replace(needs.deploy_ssg.outputs.page_url, 'http://', 'https://') }}
       report_name: playwright-report-post-deploy
 
   build_ssr:
@@ -117,7 +117,7 @@ jobs:
   deploy_ssr:
     environment:
       name: ssr
-      url: https://ssr.ziex.dev
+      url: https://ziex.dev
     # runs-on: self-hosted
     runs-on: ubuntu-latest
     name: Deploy (SSR)
