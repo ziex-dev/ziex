@@ -422,9 +422,9 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                 </div>
                 <p>Copyright © {current_year} {" ziex.dev"}</p>
             </footer>
-            <script src=`/assets/clipboard.js?v={zx.info.version}` defer="true"></script>
-            <script src=`/assets/runner.js?v={zx.info.version}` defer="true"></script>
-            <script src=`/assets/home.js?v={zx.info.version}` defer="true"></script>
+            <script src=`/assets/clipboard.js?v={util.buildId(ctx.io, ctx.arena)}` defer="true"></script>
+            <script src=`/assets/runner.js?v={util.buildId(ctx.io, ctx.arena)}` defer="true"></script>
+            <script src=`/assets/home.js?v={util.buildId(ctx.io, ctx.arena)}` defer="true"></script>
         </div>
     );
 }
@@ -458,11 +458,58 @@ fn buildFeatureCanvasJson(allocator: zx.Allocator) []const u8 {
             .{ .file = "error.zx", .kind = "error", .url = "error", .note = "Error boundary" },
             .{ .file = "notfound.zx", .kind = "notfound", .url = "404", .note = "Not found" },
         },
+        .api = .{
+            .file = "pages/api/route.zig",
+            .handler = "→ handler",
+            .methods = [_]struct { method: []const u8, path: []const u8, status: []const u8, body: []const u8 }{
+                .{ .method = "GET", .path = "/api/users", .status = "200", .body = "[{ id, name }]" },
+                .{ .method = "POST", .path = "/api/users", .status = "201", .body = "{ created: true }" },
+                .{ .method = "DELETE", .path = "/api/users/1", .status = "204", .body = "" },
+            },
+        },
+        .control_flow = .{
+            .eyebrow = "zig in markup",
+            .scenes = [_]struct { id: []const u8, snippet: []const u8 }{
+                .{ .id = "if", .snippet = "{if (ok) ( <Ok/> ) else ( <Err/> )}" },
+                .{ .id = "for", .snippet = "{for (items) |item| ( <Row/> )}" },
+                .{ .id = "switch", .snippet = "{switch (role) { .admin => ... }}" },
+            },
+            .if_arms = [_][]const u8{ "<Ok/>", "<Err/>" },
+            .for_item = "<Row/>",
+            .for_count = 3,
+            .switch_title = "switch (role)",
+            .switch_arms = [_][]const u8{ ".admin", ".member", "else" },
+        },
+        .hybrid = .{
+            .server_label = "server",
+            .client_label = "client",
+            .server_lines = [_][]const u8{ "SSR", "<Page/>", "default" },
+            .hydrate_lines = [_][]const u8{ "hydrate", "attach listeners" },
+            .rendering_hint = "@rendering",
+            .captions = [_][]const u8{
+                "Start on the server, send HTML",
+                "Then bring it to life in the browser",
+                "Go interactive only where it matters",
+            },
+        },
+        .tooling = .{
+            .command = "$ zig build dev",
+            .subtitle = "hot reload  ·  CLI  ·  editor extensions",
+        },
         .deploy = [_]struct { name: []const u8, artifact: []const u8 }{
             .{ .name = "Cloudflare", .artifact = "wasi" },
             .{ .name = "Vercel", .artifact = "wasi" },
             .{ .name = "Standalone", .artifact = "binary" },
             .{ .name = "Any Server", .artifact = "binary" },
+        },
+        .deploy_captions = .{
+            .wasi = "WASI for edge hosts",
+            .binary = "native binary for servers",
+        },
+        .memory = .{
+            .cols = 5,
+            .rows = 3,
+            .caption = "explicit allocations",
         },
     };
 

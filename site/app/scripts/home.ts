@@ -9,14 +9,77 @@ const CYAN = "#7dd3fc";
 
 type PerfBar = { label: string; value: number; display: string; self?: boolean };
 type RoutingScene = { file: string; kind: string; url: string; note: string };
-type DeployTarget = { name: string; artifact: "wasi" | "binary" };
+type DeployTarget = { name: string; artifact: "wasi" | "binary" | string };
+type ApiMethod = { method: string; path: string; status: string; body: string };
+type ControlScene = { id: string; snippet: string };
 type FeatureCanvasData = {
   performance: PerfBar[];
   routing: RoutingScene[];
   deploy: DeployTarget[];
+  api: { file: string; handler: string; methods: ApiMethod[] };
+  control_flow: {
+    eyebrow: string;
+    scenes: ControlScene[];
+    if_arms: string[];
+    for_item: string;
+    for_count: number;
+    switch_title: string;
+    switch_arms: string[];
+  };
+  hybrid: {
+    server_label: string;
+    client_label: string;
+    server_lines: string[];
+    hydrate_lines: string[];
+    rendering_hint: string;
+    captions: string[];
+  };
+  tooling: { command: string; subtitle: string };
+  deploy_captions: { wasi: string; binary: string };
+  memory: { cols: number; rows: number; caption: string };
 };
 
 type DrawFn = (ctx: CanvasRenderingContext2D, w: number, h: number, t: number, data: FeatureCanvasData) => void;
+
+function emptyCanvasData(): FeatureCanvasData {
+  return {
+    performance: [],
+    routing: [],
+    deploy: [],
+    api: { file: "", handler: "", methods: [] },
+    control_flow: {
+      eyebrow: "",
+      scenes: [],
+      if_arms: [],
+      for_item: "",
+      for_count: 0,
+      switch_title: "",
+      switch_arms: [],
+    },
+    hybrid: {
+      server_label: "server",
+      client_label: "client",
+      server_lines: [],
+      hydrate_lines: [],
+      rendering_hint: "",
+      captions: ["", "", ""],
+    },
+    tooling: { command: "", subtitle: "" },
+    deploy_captions: { wasi: "", binary: "" },
+    memory: { cols: 5, rows: 3, caption: "" },
+  };
+}
+
+function loadCanvasData(): FeatureCanvasData {
+  const empty = emptyCanvasData();
+  const el = document.getElementById("feature-canvas-data");
+  if (!el?.textContent) return empty;
+  try {
+    return { ...empty, ...JSON.parse(el.textContent) } as FeatureCanvasData;
+  } catch {
+    return empty;
+  }
+}
 
 function getVisibleCodePanel(container: Element): HTMLElement | null {
   const panels = Array.from(container.querySelectorAll<HTMLElement>(".code-example-panel"));
@@ -66,39 +129,6 @@ function setupHomeCodeExampleButtons() {
       window.open(url, "_blank", "noopener,noreferrer");
     });
   });
-}
-
-function loadCanvasData(): FeatureCanvasData {
-  const fallback: FeatureCanvasData = {
-    performance: [
-      { label: "Ziex", value: 35732, display: "35k", self: true },
-      { label: "Leptos", value: 8778, display: "8.8k" },
-      { label: "Dioxus", value: 5622, display: "5.6k" },
-      { label: "Jetzig", value: 2378, display: "2.4k" },
-    ],
-    routing: [
-      { file: "page.zx", kind: "page", url: "/", note: "Page route" },
-      { file: "layout.zx", kind: "layout", url: "/*", note: "Wraps children" },
-      { file: "about/page.zx", kind: "page", url: "/about", note: "Nested page" },
-      { file: "api/route.zig", kind: "route", url: "/api", note: "API handler" },
-      { file: "error.zx", kind: "error", url: "error", note: "Error boundary" },
-      { file: "notfound.zx", kind: "notfound", url: "404", note: "Not found" },
-    ],
-    deploy: [
-      { name: "Cloudflare", artifact: "wasi" },
-      { name: "Vercel", artifact: "wasi" },
-      { name: "Standalone", artifact: "binary" },
-      { name: "Any Server", artifact: "binary" },
-    ],
-  };
-
-  const el = document.getElementById("feature-canvas-data");
-  if (!el?.textContent) return fallback;
-  try {
-    return { ...fallback, ...JSON.parse(el.textContent) } as FeatureCanvasData;
-  } catch {
-    return fallback;
-  }
 }
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
@@ -282,13 +312,10 @@ function drawRouting(ctx: CanvasRenderingContext2D, w: number, h: number, t: num
   ctx.globalAlpha = 1;
 }
 
-function drawApiRoutes(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+function drawApiRoutes(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, data: FeatureCanvasData) {
   clear(ctx, w, h);
-  const methods = [
-    { method: "GET", path: "/api/users", status: "200", body: "[{ id, name }]" },
-    { method: "POST", path: "/api/users", status: "201", body: "{ created: true }" },
-    { method: "DELETE", path: "/api/users/1", status: "204", body: "" },
-  ] as const;
+  const methods = data.api.methods;
+  if (methods.length === 0) return;
   const idx = Math.floor(t / 2.6) % methods.length;
   const local = t % 2.6;
   const fade = Math.min(1, local / 0.22);
@@ -302,7 +329,7 @@ function drawApiRoutes(ctx: CanvasRenderingContext2D, w: number, h: number, t: n
   ctx.globalAlpha = fade;
   ctx.fillStyle = WHITE_SOFT;
   ctx.font = `11px ${MONO}`;
-  ctx.fillText("pages/api/route.zig", ox, oy + 14);
+  ctx.fillText(data.api.file, ox, oy + 14);
 
   frame(ctx, ox, oy + 28, cardW, 48, GREEN, { accent: true, corners: true });
 
@@ -314,7 +341,7 @@ function drawApiRoutes(ctx: CanvasRenderingContext2D, w: number, h: number, t: n
   ctx.fillText(req.path, ox + 16 + ctx.measureText(req.method).width + 14, oy + 48);
   ctx.fillStyle = WHITE_DIM;
   ctx.font = `11px ${MONO}`;
-  ctx.fillText("→ handler", ox + 16, oy + 66);
+  ctx.fillText(data.api.handler, ox + 16, oy + 66);
 
   const p = Math.min(1, Math.max(0, (local - 0.35) / 1.1));
   const trackY = oy + 96;
@@ -344,13 +371,11 @@ function drawApiRoutes(ctx: CanvasRenderingContext2D, w: number, h: number, t: n
   ctx.globalAlpha = 1;
 }
 
-function drawControlFlow(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+function drawControlFlow(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, data: FeatureCanvasData) {
   clear(ctx, w, h);
-  const scenes = [
-    { id: "if", snippet: "{if (ok) ( <Ok/> ) else ( <Err/> )}" },
-    { id: "for", snippet: "{for (items) |item| ( <Row/> )}" },
-    { id: "switch", snippet: "{switch (role) { .admin => ... }}" },
-  ] as const;
+  const cf = data.control_flow;
+  const scenes = cf.scenes;
+  if (scenes.length === 0) return;
   const idx = Math.floor(t / 3.0) % scenes.length;
   const local = t % 3.0;
   const kind = scenes[idx].id;
@@ -361,7 +386,7 @@ function drawControlFlow(ctx: CanvasRenderingContext2D, w: number, h: number, t:
   ctx.fillStyle = WHITE_SOFT;
   ctx.font = `11px ${MONO}`;
   ctx.textAlign = "center";
-  ctx.fillText("zig in markup", cx, cy - 128);
+  ctx.fillText(cf.eyebrow, cx, cy - 128);
 
   const tabLabels = scenes.map((s) => s.id);
   ctx.font = `12px ${MONO}`;
@@ -408,11 +433,10 @@ function drawControlFlow(ctx: CanvasRenderingContext2D, w: number, h: number, t:
     ctx.lineTo(cx + 100, cy + 40);
     ctx.stroke();
 
-    const drawArm = (x: number, label: string, on: boolean) => {
-      chip(ctx, x, cy + 40, label, on, GREEN);
-    };
-    drawArm(cx - 100, "<Ok/>", branch);
-    drawArm(cx + 100, "<Err/>", !branch);
+    const leftArm = cf.if_arms[0] || "<Ok/>";
+    const rightArm = cf.if_arms[1] || "<Err/>";
+    chip(ctx, cx - 100, cy + 40, leftArm, branch, GREEN);
+    chip(ctx, cx + 100, cy + 40, rightArm, !branch, GREEN);
   } else if (kind === "for") {
     ctx.strokeStyle = GREEN;
     ctx.lineWidth = 1.5;
@@ -428,25 +452,25 @@ function drawControlFlow(ctx: CanvasRenderingContext2D, w: number, h: number, t:
     ctx.font = `12px ${MONO}`;
     ctx.fillText("for", cx, cy - 8);
 
-    const items = ["item", "item", "item"];
-    const activeItem = Math.floor(local * 1.6) % items.length;
-    const rowLabel = "<Row/>";
+    const count = Math.max(1, cf.for_count || 3);
+    const rowLabel = cf.for_item || "<Row/>";
     ctx.font = `12px ${MONO}`;
     const rowTw = ctx.measureText(rowLabel).width;
     const rowBw = Math.max(rowTw + 36, 72);
     const rowGap = 12;
-    const rowSpan = items.length * rowBw + (items.length - 1) * rowGap;
-    items.forEach((_, i) => {
+    const rowSpan = count * rowBw + (count - 1) * rowGap;
+    const activeItem = Math.floor(local * 1.6) % count;
+    for (let i = 0; i < count; i++) {
       const x = cx - rowSpan / 2 + i * (rowBw + rowGap) + rowBw / 2;
       chip(ctx, x, cy + 30, rowLabel, i === activeItem, GREEN);
-    });
+    }
   } else {
     ctx.fillStyle = WHITE;
     ctx.font = `12px ${MONO}`;
-    ctx.fillText("switch (role)", cx, cy - 44);
+    ctx.fillText(cf.switch_title, cx, cy - 44);
 
-    const arms = [".admin", ".member", "else"];
-    const activeArm = Math.floor(local * 1.1) % arms.length;
+    const arms = cf.switch_arms;
+    const activeArm = Math.floor(local * 1.1) % Math.max(arms.length, 1);
     arms.forEach((label, i) => {
       const x = cx - 96 + i * 96;
       ctx.strokeStyle = i === activeArm ? GREEN_DIM : WHITE_SOFT;
@@ -467,9 +491,9 @@ function drawControlFlow(ctx: CanvasRenderingContext2D, w: number, h: number, t:
   ctx.textAlign = "left";
 }
 
-function drawHybrid(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+function drawHybrid(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, data: FeatureCanvasData) {
   clear(ctx, w, h);
-  // Three beats: SSR → hydrate → client island
+  const hy = data.hybrid;
   const beat = Math.floor(t / 2.4) % 3;
   const local = t % 2.4;
   const fade = Math.min(1, local / 0.2);
@@ -482,6 +506,7 @@ function drawHybrid(ctx: CanvasRenderingContext2D, w: number, h: number, t: numb
   const left = ox;
   const right = ox + cardW + gap;
   const midY = oy + cardH / 2;
+  const captions = hy.captions.length >= 3 ? hy.captions : ["", "", ""];
 
   const serverOn = beat === 0;
   const clientOn = beat >= 1;
@@ -493,14 +518,14 @@ function drawHybrid(ctx: CanvasRenderingContext2D, w: number, h: number, t: numb
   });
   ctx.fillStyle = serverOn ? GREEN : WHITE_SOFT;
   ctx.font = `11px ${MONO}`;
-  ctx.fillText("server", left + 14, oy + 22);
+  ctx.fillText(hy.server_label, left + 14, oy + 22);
   ctx.fillStyle = WHITE_DIM;
   ctx.font = `12px ${MONO}`;
-  ctx.fillText("SSR", left + 14, oy + 50);
-  ctx.fillText("<Page/>", left + 14, oy + 72);
+  if (hy.server_lines[0]) ctx.fillText(hy.server_lines[0], left + 14, oy + 50);
+  if (hy.server_lines[1]) ctx.fillText(hy.server_lines[1], left + 14, oy + 72);
   ctx.fillStyle = WHITE_SOFT;
   ctx.font = `10px ${MONO}`;
-  ctx.fillText("default", left + 14, oy + 96);
+  if (hy.server_lines[2]) ctx.fillText(hy.server_lines[2], left + 14, oy + 96);
 
   frame(ctx, right, oy, cardW, cardH, clientOn ? CYAN : WHITE_SOFT, {
     accent: clientOn && beat === 2,
@@ -508,7 +533,7 @@ function drawHybrid(ctx: CanvasRenderingContext2D, w: number, h: number, t: numb
   });
   ctx.fillStyle = clientOn ? CYAN : WHITE_SOFT;
   ctx.font = `11px ${MONO}`;
-  ctx.fillText("client", right + 14, oy + 22);
+  ctx.fillText(hy.client_label, right + 14, oy + 22);
 
   ctx.strokeStyle = WHITE_SOFT;
   ctx.lineWidth = 1;
@@ -529,7 +554,7 @@ function drawHybrid(ctx: CanvasRenderingContext2D, w: number, h: number, t: numb
 
     ctx.fillStyle = WHITE_DIM;
     ctx.font = `12px ${SANS}`;
-    ctx.fillText("Start on the server, send HTML", w / 2, oy + cardH + 36);
+    ctx.fillText(captions[0], w / 2, oy + cardH + 36);
   } else if (beat === 1) {
     const p = Math.min(1, local / 1.2);
     ctx.strokeStyle = GREEN_DIM;
@@ -543,15 +568,15 @@ function drawHybrid(ctx: CanvasRenderingContext2D, w: number, h: number, t: numb
     ctx.fillStyle = WHITE;
     ctx.font = `12px ${MONO}`;
     ctx.textAlign = "left";
-    ctx.fillText("hydrate", right + 14, oy + 56);
+    if (hy.hydrate_lines[0]) ctx.fillText(hy.hydrate_lines[0], right + 14, oy + 56);
     ctx.fillStyle = GREEN_DIM;
     ctx.font = `10px ${MONO}`;
-    ctx.fillText("attach listeners", right + 14, oy + 76);
+    if (hy.hydrate_lines[1]) ctx.fillText(hy.hydrate_lines[1], right + 14, oy + 76);
 
     ctx.fillStyle = WHITE_DIM;
     ctx.font = `12px ${SANS}`;
     ctx.textAlign = "center";
-    ctx.fillText("Then bring it to life in the browser", w / 2, oy + cardH + 36);
+    ctx.fillText(captions[1], w / 2, oy + cardH + 36);
   } else {
     const count = Math.floor(local * 1.8) % 6;
     frame(ctx, right + 14, oy + 42, cardW - 28, 36, CYAN, { accent: true, corners: false });
@@ -563,12 +588,12 @@ function drawHybrid(ctx: CanvasRenderingContext2D, w: number, h: number, t: numb
     ctx.fillStyle = WHITE_SOFT;
     ctx.font = `10px ${MONO}`;
     ctx.textAlign = "left";
-    ctx.fillText("@rendering", left + 14, oy + 96);
+    ctx.fillText(hy.rendering_hint, left + 14, oy + 96);
 
     ctx.fillStyle = WHITE_DIM;
     ctx.font = `12px ${SANS}`;
     ctx.textAlign = "center";
-    ctx.fillText("Go interactive only where it matters", w / 2, oy + cardH + 36);
+    ctx.fillText(captions[2], w / 2, oy + cardH + 36);
   }
 
   ctx.globalAlpha = 1;
@@ -685,17 +710,18 @@ function drawDeploy(ctx: CanvasRenderingContext2D, w: number, h: number, t: numb
   ctx.font = `12px ${SANS}`;
   ctx.textAlign = "center";
   ctx.fillText(
-    isWasi ? "WASI for edge hosts" : "native binary for servers",
+    isWasi ? data.deploy_captions.wasi : data.deploy_captions.binary,
     cx,
     cy + orbitRy + 42,
   );
   ctx.textAlign = "left";
 }
 
-function drawTooling(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+function drawTooling(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, data: FeatureCanvasData) {
   clear(ctx, w, h);
-  const line1 = "$ zig build dev";
-  const line2 = "hot reload  ·  CLI  ·  editor extensions";
+  const line1 = data.tooling.command;
+  const line2 = data.tooling.subtitle;
+  if (!line1) return;
   ctx.font = `15px ${MONO}`;
   const w1 = ctx.measureText(line1).width;
   ctx.font = `13px ${SANS}`;
@@ -715,10 +741,10 @@ function drawTooling(ctx: CanvasRenderingContext2D, w: number, h: number, t: num
   ctx.fillText(line2, ox, oy + 36);
 }
 
-function drawMemory(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+function drawMemory(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, data: FeatureCanvasData) {
   clear(ctx, w, h);
-  const cols = 5;
-  const rows = 3;
+  const cols = data.memory.cols || 5;
+  const rows = data.memory.rows || 3;
   const cell = Math.min(36, w * 0.08);
   const gap = 10;
   const gridW = cols * cell + (cols - 1) * gap;
@@ -746,19 +772,19 @@ function drawMemory(ctx: CanvasRenderingContext2D, w: number, h: number, t: numb
   ctx.fillStyle = WHITE_DIM;
   ctx.font = `12px ${SANS}`;
   ctx.textAlign = "center";
-  ctx.fillText("explicit allocations", w / 2, oy + gridH + 24);
+  ctx.fillText(data.memory.caption, w / 2, oy + gridH + 24);
   ctx.textAlign = "left";
 }
 
 const FEATURE_DRAWERS: Record<string, DrawFn> = {
   performance: drawPerformance,
   routing: drawRouting,
-  "api-routes": (ctx, w, h, t) => drawApiRoutes(ctx, w, h, t),
-  hybrid: (ctx, w, h, t) => drawHybrid(ctx, w, h, t),
-  "control-flow": (ctx, w, h, t) => drawControlFlow(ctx, w, h, t),
-  tooling: (ctx, w, h, t) => drawTooling(ctx, w, h, t),
+  "api-routes": drawApiRoutes,
+  hybrid: drawHybrid,
+  "control-flow": drawControlFlow,
+  tooling: drawTooling,
   deploy: drawDeploy,
-  memory: (ctx, w, h, t) => drawMemory(ctx, w, h, t),
+  memory: drawMemory,
 };
 
 function setupFeatureCanvases() {
