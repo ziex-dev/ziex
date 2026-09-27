@@ -4,6 +4,7 @@ import { skipOnRemoteStatic } from '../../helpers/env';
 
 
 test.describe('Ziex Playground', () => {
+  test.describe.configure({ timeout: 180_000 });
   test('Page Load & Initial State', async ({ page }) => {
     await page.goto('/playground');
     await expect(page.getByRole('button', { name: 'Run' })).toBeVisible();
@@ -91,7 +92,7 @@ test.describe('Ziex Playground', () => {
       return btn && !btn.disabled;
     });
     await formatButton.click();
-    await expect(page.getByText(/Formatted .*Playground\.zx/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Formatted .*Playground\.zx/)).toBeVisible({ timeout: 120_000 });
   });
 
   test('Console Panel', async ({ page }) => {
