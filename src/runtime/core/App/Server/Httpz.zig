@@ -962,32 +962,13 @@ fn Handler(comptime AppCtxType: type) type {
                 if (req.route_data) |rd| {
                     const route: *const ServerApp.Route = @ptrCast(@alignCast(rd));
                     if (req.header("x-zx-static-data")) |_| {
-                        const static_opts = blk: {
-                            if (route.page_opts) |page_opts| {
-                                if (page_opts.static) |s| break :blk s;
-                            }
-                            if (route.route_opts) |route_opts| {
-                                if (route_opts.static) |s| break :blk s;
-                            }
-                            break :blk null;
-                        };
-                        if (static_opts) |static_fn| {
-                            const params = try self.resolveStaticParams(req.arena, static_fn);
+                        if (try route.resolveStaticParams(req.arena, self.io)) |params| {
                             try std.zon.stringify.serialize(params, .{ .whitespace = true }, res.writer());
                         }
                         return;
                     }
 
-                    const is_dynamic = blk: {
-                        if (route.page_opts) |page_opts| {
-                            if (page_opts.dynamic) break :blk true;
-                        }
-                        if (route.route_opts) |route_opts| {
-                            if (route_opts.dynamic) break :blk true;
-                        }
-                        break :blk false;
-                    };
-                    if (is_dynamic) {
+                    if (route.isDynamic()) {
                         res.header("x-zx-dynamic", "true");
                         try std.zon.stringify.serialize(.{ .dynamic = true }, .{ .whitespace = true }, res.writer());
                         return;
@@ -1118,12 +1099,6 @@ fn Handler(comptime AppCtxType: type) type {
                 },
                 .continue_render => return false,
             }
-        }
-
-        fn resolveStaticParams(self: *Self, allocator_arg: Allocator, static_fn: zx.StaticFn) ![]const []const zx.StaticParam {
-            var ctx = zx.StaticContext.init(allocator_arg, self.io);
-            try static_fn(&ctx);
-            return try ctx.params.entries.toOwnedSlice(allocator_arg);
         }
 
         /// Render a page with streaming SSR support

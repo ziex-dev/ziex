@@ -26,6 +26,7 @@ const server_app = server_meta.server_app;
 
 const base_path = app_opts.app_base_path;
 const is_dev = App.mode == .dev;
+const is_export = App.mode == .@"export";
 
 pub const server_token = "ziex/std";
 
@@ -353,6 +354,42 @@ pub fn Server(comptime H: type) type {
                 .{ ._internal = .{ .http = http, .attached = true } }
             else
                 .{};
+
+            // Export-only early outs (parity with Httpz backend)
+            if (comptime is_export) {
+                if (http.reqHeaderHas("x-zx-export-notfound")) {
+                    if (core_handler.prepareNotFound(http, pathname, req_obj, res_obj, arena, self.io, matched)) |cmp| {
+                        var page = cmp;
+                        if (http.resHeaderGet("Content-Type") == null) backend.setContentTypeStr("text/html");
+                        try self.streamHtmlDocument(arena, request, &backend, &page);
+                    } else {
+                        backend.status = 404;
+                        try self.respondBody(arena, request, &backend, "404 Not Found");
+                    }
+                    return true;
+                }
+
+                if (matched) |route| {
+                    if (http.reqHeaderHas("x-zx-static-data")) {
+                        if (try route.resolveStaticParams(arena, self.io)) |params| {
+                            var aw: std.Io.Writer.Allocating = .init(arena);
+                            try std.zon.stringify.serialize(params, .{ .whitespace = true }, &aw.writer);
+                            try self.respondBody(arena, request, &backend, aw.written());
+                        } else {
+                            try self.respondBody(arena, request, &backend, "");
+                        }
+                        return true;
+                    }
+
+                    if (route.isDynamic()) {
+                        http.resHeaderSet("x-zx-dynamic", "true");
+                        var aw: std.Io.Writer.Allocating = .init(arena);
+                        try std.zon.stringify.serialize(.{ .dynamic = true }, .{ .whitespace = true }, &aw.writer);
+                        try self.respondBody(arena, request, &backend, aw.written());
+                        return true;
+                    }
+                }
+            }
 
             const result = try Router.handle(.{ .is_dev = is_dev }, .{
                 .http = http,

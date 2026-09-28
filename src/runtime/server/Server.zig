@@ -649,6 +649,36 @@ pub const ServerApp = struct {
         proxy: ?ProxyHandler = null,
         page_proxy: ?ProxyHandler = null,
         route_proxy: ?ProxyHandler = null,
+
+        /// Prefer `page_opts.static` over `route_opts.static` when both are set.
+        pub fn staticFn(self: *const Route) ?zx.StaticFn {
+            if (self.page_opts) |page_opts| {
+                if (page_opts.static) |s| return s;
+            }
+            if (self.route_opts) |route_opts| {
+                if (route_opts.static) |s| return s;
+            }
+            return null;
+        }
+
+        /// True when export should skip static generation for this route.
+        pub fn isDynamic(self: *const Route) bool {
+            if (self.page_opts) |page_opts| {
+                if (page_opts.dynamic) return true;
+            }
+            if (self.route_opts) |route_opts| {
+                if (route_opts.dynamic) return true;
+            }
+            return false;
+        }
+
+        /// Run the route's `static` fn and return ZON-ready param sets, or null if unset.
+        pub fn resolveStaticParams(self: *const Route, allocator: Allocator, io: std.Io) !?[]const []const zx.StaticParam {
+            const static_fn = self.staticFn() orelse return null;
+            var ctx = zx.StaticContext.init(allocator, io);
+            try static_fn(&ctx);
+            return try ctx.params.entries.toOwnedSlice(allocator);
+        }
     };
 
     routes: []const Route,

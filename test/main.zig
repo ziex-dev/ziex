@@ -12,6 +12,7 @@ test {
     _ = @import("core/props.zig");
     _ = @import("core/component.zig");
     _ = @import("core/routing.zig");
+    _ = @import("core/export.zig");
     _ = @import("core/vdom.zig");
     _ = @import("core/csr.zig");
     _ = @import("core/dx.zig");
