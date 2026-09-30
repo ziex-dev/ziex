@@ -3,6 +3,9 @@
 zig-out
 zig-pkg/
 
+# Emacs
+*.elc
+
 # Project Specific
 tmp
 test/data/assets/
