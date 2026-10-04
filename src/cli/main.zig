@@ -140,8 +140,9 @@ extern "kernel32" fn SetConsoleOutputCP(wCodePageID: std.os.windows.UINT) callco
 
 pub const std_options = std.Options{
     .log_scope_levels = &[_]std.log.ScopeLevel{
-        .{ .scope = .cli, .level = @enumFromInt(build_options.log_level) },
-        .{ .scope = .devserver, .level = @enumFromInt(build_options.log_level) },
-        .{ .scope = .builder, .level = @enumFromInt(build_options.log_level) },
+        .{ .scope = .cli, .level = @fromBackingInt(@intCast(build_options.log_level)) },
+        .{ .scope = .devserver, .level = @fromBackingInt(@intCast(build_options.log_level)) },
+        .{ .scope = .builder, .level = @fromBackingInt(@intCast(build_options.log_level)) },
+        .{ .scope = .builder_bsp, .level = @fromBackingInt(@intCast(build_options.log_level)) },
     },
 };

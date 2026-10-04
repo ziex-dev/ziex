@@ -4,7 +4,7 @@
     .dependencies = .{
         .tailwindcss = .{ .path = "../" },
     },
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .paths = .{""},
     .fingerprint = 0xcd7026e9d9cdd9ae,
 }

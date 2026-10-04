@@ -10,6 +10,6 @@
     },
     .version = "0.0.1",
     .fingerprint = 0x9fb4d74a63da6245,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{},
 }

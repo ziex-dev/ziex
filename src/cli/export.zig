@@ -63,11 +63,19 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const manifest_source_z = try ctx.allocator.dupeSentinel(u8, manifest_source, 0);
     defer ctx.allocator.free(manifest_source_z);
 
-    const manifest = std.zon.parse.fromSliceAlloc(ManifestApp, ctx.allocator, manifest_source_z, null, .{ .ignore_unknown_fields = true }) catch |err| {
+    var manifest_arena = std.heap.ArenaAllocator.init(ctx.allocator);
+    defer manifest_arena.deinit();
+    var manifest_diagnostics: std.zon.parse.Diagnostics = undefined;
+    const manifest = std.zon.parse.fromSlice(ManifestApp, .{
+        .gpa = ctx.allocator,
+        .arena = manifest_arena.allocator(),
+        .source = manifest_source_z,
+        .diagnostics = &manifest_diagnostics,
+        .ignore_unknown_fields = true,
+    }) catch |err| {
         std.log.err("Failed to parse manifest at {s}: {}\n", .{ manifest_path, err });
         return;
     };
-    defer std.zon.parse.free(ctx.allocator, manifest);
 
     const binpath_flag = args.binpath;
     const exe_path = util.resolveExePath(io, ctx.allocator, install_prefix, binpath_flag) catch {
@@ -532,11 +540,18 @@ fn fetchStaticParams(io: std.Io, allocator: std.mem.Allocator, host: []const u8,
     const response_z = try allocator.dupeSentinel(u8, response, 0);
     defer allocator.free(response_z);
 
-    const parsed = std.zon.parse.fromSliceAlloc([]const []const options_mod.StaticParam, allocator, response_z, null, .{}) catch |err| {
+    var parse_arena = std.heap.ArenaAllocator.init(allocator);
+    defer parse_arena.deinit();
+    var parse_diagnostics: std.zon.parse.Diagnostics = undefined;
+    const parsed = std.zon.parse.fromSlice([]const []const options_mod.StaticParam, .{
+        .gpa = allocator,
+        .arena = parse_arena.allocator(),
+        .source = response_z,
+        .diagnostics = &parse_diagnostics,
+    }) catch |err| {
         log.warn("Failed to parse static params ZON: {any}", .{err});
         return .{ .items = &.{}, .allocator = null };
     };
-    defer std.zon.parse.free(allocator, parsed);
 
     // Expand dynamic paths
     var expanded = std.array_list.Managed([]const u8).init(allocator);

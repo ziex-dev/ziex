@@ -1077,8 +1077,15 @@ fn mergeBuildInjectionsFromFile(
     const source_z = try std.mem.concatWithSentinel(allocator, u8, &.{source}, 0);
     defer allocator.free(source_z);
 
-    const build_injections = try std.zon.parse.fromSliceAlloc([]const Manifest.AddElementOptions, allocator, source_z, null, .{});
-    defer std.zon.parse.free(allocator, build_injections);
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    var diagnostics: std.zon.parse.Diagnostics = undefined;
+    const build_injections = try std.zon.parse.fromSlice([]const Manifest.AddElementOptions, .{
+        .gpa = allocator,
+        .arena = arena.allocator(),
+        .source = source_z,
+        .diagnostics = &diagnostics,
+    });
 
     try manifest.mergeBuildInjections(build_injections);
 }

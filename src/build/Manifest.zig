@@ -42,7 +42,17 @@ pub fn init(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !Manifes
 
     const source_z = try std.mem.concatWithSentinel(allocator, u8, &.{source}, 0);
     defer allocator.free(source_z);
-    const parsed = try std.zon.parse.fromSliceAlloc(App, allocator, source_z, null, .{ .ignore_unknown_fields = true });
+
+    var scratch = std.heap.ArenaAllocator.init(allocator);
+    defer scratch.deinit();
+    var diagnostics: std.zon.parse.Diagnostics = undefined;
+    const parsed = try std.zon.parse.fromSlice(App, .{
+        .gpa = scratch.allocator(),
+        .arena = allocator,
+        .source = source_z,
+        .diagnostics = &diagnostics,
+        .ignore_unknown_fields = true,
+    });
 
     return .{
         .path = owned_path,

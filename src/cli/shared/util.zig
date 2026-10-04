@@ -151,10 +151,18 @@ pub fn resolveTranspileDir(
     const source_z = try allocator.dupeSentinel(u8, source, 0);
     defer allocator.free(source_z);
 
-    const manifest = std.zon.parse.fromSliceAlloc(ManifestApp, allocator, source_z, null, .{ .ignore_unknown_fields = true }) catch {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    var diagnostics: std.zon.parse.Diagnostics = undefined;
+    const manifest = std.zon.parse.fromSlice(ManifestApp, .{
+        .gpa = allocator,
+        .arena = arena.allocator(),
+        .source = source_z,
+        .diagnostics = &diagnostics,
+        .ignore_unknown_fields = true,
+    }) catch {
         return try allocator.dupe(u8, CliConstant.default_transpile_dir);
     };
-    defer std.zon.parse.free(allocator, manifest);
 
     if (manifest.transpile_dir) |dir| {
         if (dir.len > 0) return try allocator.dupe(u8, dir);
@@ -183,8 +191,16 @@ pub fn resolveExePath(
     const source_z = try allocator.dupeSentinel(u8, source, 0);
     defer allocator.free(source_z);
 
-    const manifest = try std.zon.parse.fromSliceAlloc(ManifestApp, allocator, source_z, null, .{ .ignore_unknown_fields = true });
-    defer std.zon.parse.free(allocator, manifest);
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    var diagnostics: std.zon.parse.Diagnostics = undefined;
+    const manifest = try std.zon.parse.fromSlice(ManifestApp, .{
+        .gpa = allocator,
+        .arena = arena.allocator(),
+        .source = source_z,
+        .diagnostics = &diagnostics,
+        .ignore_unknown_fields = true,
+    });
 
     const rel = manifest.exe_path orelse return error.ExecutableNotFound;
     const path = try std.fs.path.join(allocator, &.{ install_prefix, rel });

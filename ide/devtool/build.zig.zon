@@ -2,7 +2,7 @@
     .name = .ziex_devtool,
     .version = "0.1.0",
     .fingerprint = 0x3e674a69933290f8,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .ziex = .{ .path = "../.." },
         .esbuild = .{ .path = "../../pkg/plugin-esbuild" },

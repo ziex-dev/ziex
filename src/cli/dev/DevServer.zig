@@ -656,8 +656,16 @@ fn buildAppInfoJson(ds: *DevServer) ![]u8 {
             if (source.len > 0) {
                 const source_z = try ds.gpa.dupeSentinel(u8, source, 0);
                 defer ds.gpa.free(source_z);
-                if (std.zon.parse.fromSliceAlloc(Manifest.App, ds.gpa, source_z, null, .{ .ignore_unknown_fields = true })) |manifest| {
-                    defer std.zon.parse.free(ds.gpa, manifest);
+                var arena = std.heap.ArenaAllocator.init(ds.gpa);
+                defer arena.deinit();
+                var diagnostics: std.zon.parse.Diagnostics = undefined;
+                if (std.zon.parse.fromSlice(Manifest.App, .{
+                    .gpa = ds.gpa,
+                    .arena = arena.allocator(),
+                    .source = source_z,
+                    .diagnostics = &diagnostics,
+                    .ignore_unknown_fields = true,
+                })) |manifest| {
                     if (manifest.exe_path) |p| {
                         exe_path_owned = try ds.gpa.dupe(u8, p);
                     }

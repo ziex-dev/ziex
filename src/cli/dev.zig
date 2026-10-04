@@ -98,7 +98,6 @@ fn runSupervised(ctx: CommandContext, args: anytype, fatal_sig: *?std.posix.SIG)
     const io = app.io;
     const env_map = app.environ_map;
     var runner: ?std.process.Child = null;
-    var builder: ?std.process.Child = null;
 
     try sig.install();
     defer sig.uninstall();
@@ -131,7 +130,6 @@ fn runSupervised(ctx: CommandContext, args: anytype, fatal_sig: *?std.posix.SIG)
         if (std.mem.eql(u8, trimmed_arg, "")) continue;
         try build_args_array.appendSlice(allocator, &.{trimmed_arg});
     }
-    try build_args_array.appendSlice(allocator, &.{ "--watch", "--verbose", "--summary", "all", "--color", "off" });
 
     const manifest_path = try util.resolveManifestPath(allocator, install_prefix, args.manifest);
     defer allocator.free(manifest_path);
@@ -178,17 +176,20 @@ fn runSupervised(ctx: CommandContext, args: anytype, fatal_sig: *?std.posix.SIG)
 
     log.debug("devserver ready, inner: {d} outer: {d}", .{ inner_port, outer_port });
 
-    builder = try util.spawnZig(io, .{
+    // Resolve zig exe up-front so Builder backends can spawn without
+    // importing cli util (keeps the `builder` test module self-contained).
+    const resolved_zig = util.resolveZigExe(env_map, zig_path);
+    if (build_args_array.items.len > 0) build_args_array.items[0] = resolved_zig;
+
+    var builder_impl: Builder.default = undefined;
+    try builder_impl.init(io, .{
+        .allocator = allocator,
         .argv = build_args_array.items,
         .environ_map = env_map,
-        .stderr = .pipe,
-        .stdout = .ignore,
         .pgid = ownProcessGroup(),
     });
-    trackChildGroup(&builder.?);
-
-    var build_state = Builder.BuildState.init(allocator);
-    defer build_state.deinit();
+    var builder = builder_impl.builder();
+    trackChildGroup(builder.child());
 
     var runner_output: ?RunnerOutput = null;
     var program_path: ?[]const u8 = null;
@@ -213,11 +214,8 @@ fn runSupervised(ctx: CommandContext, args: anytype, fatal_sig: *?std.posix.SIG)
             o.deinit();
             runner_output = null;
         }
-        if (builder) |*b| {
-            untrackChildGroup(b);
-            b.kill(io);
-            builder = null;
-        }
+        untrackChildGroup(builder.child());
+        builder.deinit(io);
         if (runnable_path_owned) |p| allocator.free(p);
         if (runner_temp) |*t| t.deinit(io, allocator);
         if (program_path) |p| allocator.free(p);
@@ -240,336 +238,259 @@ fn runSupervised(ctx: CommandContext, args: anytype, fatal_sig: *?std.posix.SIG)
         try ctx.writer.print("{s}↺ {s}Building...{s}\x1b[K\n", .{ Colors.cyan, Colors.bold, Colors.reset });
     }
 
-    var stderr_file = builder.?.stderr.?;
-    var raw_buf: [8192]u8 = undefined;
-    var streaming_reader = stderr_file.readerStreaming(io, &raw_buf);
-    const io_reader = &streaming_reader.interface;
-    var line_writer = std.Io.Writer.Allocating.init(allocator);
-    defer line_writer.deinit();
-
     const NO_CHANGE_DEBOUNCE_MS = 200;
-    var pending_no_change = false;
 
     while (true) {
         if (sig.interrupted()) break;
 
-        // Populate `line_writer`, then strip ANSI in place (no per-line alloc).
-        _ = if (pending_no_change) blk: {
-            const LineResult = error{ Eof, ReadFailed }![]const u8;
-            const Branch = union(enum) { line: LineResult, tick: void };
-            var sel_buf: [2]Branch = undefined;
-            var sel = std.Io.Select(Branch).init(io, &sel_buf);
-            const raced = blk_race: {
-                sel.concurrent(.line, readOneLine, .{ io_reader, &line_writer }) catch
-                    break :blk_race false;
-                sel.concurrent(.tick, sleepMs, .{ io, NO_CHANGE_DEBOUNCE_MS }) catch {
-                    // Line read is already running; await it without a timer.
-                };
-                break :blk_race true;
-            };
-            if (!raced) {
-                _ = io_reader.streamDelimiter(&line_writer.writer, '\n') catch break;
-                const l = line_writer.written();
-                _ = io_reader.takeByte() catch break;
-                break :blk l;
-            }
-            var line_result: ?LineResult = null;
-            while (line_result == null) {
-                switch (sel.await() catch break) {
-                    .line => |r| line_result = r,
-                    .tick => {
-                        pending_no_change = false;
-                        const replace_status = if (runner_output) |*output|
-                            output.outputEpoch() == rebuild_output_epoch
-                        else
-                            true;
-                        try settleNoChange(&ctx, &dev_server, use_spinner, rebuilding_shown, replace_status);
-                        rebuild_timer = null;
-                        rebuilding_shown = false;
-                        last_was_no_change = true;
-                    },
+        const event = (try builder.next(io)) orelse break;
+        switch (event) {
+            .change_detected => change: {
+                if (rebuilding_shown) break :change;
+                last_was_no_change = false;
+                if (last_error_formatted) |prev| {
+                    allocator.free(prev);
+                    last_error_formatted = null;
                 }
-            }
-            sel.cancelDiscard();
-            const r = line_result orelse break;
-            break :blk r catch break;
-        } else blk: {
-            _ = io_reader.streamDelimiter(&line_writer.writer, '\n') catch break;
-            const l = line_writer.written();
-            _ = io_reader.takeByte() catch break;
-            break :blk l;
-        };
-
-        const line = cleanLineInPlace(line_writer.written());
-        if (try build_state.processLine(line)) |event| {
-            if (pending_no_change) {
-                pending_no_change = false;
-                rebuild_timer = null;
-            }
-            switch (event) {
-                .change_detected => change: {
-                    if (rebuilding_shown) break :change;
-                    last_was_no_change = false;
-                    if (last_error_formatted) |prev| {
-                        allocator.free(prev);
-                        last_error_formatted = null;
-                    }
-                    rebuild_timer = std.Io.Timestamp.now(io, .awake);
-                    rebuild_output_epoch = if (runner_output) |*output| output.outputEpoch() else 0;
-                    dev_server.notify(.{ .type = .building });
-                    if (use_spinner) {
-                        if (rebuilding_shown) {
-                            var spinner = ctx.spinner;
-                            try spinner.updateMessage("{s}Rebuilding...{s}", .{ Colors.cyan, Colors.reset });
-                        } else {
-                            try ctx.writer.print("\n", .{});
-                            var spinner = ctx.spinner;
-                            spinner.updateStyle(.{ .frames = tui.Spinner.SpinnerStyles.dots2, .refresh_rate_ms = 80 });
-                            try spinner.start("{s}Rebuilding...{s}", .{ Colors.cyan, Colors.reset });
-                        }
-                    } else {
-                        const prefix = if (rebuilding_shown) "\r" else "\n";
-                        try ctx.writer.print("{s}{s}↺ {s}Rebuilding...{s}\x1b[K\n", .{ prefix, Colors.cyan, Colors.bold, Colors.reset });
-                    }
-                    rebuilding_shown = true;
-                },
-                .errors => |result_val| {
-                    last_was_no_change = false;
-                    var build_result = result_val;
-                    defer build_result.deinit();
-
-                    Diagnostics.remap(allocator, build_result.diagnostics, .{
-                        .transpile_dir = transpile_dir,
-                    });
-                    const deduped = Diagnostics.dedupe(allocator, build_result.diagnostics);
-                    const identical_check = try Builder.formatDiagnostics(allocator, deduped);
-                    defer allocator.free(identical_check);
-
-                    const is_identical = if (last_error_formatted) |prev|
-                        std.mem.eql(u8, identical_check, prev)
-                    else
-                        false;
-
-                    if (!is_identical) {
-                        if (last_error_formatted) |prev| allocator.free(prev);
-                        last_error_formatted = try allocator.dupe(u8, identical_check);
-                    }
-
-                    const formatted_oxlint = try Diagnostics.formatOxlint(allocator, deduped);
-                    defer allocator.free(formatted_oxlint);
-
-                    if (use_spinner and rebuilding_shown) {
+                rebuild_timer = std.Io.Timestamp.now(io, .awake);
+                rebuild_output_epoch = if (runner_output) |*output| output.outputEpoch() else 0;
+                dev_server.notify(.{ .type = .building });
+                if (use_spinner) {
+                    if (rebuilding_shown) {
                         var spinner = ctx.spinner;
-                        if (rebuild_timer) |_| {
-                            try spinner.fail("{s}Error building{s}", .{ Colors.red, Colors.reset });
-                        }
-                        rebuild_timer = null;
-                    } else if (rebuild_timer) |_| {
-                        const replace_status = if (runner_output) |*output|
-                            output.outputEpoch() == rebuild_output_epoch
-                        else
-                            true;
-                        const prefix = if (replace_status) "\x1b[1A\r" else "\r";
-                        try ctx.writer.print("{s}{s}✖ {s}Error building{s}\x1b[K\n", .{ prefix, Colors.red, Colors.bold, Colors.reset });
-                        rebuild_timer = null;
+                        try spinner.updateMessage("{s}Rebuilding...{s}", .{ Colors.cyan, Colors.reset });
+                    } else {
+                        try ctx.writer.print("\n", .{});
+                        var spinner = ctx.spinner;
+                        spinner.updateStyle(.{ .frames = tui.Spinner.SpinnerStyles.dots2, .refresh_rate_ms = 80 });
+                        try spinner.start("{s}Rebuilding...{s}", .{ Colors.cyan, Colors.reset });
                     }
+                } else {
+                    const prefix = if (rebuilding_shown) "\r" else "\n";
+                    try ctx.writer.print("{s}{s}↺ {s}Rebuilding...{s}\x1b[K\n", .{ prefix, Colors.cyan, Colors.bold, Colors.reset });
+                }
+                rebuilding_shown = true;
+            },
+            .errors => |result_val| {
+                last_was_no_change = false;
+                var build_result = result_val;
+                defer build_result.deinit();
 
-                    if (!is_identical) {
-                        try ctx.writer.writeAll(formatted_oxlint);
+                Diagnostics.remap(allocator, build_result.diagnostics, .{
+                    .transpile_dir = transpile_dir,
+                });
+                const deduped = Diagnostics.dedupe(allocator, build_result.diagnostics);
+                const identical_check = try Builder.formatDiagnostics(allocator, deduped);
+                defer allocator.free(identical_check);
+
+                const is_identical = if (last_error_formatted) |prev|
+                    std.mem.eql(u8, identical_check, prev)
+                else
+                    false;
+
+                if (!is_identical) {
+                    if (last_error_formatted) |prev| allocator.free(prev);
+                    last_error_formatted = try allocator.dupe(u8, identical_check);
+                }
+
+                const formatted_oxlint = try Diagnostics.formatOxlint(allocator, deduped);
+                defer allocator.free(formatted_oxlint);
+
+                if (use_spinner and rebuilding_shown) {
+                    var spinner = ctx.spinner;
+                    if (rebuild_timer) |_| {
+                        try spinner.fail("{s}Error building{s}", .{ Colors.red, Colors.reset });
                     }
-
-                    notifyBuildError(allocator, &dev_server, formatted_oxlint, deduped);
-                    rebuilding_shown = false;
-                },
-                .resolved => {
-                    last_was_no_change = false;
-                    try ctx.writer.print("\n{s}✓ {s}All build errors have been resolved!{s}\n", .{ Colors.green, Colors.bold, Colors.reset });
-                    dev_server.notify(.{ .type = .clear });
-                },
-                .build_complete_no_change => {
-                    pending_no_change = true;
-                },
-                .assets_installed => |result_val| {
-                    var result = result_val;
-                    defer result.deinit();
-
-                    if (use_spinner) {
-                        ctx.spinner.stop();
-                    }
-
+                    rebuild_timer = null;
+                } else if (rebuild_timer) |_| {
                     const replace_status = if (runner_output) |*output|
                         output.outputEpoch() == rebuild_output_epoch
                     else
                         true;
-                    const prefix: []const u8 = if (last_was_no_change or (rebuilding_shown and replace_status))
-                        "\x1b[1A\r"
-                    else if (rebuilding_shown)
-                        "\r"
-                    else
-                        "";
-                    if (result.files.len == 1) {
-                        try ctx.writer.print("{s}{s}✓ {s}Asset updated{s} {s}{s}{s}\x1b[K\n", .{
-                            prefix, Colors.cyan, Colors.bold, Colors.reset, Colors.gray, result.files[0], Colors.reset,
-                        });
-                    } else {
-                        try ctx.writer.print("{s}{s}✓ {s}Assets updated{s} {s}({d} files){s}\x1b[K\n", .{
-                            prefix, Colors.cyan, Colors.bold, Colors.reset, Colors.gray, result.files.len, Colors.reset,
-                        });
-                    }
-
-                    dev_server.notify(.{ .type = .asset_update, .files = result.files });
+                    const prefix = if (replace_status) "\x1b[1A\r" else "\r";
+                    try ctx.writer.print("{s}{s}✖ {s}Error building{s}\x1b[K\n", .{ prefix, Colors.red, Colors.bold, Colors.reset });
                     rebuild_timer = null;
-                    rebuilding_shown = false;
-                    last_was_no_change = true;
-                },
-                .should_restart => |build_duration_ms| {
-                    last_was_no_change = false;
-                    log.debug("Processing startup/restart request...", .{});
+                }
 
-                    const wall_build_ms: u64 = if (rebuild_timer) |t| @intCast(t.durationTo(std.Io.Timestamp.now(io, .awake)).toMilliseconds()) else build_duration_ms;
-                    rebuild_timer = null;
-                    const replace_status = is_first_run or if (runner_output) |*output|
-                        output.outputEpoch() == rebuild_output_epoch
-                    else
-                        true;
+                if (!is_identical) {
+                    try ctx.writer.writeAll(formatted_oxlint);
+                }
 
-                    var start_time = std.Io.Timestamp.now(io, .awake);
+                notifyBuildError(allocator, &dev_server, formatted_oxlint, deduped);
+                rebuilding_shown = false;
+            },
+            .resolved => {
+                last_was_no_change = false;
+                try ctx.writer.print("\n{s}✓ {s}All build errors have been resolved!{s}\n", .{ Colors.green, Colors.bold, Colors.reset });
+                dev_server.notify(.{ .type = .clear });
+            },
+            .build_complete_no_change => {
+                std.Io.sleep(io, .fromMilliseconds(NO_CHANGE_DEBOUNCE_MS), .awake) catch {};
+                const replace_status = if (runner_output) |*output|
+                    output.outputEpoch() == rebuild_output_epoch
+                else
+                    true;
+                try settleNoChange(&ctx, &dev_server, use_spinner, rebuilding_shown, replace_status);
+                rebuild_timer = null;
+                rebuilding_shown = false;
+                last_was_no_change = true;
+            },
+            .assets_installed => |result_val| {
+                var result = result_val;
+                defer result.deinit();
 
-                    // Graceful SIGTERM so DebugAllocator can print leaks on
-                    // restart; SIGKILL only if stop hangs past the timeout.
-                    if (runner) |*r| {
-                        untrackChildGroup(r);
-                        stopRunnerGraceful(r, io, inner_port, 3000);
-                        runner = null;
-                    }
-                    if (runner_output) |*o| {
-                        o.wait();
-                        o.deinit();
-                        runner_output = null;
-                    }
-                    _ = waitUntilPortFree(io, inner_port, 2000);
+                if (use_spinner) {
+                    ctx.spinner.stop();
+                }
 
-                    if (program_path == null) {
-                        program_path = util.resolveExePath(io, allocator, install_prefix, binpath) catch |err| {
-                            log.debug("Error finding ZX executable: {any}", .{err});
-                            continue;
-                        };
-                    }
+                const replace_status = if (runner_output) |*output|
+                    output.outputEpoch() == rebuild_output_epoch
+                else
+                    true;
+                const prefix: []const u8 = if (last_was_no_change or (rebuilding_shown and replace_status))
+                    "\x1b[1A\r"
+                else if (rebuilding_shown)
+                    "\r"
+                else
+                    "";
+                if (result.files.len == 1) {
+                    try ctx.writer.print("{s}{s}✓ {s}Asset updated{s} {s}{s}{s}\x1b[K\n", .{
+                        prefix, Colors.cyan, Colors.bold, Colors.reset, Colors.gray, result.files[0], Colors.reset,
+                    });
+                } else {
+                    try ctx.writer.print("{s}{s}✓ {s}Assets updated{s} {s}({d} files){s}\x1b[K\n", .{
+                        prefix, Colors.cyan, Colors.bold, Colors.reset, Colors.gray, result.files.len, Colors.reset,
+                    });
+                }
 
-                    if (runnable_path_owned) |p| {
-                        allocator.free(p);
-                        runnable_path_owned = null;
-                    }
-                    if (runner_temp) |*t| {
-                        t.deinit(io, allocator);
+                dev_server.notify(.{ .type = .asset_update, .files = result.files });
+                rebuild_timer = null;
+                rebuilding_shown = false;
+                last_was_no_change = true;
+            },
+            .should_restart => |build_duration_ms| {
+                last_was_no_change = false;
+                log.debug("Processing startup/restart request...", .{});
+
+                const wall_build_ms: u64 = if (rebuild_timer) |t| @intCast(t.durationTo(std.Io.Timestamp.now(io, .awake)).toMilliseconds()) else build_duration_ms;
+                rebuild_timer = null;
+                const replace_status = is_first_run or if (runner_output) |*output|
+                    output.outputEpoch() == rebuild_output_epoch
+                else
+                    true;
+
+                var start_time = std.Io.Timestamp.now(io, .awake);
+
+                // Graceful SIGTERM so DebugAllocator can print leaks on
+                // restart; SIGKILL only if stop hangs past the timeout.
+                if (runner) |*r| {
+                    untrackChildGroup(r);
+                    stopRunnerGraceful(r, io, inner_port, 3000);
+                    runner = null;
+                }
+                if (runner_output) |*o| {
+                    o.wait();
+                    o.deinit();
+                    runner_output = null;
+                }
+                _ = waitUntilPortFree(io, inner_port, 2000);
+
+                if (program_path == null) {
+                    program_path = util.resolveExePath(io, allocator, install_prefix, binpath) catch |err| {
+                        log.debug("Error finding ZX executable: {any}", .{err});
+                        continue;
+                    };
+                }
+
+                if (runnable_path_owned) |p| {
+                    allocator.free(p);
+                    runnable_path_owned = null;
+                }
+                if (runner_temp) |*t| {
+                    t.deinit(io, allocator);
+                    runner_temp = null;
+                }
+
+                const runnable_path = if (comptime builtin.os.tag == .windows) blk: {
+                    runner_temp = try util.TempDir.init(io, allocator);
+                    errdefer {
+                        runner_temp.?.deinit(io, allocator);
                         runner_temp = null;
                     }
+                    const path = try util.getRunnablePath(io, allocator, program_path.?, runner_temp.?);
+                    runnable_path_owned = path;
+                    break :blk path;
+                } else program_path.?;
 
-                    const runnable_path = if (comptime builtin.os.tag == .windows) blk: {
-                        runner_temp = try util.TempDir.init(io, allocator);
-                        errdefer {
-                            runner_temp.?.deinit(io, allocator);
-                            runner_temp = null;
-                        }
-                        const path = try util.getRunnablePath(io, allocator, program_path.?, runner_temp.?);
-                        runnable_path_owned = path;
-                        break :blk path;
-                    } else program_path.?;
+                if (clear_on_restart) {
+                    try ctx.writer.print("\x1b[2J\x1b[H", .{});
+                }
 
-                    if (clear_on_restart) {
-                        try ctx.writer.print("\x1b[2J\x1b[H", .{});
-                    }
+                if (rebuilding_shown and !is_first_run and use_spinner) {
+                    var spinner = ctx.spinner;
+                    spinner.updateStyle(.{ .frames = tui.Spinner.SpinnerStyles.dots2, .refresh_rate_ms = 80 });
+                    try spinner.start("{s}Restarting...{s}", .{ Colors.purple, Colors.reset });
+                }
 
-                    if (rebuilding_shown and !is_first_run and use_spinner) {
+                var runner_args = std.ArrayList([]const u8).empty;
+                defer runner_args.deinit(allocator);
+                try runner_args.appendSlice(allocator, &.{runnable_path});
+
+                runner = try std.process.spawn(io, .{
+                    .argv = runner_args.items,
+                    .environ_map = env_map,
+                    .stderr = .pipe,
+                    .stdout = .pipe,
+                    .pgid = ownProcessGroup(),
+                });
+                trackChildGroup(&runner.?);
+
+                runner_output = try RunnerOutput.init(io, allocator, &runner.?);
+
+                const restart_time_ms: u64 = @intCast(start_time.durationTo(std.Io.Timestamp.now(io, .awake)).toMilliseconds());
+
+                if (rebuilding_shown and (!is_first_run or report_initial_build_time)) {
+                    const total_ms = wall_build_ms + restart_time_ms;
+                    const total_s: f64 = @as(f64, @floatFromInt(total_ms)) / 1000.0;
+                    if (use_spinner) {
                         var spinner = ctx.spinner;
-                        spinner.updateStyle(.{ .frames = tui.Spinner.SpinnerStyles.dots2, .refresh_rate_ms = 80 });
-                        try spinner.start("{s}Restarting...{s}", .{ Colors.purple, Colors.reset });
-                    }
-
-                    var runner_args = std.ArrayList([]const u8).empty;
-                    defer runner_args.deinit(allocator);
-                    try runner_args.appendSlice(allocator, &.{runnable_path});
-
-                    runner = try std.process.spawn(io, .{
-                        .argv = runner_args.items,
-                        .environ_map = env_map,
-                        .stderr = .pipe,
-                        .stdout = .pipe,
-                        .pgid = ownProcessGroup(),
-                    });
-                    trackChildGroup(&runner.?);
-
-                    runner_output = try RunnerOutput.init(io, allocator, &runner.?);
-
-                    const restart_time_ms: u64 = @intCast(start_time.durationTo(std.Io.Timestamp.now(io, .awake)).toMilliseconds());
-
-                    if (rebuilding_shown and (!is_first_run or report_initial_build_time)) {
-                        const total_ms = wall_build_ms + restart_time_ms;
-                        const total_s: f64 = @as(f64, @floatFromInt(total_ms)) / 1000.0;
-                        if (use_spinner) {
-                            var spinner = ctx.spinner;
-                            if (is_first_run) {
-                                try spinner.succeed("{s}Built {s}({d:.2}s){s}", .{ Colors.green, Colors.gray, total_s, Colors.reset });
-                            } else {
-                                try spinner.succeed("{s}Restarted {s}({d:.2}s){s}", .{ Colors.green, Colors.gray, total_s, Colors.reset });
-                            }
+                        if (is_first_run) {
+                            try spinner.succeed("{s}Built {s}({d:.2}s){s}", .{ Colors.green, Colors.gray, total_s, Colors.reset });
                         } else {
-                            const action = if (is_first_run) "Built" else "Restarted";
-                            const prefix = if (replace_status) "\x1b[1A\r" else "\r";
-                            try ctx.writer.print("{s}{s}✓ {s}{s} {s}({d:.2}s){s}\x1b[K\n", .{ prefix, Colors.green, Colors.bold, action, Colors.gray, total_s, Colors.reset });
+                            try spinner.succeed("{s}Restarted {s}({d:.2}s){s}", .{ Colors.green, Colors.gray, total_s, Colors.reset });
                         }
-                    }
-
-                    if (!is_first_run) {
-                        try ctx.writer.print("\n", .{});
-                        printApplicationLogsBanner();
-                    } else if (report_initial_build_time) {
-                        try ctx.writer.print("\n", .{});
-                    } else if (use_spinner) {
-                        var spinner = ctx.spinner;
-                        spinner.stop();
-                        try ctx.writer.print("\r\x1b[2K", .{});
                     } else {
-                        try ctx.writer.print("\x1b[1A\r\x1b[2K", .{});
+                        const action = if (is_first_run) "Built" else "Restarted";
+                        const prefix = if (replace_status) "\x1b[1A\r" else "\r";
+                        try ctx.writer.print("{s}{s}✓ {s}{s} {s}({d:.2}s){s}\x1b[K\n", .{ prefix, Colors.green, Colors.bold, action, Colors.gray, total_s, Colors.reset });
                     }
-                    _ = runner_output.?.waitForFirstLine(250);
-                    printFirstLine(&runner_output.?);
-                    is_first_run = false;
+                }
 
-                    _ = dev_server.waitUntilInnerReady(5000);
-                    dev_server.notify(.{ .type = .reload });
+                if (!is_first_run) {
+                    try ctx.writer.print("\n", .{});
+                    printApplicationLogsBanner();
+                } else if (report_initial_build_time) {
+                    try ctx.writer.print("\n", .{});
+                } else if (use_spinner) {
+                    var spinner = ctx.spinner;
+                    spinner.stop();
+                    try ctx.writer.print("\r\x1b[2K", .{});
+                } else {
+                    try ctx.writer.print("\x1b[1A\r\x1b[2K", .{});
+                }
+                _ = runner_output.?.waitForFirstLine(250);
+                printFirstLine(&runner_output.?);
+                is_first_run = false;
 
-                    rebuilding_shown = false;
-                },
-            }
+                _ = dev_server.waitUntilInnerReady(5000);
+                dev_server.notify(.{ .type = .reload });
+
+                rebuilding_shown = false;
+            },
         }
-        line_writer.clearRetainingCapacity();
-    }
-
-    if (pending_no_change) {
-        const replace_status = if (runner_output) |*output|
-            output.outputEpoch() == rebuild_output_epoch
-        else
-            true;
-        try settleNoChange(&ctx, &dev_server, use_spinner, rebuilding_shown, replace_status);
     }
 
     fatal_sig.* = sig.received();
-}
-
-fn readOneLine(
-    reader: *std.Io.Reader,
-    line_writer: *std.Io.Writer.Allocating,
-) error{ Eof, ReadFailed }![]const u8 {
-    _ = reader.streamDelimiter(&line_writer.writer, '\n') catch return error.Eof;
-    const line = line_writer.written();
-
-    _ = reader.takeByte() catch return error.ReadFailed;
-    return line;
-}
-
-fn sleepMs(lio: std.Io, ms: i64) void {
-    lio.sleep(.fromMilliseconds(ms), .awake) catch {};
 }
 
 fn settleNoChange(
@@ -673,11 +594,4 @@ fn freeNotificationDiagnostics(
         if (d.source_html) |source_html| allocator.free(source_html);
     }
     allocator.free(diagnostics);
-}
-
-fn cleanLineInPlace(line: []u8) []const u8 {
-    const prefix = "info(verbose): ";
-    const ansi_clean = Builder.stripAnsiInPlace(line);
-    if (std.mem.startsWith(u8, ansi_clean, prefix)) return ansi_clean[prefix.len..];
-    return ansi_clean;
 }

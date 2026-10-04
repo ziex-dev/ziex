@@ -31,7 +31,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.2248+3f6a02acd
+          version: 0.17.0
           cache-size-limit: 0
           use-tool-cache: true
 
@@ -180,7 +180,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.2248+3f6a02acd
+          version: 0.17.0
           cache-size-limit: 0
           use-tool-cache: true
 

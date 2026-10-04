@@ -2,7 +2,7 @@
     .name = .ziex_app,
     .version = "0.0.0",
     .fingerprint = 0x7246d8c908f650a4,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .ziex = .{
             .url = "git+https://github.com/ziex-dev/ziex#f346e357db896d57e5a70ac34d89c8b38ba45e45",

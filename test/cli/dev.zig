@@ -367,7 +367,7 @@ test "parseDiagnostic - errors" {
 
 test "isBuildCommand handles windows zig path and rejects other tools" {
     try std.testing.expect(isBuildCommandForOs(.windows, "\"C:\\\\Users\\\\x\\\\zig.exe\" build-exe -ODebug"));
-    try std.testing.expect(isBuildCommandForOs(.macos, "/Users/x/.asdf/installs/zig/0.16.0/zig build-lib -ODebug"));
+    try std.testing.expect(isBuildCommandForOs(.macos, "/Users/x/.asdf/installs/zig/0.17.0/zig build-lib -ODebug"));
     try std.testing.expect(!isBuildCommandForOs(.windows, "install -C foo bar"));
 }
 

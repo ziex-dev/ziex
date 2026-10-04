@@ -19,8 +19,8 @@
             .lazy = true,
         },
         .zig = .{
-            .url = "git+https://codeberg.org/ziglang/zig.git#3f6a02acdda41190eab7d57a9f037df9d4853631",
-            .hash = "zig-0.0.0-Fp4XJGLgOg6H0Vfv5rGBIFiTdt_OclrSeOrf8HevP76N",
+            .url = "git+https://codeberg.org/ziglang/zig.git?ref=0.17.0#7647adab80dd088f4de3610fd245915a912eb6ad",
+            .hash = "zig-0.0.0-Fp4XJNPbSg7JHi19U9bkBViqpw1CEGENf1JhYBLHWjMq",
             .lazy = true,
         },
         .zigc_wasm = .{
@@ -29,8 +29,8 @@
             .lazy = true,
         },
         .zigc_lib = .{
-            .url = "https://registry.npmjs.org/@zigc/lib/-/lib-0.17.0-dev.2307.tgz",
-            .hash = "N-V-__8AANGBIgvu47Bh2fCmD5y_iADO-_giXQXx9lVgZsLH",
+            .url = "https://registry.npmjs.org/@zigc/lib/-/lib-0.17.0.tgz",
+            .hash = "N-V-__8AAC0wLwsc69gvTRq_9HRPPPrTrNegJ2Ow5ODcQvBE",
             .lazy = true,
         },
     },
