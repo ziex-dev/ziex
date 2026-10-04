@@ -43,5 +43,5 @@ pub fn init(io: anytype, allocator: std.mem.Allocator, uri: []const u8) !Databas
 
 pub fn deinit(self: *Database) void {
     if (zx.platform.isClient()) return;
-    self.db_pool.deinit();
+    self.pool.deinit();
 }

@@ -5,12 +5,12 @@
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .ziex = .{
-            .url = "git+https://github.com/ziex-dev/ziex#f346e357db896d57e5a70ac34d89c8b38ba45e45",
-            .hash = "ziex-0.1.0-dev-Z3YcvV7HngEeV-4Sw0v1FYzxP2PSjT5hy1_Cs5sS9F8B",
+            .url = "git+https://github.com/ziex-dev/ziex#f90d9324d438fa5e05bba6e24a5cd723b8b816ae",
+            .hash = "ziex-0.1.0-dev-Z3YcvcgVnAH5-gNZI27eYzdXKJjsI66gptXHDWH2YFwC",
         },
         .pg = .{
-            .url = "git+https://github.com/karlseguin/pg.zig#61fb377e7afbffedfae28bb4396d038dcf9462c8",
-            .hash = "pg-0.0.0-Wp_7geGMBgA6dG6czFRdDq6RB7ti-DDVBx_ZV0B957Sz",
+            .url = "git+https://github.com/karlseguin/pg.zig#1ca2d58d412af038254da5a67882c5b68977c34a",
+            .hash = "pg-0.0.0-Wp_7gY0XBwAT4SpnVT7CjXE5IbUUWMpUy10L_BkyPeg9",
         },
     },
     .paths = .{
