@@ -24,8 +24,8 @@
             .lazy = true,
         },
         .zigc_wasm = .{
-            .url = "https://registry.npmjs.org/@zigc/wasm32-wasi/-/wasm32-wasi-0.17.0-dev.2307.tgz",
-            .hash = "N-V-__8AAP_KzABjnRpGl_Di5Yu8BYRZ_3wcz3UAz9ATpqUk",
+            .url = "https://registry.npmjs.org/@zigc/wasm32-wasi/-/wasm32-wasi-0.17.0.tgz",
+            .hash = "N-V-__8AAA5jzQAZuYKAtMEaUqGIwyDNUHoI_dPmGw3O21Vi",
             .lazy = true,
         },
         .zigc_lib = .{
