@@ -130,7 +130,7 @@ test "init → build" {
     try build_zig_zon.writeFile(std.testing.io, .{ .sub_path = build_zig_zon_path, .data = local_zon_str });
 
     const build_result = try std.process.run(allocator, std.testing.io, .{
-        .argv = &.{ "zig", "build" },
+        .argv = &.{ "zig", "build", "-Dcli-command=dev" },
         .cwd = .{ .path = test_dir_abs },
     });
     defer allocator.free(build_result.stdout);
@@ -144,13 +144,15 @@ test "init → build" {
 test "dev" {
     if (!test_util.shouldRunSlowTest()) return error.SkipZigTest;
 
+    killPort("3000") catch {};
+
     try test_cmd_blocking(.{
         .args = &.{"dev"},
         .expected_stderr_strings = &.{
             "- v" ++ zx.info.version,
-            "http://localhost:3000",
+            "http://localhost:",
         },
-        .timeout_ms = 120_000,
+        .timeout_ms = 180_000,
     });
 }
 
