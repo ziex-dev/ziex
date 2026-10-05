@@ -1,6 +1,9 @@
 pub fn Page(ctx: zx.PageContext) zx.Component {
     const allocator = ctx.arena;
     const slug = ctx.request.params.get("slug") orelse "unknown";
+    const page_title = ctx.fmt("Post: {s}", .{slug}) catch "Post";
+    ctx.data.set("title", page_title);
+    ctx.data.set("description", ctx.fmt("Statically generated post page for slug: {s}", .{slug}) catch "Post page");
 
     return (
         <div @allocator={allocator}>

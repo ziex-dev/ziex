@@ -722,6 +722,7 @@ fn PagesAndLayouts(allocator: zx.Allocator, props: PagesAndLayoutsProps) zx.Comp
                 <li><code>response</code> - HTTP response for setting headers</li>
                 <li><code>arena</code> - Request-scoped allocator (recommended)</li>
                 <li><code>allocator</code> - Global allocator for persistent allocations</li>
+                <li><code>data</code> - Request-scoped key/value bag (<code>ctx.data.set</code> / <code>ctx.data.get</code>) for page metadata such as title</li>
             </ul>
             <div class="callout tip">
                 <strong>Best practice:</strong>{" "}Use <code>ctx.arena</code>{" "}for allocations - it's automatically freed after the request.

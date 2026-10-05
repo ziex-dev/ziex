@@ -145,7 +145,7 @@ pub fn handlePage(
         page_component = zx.util.devtool.namedBoundary(arena, "Page", page_component);
     }
 
-    const layoutctx = zx.LayoutContext.init(request, response, allocator, io);
+    const layoutctx: zx.LayoutContext = pagectx;
     var used_layout = false;
     page_component = Router.applyLayouts(
         route,

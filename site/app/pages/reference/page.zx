@@ -249,6 +249,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                     <li><code>response</code>: The HTTP response object for setting headers and writing the response</li>
                     <li><code>allocator</code>: Global allocator for persistent allocations (freed manually)</li>
                     <li><code>arena</code>: Request-scoped allocator that's automatically freed after the request (recommended for most use cases)</li>
+                    <li><code>data</code>: Request-scoped key/value bag via <code>ctx.data.set</code> / <code>ctx.data.get</code> (e.g. title, description). The page runs first and can set values; parent and root layouts read and use them.</li>
                 </ul>
                 <p>Use <code>ctx.arena</code> for temporary allocations that only need to persist during request processing. This is the recommended allocator for most page and component code.</p>
             </section>

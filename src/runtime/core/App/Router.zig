@@ -596,12 +596,13 @@ pub fn renderErrorComponent(
     const err_fn = route.@"error" orelse return null;
 
     const errorctx = zx.ErrorContext.init(req, res, arena, io, err);
-    const layoutctx = zx.LayoutContext{
-        .request = req,
-        .response = res,
-        .allocator = arena,
-        .arena = arena,
-        .io = io,
+    const layoutctx: zx.LayoutContext = .{
+        .request = errorctx.request,
+        .response = errorctx.response,
+        .allocator = errorctx.allocator,
+        .arena = errorctx.arena,
+        .io = errorctx.io,
+        .data = errorctx.data,
     };
 
     var component = err_fn(errorctx);
@@ -632,20 +633,8 @@ pub fn renderNotFoundComponent(
 
     const nf_fn = notfound_fn orelse return null;
 
-    const notfoundctx = zx.NotFoundContext{
-        .request = req,
-        .response = res,
-        .allocator = arena,
-        .arena = arena,
-        .io = io,
-    };
-    const layoutctx = zx.LayoutContext{
-        .request = req,
-        .response = res,
-        .allocator = arena,
-        .arena = arena,
-        .io = io,
-    };
+    const notfoundctx = zx.NotFoundContext.init(req, res, arena, io);
+    const layoutctx: zx.LayoutContext = notfoundctx;
 
     var component = nf_fn(notfoundctx);
     component = applyLayoutsForPath(path, layoutctx, component, null, null);

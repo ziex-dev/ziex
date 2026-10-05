@@ -64,6 +64,7 @@ pub const StaticContext = opts.StaticContext;
 pub const StaticParams = opts.StaticParams;
 pub const StaticParam = opts.StaticParam;
 pub const StaticFn = opts.StaticFn;
+pub const PageData = routing.PageData;
 pub const PageContext = routing.PageContext;
 pub const LayoutContext = routing.LayoutContext;
 pub const NotFoundContext = routing.NotFoundContext;

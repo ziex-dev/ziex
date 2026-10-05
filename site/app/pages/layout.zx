@@ -6,6 +6,8 @@ const keywords = "zig, zx, ziex, web framework, jsx, full-stack, ssr, ssg, wasm,
 
 pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
     const path = ctx.request.pathname;
+    const page_title = ctx.data.get("title") orelse title;
+    const page_description = ctx.data.get("description") orelse description;
     const js_href = ctx.fmt("/assets/docs.js?v={s}", .{zx.info.version}) catch unreachable;
     const needs_js = !std.mem.eql(u8, path, "/") and !std.mem.startsWith(u8, path, "/playground");
     const templates_preload = std.mem.eql(u8, path, "/playground") or std.mem.startsWith(u8, path, "/playground/");
@@ -16,8 +18,8 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
         return (
             <html lang="en" @allocator={ctx.arena}>
                 <head>
-                    <title>{title}</title>
-                    <meta name="description" content={description} />
+                    <title>{page_title}</title>
+                    <meta name="description" content={page_description} />
                 </head>
                 <body>
                     {children}
@@ -38,8 +40,8 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
                 <meta charset="UTF-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-                <title>{title}</title>
-                <meta name="description" content={description} />
+                <title>{page_title}</title>
+                <meta name="description" content={page_description} />
 
                 <meta name="keywords" content={keywords} />
                 <meta name="author" content="Nurul Huda" />
@@ -53,8 +55,8 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
                 {if (templates_preload) (<link rel="preload" href="/playground/templates.json" as="fetch" crossorigin="anonymous" />)}
 
                 <meta property="og:type" content="website" />
-                <meta property="og:title" content={title} />
-                <meta property="og:description" content={description} />
+                <meta property="og:title" content={page_title} />
+                <meta property="og:description" content={page_description} />
                 <meta property="og:url" content={site_url} />
                 <meta property="og:image" content={og_image_url} />
                 <meta property="og:site_name" content="Ziex" />

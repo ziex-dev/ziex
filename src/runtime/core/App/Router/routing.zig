@@ -3,6 +3,38 @@ const Request = @import("../../Http/Request.zig");
 const Response = @import("../../Http/Response.zig");
 const Http = @import("../../Http.zig");
 
+pub const PageData = struct {
+    const Store = struct {
+        arena: std.mem.Allocator,
+        map: std.StringHashMapUnmanaged([]const u8) = .{},
+    };
+
+    _store: ?*Store = null,
+
+    pub fn init(arena: std.mem.Allocator) PageData {
+        const store = arena.create(Store) catch return .{};
+        store.* = .{ .arena = arena };
+        return .{ ._store = store };
+    }
+
+    pub fn set(self: PageData, key: []const u8, value: []const u8) void {
+        const store = self._store orelse return;
+        const gop = store.map.getOrPut(store.arena, key) catch return;
+        if (!gop.found_existing) {
+            gop.key_ptr.* = store.arena.dupe(u8, key) catch {
+                _ = store.map.remove(key);
+                return;
+            };
+        }
+        gop.value_ptr.* = store.arena.dupe(u8, value) catch return;
+    }
+
+    pub fn get(self: PageData, key: []const u8) ?[]const u8 {
+        const store = self._store orelse return null;
+        return store.map.get(key);
+    }
+};
+
 pub const BaseContext = struct {
     const Self = @This();
 
@@ -16,6 +48,8 @@ pub const BaseContext = struct {
     arena: std.mem.Allocator,
     /// Io passed from App.init()
     io: std.Io,
+    /// Request-scoped page metadata shared with layouts (title, description, etc.).
+    data: PageData = .{},
 
     pub fn init(request: Request, response: Response, alloc: std.mem.Allocator, io: std.Io) Self {
         return .{
@@ -24,6 +58,7 @@ pub const BaseContext = struct {
             .allocator = alloc,
             .arena = request.arena,
             .io = io,
+            .data = PageData.init(request.arena),
         };
     }
 
@@ -53,6 +88,8 @@ pub const ErrorContext = struct {
     io: std.Io,
     /// The error that occurred
     err: anyerror,
+    /// Request-scoped page metadata shared with layouts (title, description, etc.).
+    data: PageData = .{},
 
     pub fn init(request: Request, response: Response, alloc: std.mem.Allocator, io: std.Io, err: anyerror) ErrorContext {
         return .{
@@ -62,6 +99,7 @@ pub const ErrorContext = struct {
             .arena = request.arena,
             .io = io,
             .err = err,
+            .data = PageData.init(request.arena),
         };
     }
 

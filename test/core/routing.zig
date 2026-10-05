@@ -120,6 +120,58 @@ test "PageContext: has allocator and arena fields" {
     _ = ctx.allocator;
     _ = ctx.arena;
     _ = ctx.io;
+    _ = ctx.data;
+}
+
+test "PageData: get returns null when unset" {
+    var buffer: [4096]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const alloc = fba.allocator();
+
+    const data = zx.PageData.init(alloc);
+    try std.testing.expect(data.get("title") == null);
+}
+
+test "PageData: set then get round-trips and overwrites" {
+    var buffer: [4096]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const alloc = fba.allocator();
+
+    const data = zx.PageData.init(alloc);
+    data.set("title", "Hello");
+    try std.testing.expectEqualStrings("Hello", data.get("title").?);
+
+    data.set("title", "World");
+    try std.testing.expectEqualStrings("World", data.get("title").?);
+}
+
+test "PageData: shared store visible across page and layout contexts" {
+    var buffer: [4096]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const alloc = fba.allocator();
+
+    const rr = makeReqRes(alloc);
+    const page_ctx = PageContext.init(rr.req, rr.res, alloc, std.testing.io);
+    const layout_ctx: LayoutContext = page_ctx;
+
+    page_ctx.data.set("title", "From page");
+    page_ctx.data.set("description", "Meta");
+
+    try std.testing.expectEqualStrings("From page", layout_ctx.data.get("title").?);
+    try std.testing.expectEqualStrings("Meta", layout_ctx.data.get("description").?);
+}
+
+test "PageData: separate init contexts do not share" {
+    var buffer: [4096]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const alloc = fba.allocator();
+
+    const rr = makeReqRes(alloc);
+    const a = PageContext.init(rr.req, rr.res, alloc, std.testing.io);
+    const b = PageContext.init(rr.req, rr.res, alloc, std.testing.io);
+
+    a.data.set("title", "only-a");
+    try std.testing.expect(b.data.get("title") == null);
 }
 
 // --- ErrorContext --- //
