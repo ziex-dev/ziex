@@ -29,7 +29,9 @@
 
 (declare-function treesit-node-child "treesit.c")
 (declare-function treesit-node-child-by-field-name "treesit.c")
+(declare-function treesit-node-end "treesit.c")
 (declare-function treesit-node-next-sibling "treesit.c")
+(declare-function treesit-node-start "treesit.c")
 (declare-function treesit-node-type "treesit.c")
 (declare-function treesit-parser-create "treesit.c")
 
@@ -106,13 +108,60 @@
     ".*" ".?" "?" "..")
   "Zig operators.")
 
+;; libtree-sitter 0.25 and later, which the ZX grammar needs, reject the
+;; `#match' and `#equal' predicates that `:match' and `:equal' expand to
+;; before Emacs 31, so names are classified by the functions below instead.
+
+(defun zx-ts-mode--fontify-comment (node override start end &rest _)
+  "Fontify comment NODE, with `font-lock-doc-face' for `///' and `//!'.
+For OVERRIDE, START and END see `treesit-font-lock-rules'."
+  (let ((text (treesit-node-text node t)))
+    (treesit-fontify-with-override
+     (treesit-node-start node) (treesit-node-end node)
+     (if (or (string-prefix-p "///" text) (string-prefix-p "//!" text))
+         'font-lock-doc-face
+       'font-lock-comment-face)
+     override start end)))
+
+(defun zx-ts-mode--identifier-kind (node)
+  "Return `builtin', `constant' or `type' if identifier NODE is named like one."
+  (let ((case-fold-search nil)
+        (name (treesit-node-text node t)))
+    (cond ((equal name "_") 'builtin)
+          ((string-match-p "\\`[A-Z][A-Z0-9_]+\\'" name) 'constant)
+          ((string-match-p "\\`[A-Z][A-Za-z0-9_]*\\'" name) 'type))))
+
+(defun zx-ts-mode--fontify-identifier (node kind face override start end)
+  "Fontify identifier NODE with FACE if its kind is KIND.
+For OVERRIDE, START and END see `treesit-font-lock-rules'."
+  (when (eq (zx-ts-mode--identifier-kind node) kind)
+    (treesit-fontify-with-override
+     (treesit-node-start node) (treesit-node-end node)
+     face override start end)))
+
+(defun zx-ts-mode--fontify-type (node override start end &rest _)
+  "Fontify NODE as a type if it is named in PascalCase.
+For OVERRIDE, START and END see `treesit-font-lock-rules'."
+  (zx-ts-mode--fontify-identifier
+   node 'type 'font-lock-type-face override start end))
+
+(defun zx-ts-mode--fontify-constant (node override start end &rest _)
+  "Fontify NODE as a constant if it is named in SCREAMING_CASE.
+For OVERRIDE, START and END see `treesit-font-lock-rules'."
+  (zx-ts-mode--fontify-identifier
+   node 'constant 'font-lock-constant-face override start end))
+
+(defun zx-ts-mode--fontify-discard (node override start end &rest _)
+  "Fontify NODE as a builtin if it is the `_' discard.
+For OVERRIDE, START and END see `treesit-font-lock-rules'."
+  (zx-ts-mode--fontify-identifier
+   node 'builtin 'font-lock-builtin-face override start end))
+
 (defvar zx-ts-mode--font-lock-settings
   (treesit-font-lock-rules
    :language 'zx
    :feature 'comment
-   '((comment) @font-lock-comment-face
-     ((comment) @font-lock-doc-face
-      (:match "\\`//[/!]" @font-lock-doc-face)))
+   '((comment) @zx-ts-mode--fontify-comment)
 
    :language 'zx
    :feature 'definition
@@ -142,8 +191,7 @@
    '((builtin_type) @font-lock-type-face
      "anyframe" @font-lock-type-face
      (parameter type: (identifier) @font-lock-type-face)
-     ((identifier) @font-lock-type-face
-      (:match "\\`[A-Z][A-Za-z0-9_]*\\'" @font-lock-type-face)))
+     (identifier) @zx-ts-mode--fontify-type)
 
    :language 'zx
    :feature 'tag
@@ -163,14 +211,12 @@
    :language 'zx
    :feature 'builtin
    '((builtin_identifier) @font-lock-builtin-face
-     ((identifier) @font-lock-builtin-face
-      (:equal "_" @font-lock-builtin-face)))
+     (identifier) @zx-ts-mode--fontify-discard)
 
    :language 'zx
    :feature 'constant
    '([(boolean) "null" "undefined" "unreachable"] @font-lock-constant-face
-     ((identifier) @font-lock-constant-face
-      (:match "\\`[A-Z][A-Z0-9_]+\\'" @font-lock-constant-face)))
+     (identifier) @zx-ts-mode--fontify-constant)
 
    :language 'zx
    :feature 'escape-sequence
