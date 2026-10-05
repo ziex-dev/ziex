@@ -1021,7 +1021,12 @@ fn handleOpenInEditor(ds: *DevServer, target: []const u8) !void {
 
 fn urlDecode(allocator: std.mem.Allocator, encoded: []const u8) ![]u8 {
     const buf = try allocator.dupe(u8, encoded);
-    return std.Uri.percentDecodeInPlace(buf);
+    errdefer allocator.free(buf);
+    const decoded = std.Uri.percentDecodeInPlace(buf);
+    if (decoded.ptr != buf.ptr) {
+        std.mem.copyForwards(u8, buf[0..decoded.len], decoded);
+    }
+    return try allocator.realloc(buf, decoded.len);
 }
 
 const IdeScheme = @import("IdeScheme.zig");

@@ -36,7 +36,8 @@ deferred_body: ?[]const u8 = null,
 /// Accumulator for `resWriter` / `json` / chunks when `out` is null.
 deferred_aw: std.Io.Writer.Allocating,
 
-// --- lazily-parsed form data --- //
+// --- lazily-parsed query / form data --- //
+query: QueryCache = .{},
 form: FormCache = .{},
 multi: MultiCache = .{},
 
@@ -155,16 +156,10 @@ fn reqParam(userdata: ?*anyopaque, name: []const u8) ?[]const u8 {
 }
 
 fn reqQueryGet(userdata: ?*anyopaque, name: []const u8) ?[]const u8 {
-    const search = self_(userdata).search;
-    const query = if (search.len > 0 and search[0] == '?') search[1..] else search;
-    var iter = std.mem.splitScalar(u8, query, '&');
-    while (iter.next()) |pair| {
-        if (pair.len == 0) continue;
-        if (std.mem.indexOfScalar(u8, pair, '=')) |eq| {
-            if (std.mem.eql(u8, pair[0..eq], name)) return pair[eq + 1 ..];
-        } else {
-            if (std.mem.eql(u8, pair, name)) return "";
-        }
+    const self = self_(userdata);
+    self.query.parse(self);
+    for (self.query.keys[0..self.query.count], 0..) |key, i| {
+        if (std.mem.eql(u8, key, name)) return self.query.values[i];
     }
     return null;
 }
@@ -353,6 +348,40 @@ fn wsSetPublishToSelf(_: ?*anyopaque, _: bool) void {
     // Edge pub/sub fan-out always includes topic subscribers (see createWebSocketDO).
 }
 
+const QueryCache = struct {
+    keys: [32][]const u8 = undefined,
+    values: [32][]const u8 = undefined,
+    count: usize = 0,
+    parsed: bool = false,
+
+    fn parse(self: *QueryCache, b: *Conn) void {
+        if (self.parsed) return;
+        self.parsed = true;
+        self.count = 0;
+
+        const search = b.search;
+        const query = if (search.len > 0 and search[0] == '?') search[1..] else search;
+        parseUrlEncoded(self, b.allocator, query);
+    }
+
+    fn parseUrlEncoded(self: anytype, allocator: std.mem.Allocator, raw: []const u8) void {
+        var iter = std.mem.splitScalar(u8, raw, '&');
+        while (iter.next()) |pair| {
+            if (pair.len == 0) continue;
+            if (self.count >= self.keys.len) break;
+            const i = self.count;
+            if (std.mem.indexOfScalar(u8, pair, '=')) |eq| {
+                self.keys[i] = formDecode(allocator, pair[0..eq]) catch pair[0..eq];
+                self.values[i] = formDecode(allocator, pair[eq + 1 ..]) catch pair[eq + 1 ..];
+            } else {
+                self.keys[i] = formDecode(allocator, pair) catch pair;
+                self.values[i] = "";
+            }
+            self.count += 1;
+        }
+    }
+};
+
 const FormCache = struct {
     keys: [32][]const u8 = undefined,
     values: [32][]const u8 = undefined,
@@ -369,20 +398,7 @@ const FormCache = struct {
         const is_urlencoded = ct.len >= prefix.len and std.ascii.eqlIgnoreCase(ct[0..prefix.len], prefix);
         if (!is_urlencoded) return;
 
-        var iter = std.mem.splitScalar(u8, b.body, '&');
-        while (iter.next()) |pair| {
-            if (pair.len == 0) continue;
-            if (self.count >= self.keys.len) break;
-            const i = self.count;
-            if (std.mem.indexOfScalar(u8, pair, '=')) |eq| {
-                self.keys[i] = formDecode(b.allocator, pair[0..eq]) catch pair[0..eq];
-                self.values[i] = formDecode(b.allocator, pair[eq + 1 ..]) catch pair[eq + 1 ..];
-            } else {
-                self.keys[i] = formDecode(b.allocator, pair) catch pair;
-                self.values[i] = "";
-            }
-            self.count += 1;
-        }
+        QueryCache.parseUrlEncoded(self, b.allocator, b.body);
     }
 };
 
@@ -492,8 +508,13 @@ const MultiCache = struct {
 
 fn formDecode(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const buf = try allocator.dupe(u8, input);
+    errdefer allocator.free(buf);
     for (buf) |*c| {
         if (c.* == '+') c.* = ' ';
     }
-    return std.Uri.percentDecodeInPlace(buf);
+    const decoded = std.Uri.percentDecodeInPlace(buf);
+    if (decoded.ptr != buf.ptr) {
+        std.mem.copyForwards(u8, buf[0..decoded.len], decoded);
+    }
+    return try allocator.realloc(buf, decoded.len);
 }

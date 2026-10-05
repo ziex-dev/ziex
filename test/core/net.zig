@@ -98,6 +98,23 @@ test "Request.queries.has no backend" {
     try std.testing.expect(!req.queries.has("q"));
 }
 
+test "Conn.queries.get percent-decodes values" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var conn = zx.Http.Conn.init(arena);
+    defer conn.deinit();
+    conn.search = "?msg=hello%20world&q=a+b&flag";
+
+    const req = conn.request(.GET, "/", "/?msg=hello%20world&q=a+b&flag");
+    try std.testing.expectEqualStrings("hello world", req.queries.get("msg").?);
+    try std.testing.expectEqualStrings("a b", req.queries.get("q").?);
+    try std.testing.expectEqualStrings("", req.queries.get("flag").?);
+    try std.testing.expect(req.queries.has("msg"));
+    try std.testing.expect(!req.queries.has("missing"));
+}
+
 // --- Init --- //
 
 test "Request.init custom" {

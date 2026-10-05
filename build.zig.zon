@@ -17,8 +17,8 @@
         .ziex_jsbindings = .{ .path = "pkg/ziex", .lazy = true }, // source of JS Bindings to be built with esbuild
         // httpz - HTTP server for Ziex
         .httpz = .{
-            .url = "git+https://github.com/ziex-dev/httpz.git?ref=dev#49684ddd1fb030f72594cce8370b076dfa922ff9",
-            .hash = "httpz-0.0.0-PNVzrATcCADK2AQ3S7KDpH49xF3iMZ6Itih2-uBglAae",
+            .url = "git+https://github.com/ziex-dev/httpz.git#8aeb4e522b122fd2d9ba6731480b5d3878d2845f",
+            .hash = "httpz-0.0.0-PNVzrPoWCQDh-mpVLlE6Ryjobya3u-oDwOTq0aoQHdms",
             .lazy = true,
         },
         .zls = .{
@@ -27,7 +27,7 @@
             .lazy = true,
         },
         .lsp_kit = .{
-            .url = "git+https://github.com/zigtools/lsp-kit.git#d148676ace1eaecf3c703ce7d350d0e94e502ed7",
+            .url = "git+https://github.com/ziex-dev/lsp-kit.git#d148676ace1eaecf3c703ce7d350d0e94e502ed7",
             .hash = "lsp_kit-0.1.0-bi_PLwc2DACoR7VTz_qKFXUvtx7veHvWcTQvP9pDFLpk",
             .lazy = true,
         },
