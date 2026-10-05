@@ -403,6 +403,9 @@ jobs:
         run: |
           OWNER=$(echo $GITHUB_REPOSITORY | cut -d'/' -f1)
           TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+
+          bash tools/version "$VERSION"
 
           # Update _base build.zig.zon to point to the release tag
           cd templates/_base

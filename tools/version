@@ -123,7 +123,8 @@ fi
 
 echo "Version: $CURRENT_VERSION -> $NEW_VERSION"
 
-# Stamp the new version into all version-bearing files
+# Stamp the new version into all version-bearing files, including
+# @ziex/cli / ziex dependency pins in templates/*/package.json.
 
 # Match any X.Y.Z[-pre[.N]][+meta] version string for in-place replacement.
 VERSION_PATTERN='[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z]+(\.[0-9]+)?)?(\+[0-9A-Za-z.]+)?'
@@ -141,13 +142,29 @@ if [ -f "$ZIEX_BUILD_ZON" ]; then
     echo "Updated pkg/ziex/build.zig.zon"
 fi
 
-# pkg/ziex/package.json
+# pkg/ziex/package.json (package version + @ziex/cli dependency pin)
 ZIEX_PACKAGE_JSON="$PROJECT_ROOT/pkg/ziex/package.json"
 if [ -f "$ZIEX_PACKAGE_JSON" ]; then
     sed -i.bak -E "/^[[:space:]]*\"version\"[[:space:]]*:/s/$VERSION_PATTERN/$NEW_VERSION/" "$ZIEX_PACKAGE_JSON"
+    sed -i.bak -E "s/(\"@ziex\/cli\"[[:space:]]*:[[:space:]]*\")$VERSION_PATTERN\"/\1$NEW_VERSION\"/" "$ZIEX_PACKAGE_JSON"
     rm -f "$ZIEX_PACKAGE_JSON.bak"
     echo "Updated pkg/ziex/package.json"
 fi
+
+# templates/*/package.json — keep @ziex/cli and ziex dependency pins in sync
+# so starter templates always match the release being published.
+for TEMPLATE_PKG_JSON in "$PROJECT_ROOT"/templates/*/package.json; do
+    [ -f "$TEMPLATE_PKG_JSON" ] || continue
+    TEMPLATE_NAME=$(basename "$(dirname "$TEMPLATE_PKG_JSON")")
+    case "$TEMPLATE_NAME" in
+        _*) continue ;;  # skip internal templates (_base, _docker, ...)
+    esac
+    if grep -qE '"(@ziex/cli|ziex)"[[:space:]]*:' "$TEMPLATE_PKG_JSON"; then
+        sed -i.bak -E "s/(\"(@ziex\/cli|ziex)\"[[:space:]]*:[[:space:]]*\")$VERSION_PATTERN\"/\1$NEW_VERSION\"/" "$TEMPLATE_PKG_JSON"
+        rm -f "$TEMPLATE_PKG_JSON.bak"
+        echo "Updated templates/$TEMPLATE_NAME/package.json"
+    fi
+done
 
 # ide/zed/extension.toml
 ZED_EXTENSION_TOML="$PROJECT_ROOT/ide/zed/extension.toml"
