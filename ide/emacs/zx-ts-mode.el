@@ -264,19 +264,39 @@ For OVERRIDE, START and END see `treesit-font-lock-rules'."
      ((node-is ")") standalone-parent 0)
      ((node-is "]") standalone-parent 0)
      ((node-is "else_clause") standalone-parent 0)
-     ;; A closing tag lines up with the element it closes.
+     ((node-is "\\`else\\'") standalone-parent 0)
+     ;; Every line of a `\\' string lines up with its first line.
+     ((parent-is "\\`multiline_string\\'") parent 0)
+     ;; A closing tag lines up with the element it closes, and so does the
+     ;; `>' or `/>' that ends a start tag split over several lines.
      ((node-is "zx_end_tag") parent-bol 0)
+     ((node-is "\\`\\(?:/>\\|</>\\)\\'") parent-bol 0)
+     ((match "\\`>\\'" "\\`zx_start_tag\\'") parent-bol 0)
      ;; Markup children and attributes are indented inside their tag.
      ((parent-is "zx_element") parent-bol zx-ts-mode-indent-offset)
      ((parent-is "zx_fragment") parent-bol zx-ts-mode-indent-offset)
      ((parent-is "zx_start_tag") parent-bol zx-ts-mode-indent-offset)
      ((parent-is "zx_self_closing_element") parent-bol zx-ts-mode-indent-offset)
      ((parent-is "zx_block") parent-bol zx-ts-mode-indent-offset)
+     ((parent-is "zx_expression_block") parent-bol zx-ts-mode-indent-offset)
      ((parent-is "zx_child") parent-bol 0)
      ;; Zig.
      ((parent-is "block") standalone-parent zx-ts-mode-indent-offset)
+     ((parent-is "\\`\\(?:struct\\|enum\\|union\\|opaque\\|error_set\\)_declaration\\'")
+      standalone-parent zx-ts-mode-indent-offset)
+     ;; Bodies without braces, and declarations wrapped after `='.  A `{'
+     ;; on its own line after a wrapped condition stays with its statement.
+     ((match "\\`block\\(?:_expression\\)?\\'" "\\`\\(?:if\\|for\\|while\\)_statement\\'")
+      standalone-parent 0)
+     ((parent-is "\\`\\(?:if\\|for\\|while\\)_statement\\'")
+      standalone-parent zx-ts-mode-indent-offset)
+     ((match "\\`;\\'" "\\`variable_declaration\\'") standalone-parent 0)
+     ((parent-is "\\`\\(?:if_expression\\|else_clause\\|variable_declaration\\|binary_expression\\)\\'")
+      standalone-parent zx-ts-mode-indent-offset)
      ((parent-is "switch_expression") standalone-parent zx-ts-mode-indent-offset)
      ((parent-is "initializer_list") standalone-parent zx-ts-mode-indent-offset)
+     ;; A `, .{})' after a `\\' string argument returns to the call's column.
+     ((match "\\`,\\'" "\\`arguments\\'") standalone-parent 0)
      ((parent-is "arguments") standalone-parent zx-ts-mode-indent-offset)
      ((parent-is "parameters") standalone-parent zx-ts-mode-indent-offset)
      ((parent-is "parenthesized_expression") standalone-parent zx-ts-mode-indent-offset)
