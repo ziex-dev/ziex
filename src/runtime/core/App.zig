@@ -11,6 +11,7 @@ const sig = @import("../../util/sig.zig");
 const platform = zx.platform;
 
 pub const mode = std.meta.stringToEnum(Mode, app_opts.cli_command) orelse .@"--";
+pub const base_path = app_opts.app_base_path;
 
 pub const Config = @import("App/Config.zig");
 pub const Router = @import("App/Router.zig");
@@ -18,48 +19,134 @@ pub const Server = @import("App/Server.zig");
 pub const Client = @import("App/Client.zig");
 pub const Wasm = Server.Wasm;
 
-userdata: ?*anyopaque = null,
-vtable: *const VTable = &failing_vtable,
+server: Server = .failing,
+alloc: std.mem.Allocator = undefined,
+config: Config = .{},
 
-pub const VTable = struct {
-    start: *const fn (userdata: ?*anyopaque) anyerror!void,
-    stop: *const fn (userdata: ?*anyopaque) void,
-    deinit: *const fn (userdata: ?*anyopaque) void,
-    info: *const fn (userdata: ?*anyopaque) void,
-};
+default_create: ?*const fn (userdata: ?*anyopaque) anyerror!Server = null,
+default_destroy: ?*const fn (userdata: ?*anyopaque, alloc: std.mem.Allocator) void = null,
+default_userdata: ?*anyopaque = null,
 
 pub fn init(inita: zx.Init, process_io: anytype, alloc: std.mem.Allocator, config: Config, app_ctx: anytype) !App {
     const H = @TypeOf(app_ctx);
     const cfg = try resolveOptions(alloc, inita, config);
 
     switch (platform.role) {
-        .client => return Client.app(),
+        .client => return .{
+            .server = Client.server(),
+            .alloc = alloc,
+            .config = cfg,
+        },
         .server => switch (platform.os) {
-            .wasi => return Wasm.app(inita),
+            .wasi => return .{
+                .server = Wasm.server(inita),
+                .alloc = alloc,
+                .config = cfg,
+            },
             else => {
                 const io_value = if (@TypeOf(process_io) == std.Io) process_io else return error.InvalidIo;
-                const Transport = if (comptime app_opts.enable_httpz) Server.Httpz else Server.Std;
-                const instance = try Transport.Server(H).init(io_value, alloc, cfg, app_ctx, inita);
-                return Server.bind(@TypeOf(instance.*), instance, alloc);
+
+                const State = struct {
+                    io: std.Io,
+                    config: Config,
+                    app_ctx: H,
+                    inita: zx.Init,
+                    alloc: std.mem.Allocator,
+
+                    fn create(userdata: ?*anyopaque) anyerror!Server {
+                        const self: *@This() = @ptrCast(@alignCast(userdata.?));
+                        const Transport = if (comptime app_opts.enable_httpz)
+                            Server.Httpz
+                        else
+                            Server.Std;
+                        const instance = try Transport.Backend(H).init(self.io, self.alloc, self.config, self.app_ctx, self.inita);
+                        const transport = instance.server();
+                        if (App.mode != .@"export") transport.info();
+                        return transport;
+                    }
+
+                    fn destroy(userdata: ?*anyopaque, gpa: std.mem.Allocator) void {
+                        const self: *@This() = @ptrCast(@alignCast(userdata.?));
+                        gpa.destroy(self);
+                    }
+                };
+
+                const state = try alloc.create(State);
+                state.* = .{
+                    .io = io_value,
+                    .config = cfg,
+                    .app_ctx = app_ctx,
+                    .inita = inita,
+                    .alloc = alloc,
+                };
+
+                return .{
+                    .server = .failing,
+                    .alloc = alloc,
+                    .config = cfg,
+                    .default_create = &State.create,
+                    .default_destroy = &State.destroy,
+                    .default_userdata = state,
+                };
             },
         },
     }
 }
 
-pub fn start(self: App) !void {
-    return self.vtable.start(self.userdata);
+pub fn start(self: *App) !void {
+    try self.ensureServer();
+
+    const arm_signals = comptime builtin.optimize == .debug and platform.os != .freestanding and platform.os != .wasi;
+    if (arm_signals) {
+        armSignal(self, struct {
+            fn call(ctx: *anyopaque) void {
+                const app: *App = @ptrCast(@alignCast(ctx));
+                app.server.stop();
+            }
+        }.call);
+        defer disarmSignal();
+        try self.server.start();
+        return;
+    }
+
+    try self.server.start();
 }
 
 pub fn stop(self: App) void {
-    self.vtable.stop(self.userdata);
+    self.server.stop();
 }
 
 pub fn deinit(self: *App) void {
-    self.vtable.deinit(self.userdata);
+    self.clearDefaultFactory();
+    self.server.deinit();
+    release(self.alloc);
+    assertNoLeaks();
 }
 
 pub fn info(self: App) void {
-    self.vtable.info(self.userdata);
+    self.server.info();
+}
+
+fn ensureServer(self: *App) !void {
+    if (self.server.vtable != &Server.failing_vtable) {
+        self.clearDefaultFactory();
+        return;
+    }
+    const create = self.default_create orelse return error.AppUnavailable;
+    const userdata = self.default_userdata;
+    self.server = try create(userdata);
+    self.clearDefaultFactory();
+}
+
+fn clearDefaultFactory(self: *App) void {
+    if (self.default_destroy) |destroy| {
+        if (self.default_userdata) |userdata| {
+            destroy(userdata, self.alloc);
+        }
+    }
+    self.default_create = null;
+    self.default_destroy = null;
+    self.default_userdata = null;
 }
 
 pub fn armSignal(instance: *anyopaque, on_stop: *const fn (ctx: *anyopaque) void) void {
@@ -77,13 +164,16 @@ pub fn disarmSignal() void {
 
 pub fn release(alloc: std.mem.Allocator) void {
     freeResolved(alloc);
-    if (threaded_initialized) {
-        threaded_instance.deinit();
-        threaded_initialized = false;
+    if (comptime Threaded != void) {
+        if (threaded_initialized) {
+            threaded_instance.deinit();
+            threaded_initialized = false;
+        }
     }
 }
 
 pub fn assertNoLeaks() void {
+    if (comptime builtin.os.tag == .wasi or builtin.os.tag == .freestanding) return;
     if (builtin.optimize == .debug)
         std.debug.assert(debug_allocator.deinit() == .ok);
 }
@@ -108,15 +198,16 @@ pub const allocator = switch (builtin.os.tag) {
 };
 
 const Io = if (platform.os == .freestanding) void else std.Io;
+const Threaded = if (platform.os == .freestanding) void else std.Io.Threaded;
 
-var threaded_instance: std.Io.Threaded = undefined;
+var threaded_instance: Threaded = if (Threaded == void) {} else undefined;
 var threaded_initialized = false;
 
 pub fn io() Io {
-    if (platform.os == .freestanding) return {};
+    if (comptime platform.os == .freestanding) return {};
 
     if (!threaded_initialized) {
-        threaded_instance = std.Io.Threaded.init(allocator, .{});
+        threaded_instance = Threaded.init(allocator, .{});
         threaded_initialized = true;
     }
     return threaded_instance.io();
@@ -141,6 +232,9 @@ var resolved: Resolved = .{};
 
 fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Config {
     var cfg = config;
+
+    if (app_opts.server_port) |p| cfg.server.port = p;
+    if (app_opts.server_address) |a| cfg.server.address = a;
 
     const rootdir_env = envVar(alloc, inita, "ZIEX_ROOT_DIR");
     const datadir_env = envVar(alloc, inita, "ZIEX_DATA_DIR");
@@ -266,20 +360,6 @@ fn envVar(alloc: std.mem.Allocator, inita: zx.Init, name: []const u8) ?[]const u
     };
     return minimal.environ.getAlloc(alloc, name) catch null;
 }
-
-fn failStart(_: ?*anyopaque) anyerror!void {
-    return error.AppUnavailable;
-}
-fn failStop(_: ?*anyopaque) void {}
-fn failDeinit(_: ?*anyopaque) void {}
-fn failInfo(_: ?*anyopaque) void {}
-
-pub const failing_vtable = VTable{
-    .start = &failStart,
-    .stop = &failStop,
-    .deinit = &failDeinit,
-    .info = &failInfo,
-};
 
 pub const Route = struct {
     path: []const u8,

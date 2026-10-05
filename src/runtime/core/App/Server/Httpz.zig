@@ -6,6 +6,7 @@ const app_opts = @import("app_opts");
 const zx = @import("../../../../root.zig");
 const constants = @import("../../constants.zig");
 const App = @import("../../App.zig");
+const Server = @import("../Server.zig");
 const AppConfig = @import("../Config.zig");
 const server_meta = @import("../../../server/Server.zig");
 const Http = @import("../../Http.zig");
@@ -20,13 +21,14 @@ const PageCache = @import("../../../server/PageCache.zig");
 const AccessLog = @import("AccessLog.zig");
 const Devtool = @import("Devtool.zig");
 const PubSub = @import("PubSub.zig");
+const Pipeline = @import("Pipeline.zig");
 
-fn httpzWsWrite(ctx: *anyopaque, message: []const u8) anyerror!void {
+fn onPublish(ctx: *anyopaque, message: []const u8) anyerror!void {
     const conn: *httpz.websocket.Conn = @ptrCast(@alignCast(ctx));
     try conn.write(message);
 }
 
-pub const server_token = "ziex/httpz";
+pub const token = "ziex/httpz";
 
 const Allocator = std.mem.Allocator;
 const Component = zx.Component;
@@ -35,28 +37,59 @@ const ServerApp = server_meta.ServerApp;
 const server_app = server_meta.server_app;
 const log = std.log.scoped(.app);
 
-// --- Method / protocol conversion --- //
-fn convertMethod(method: httpz.Method) std.http.Method {
-    return switch (method) {
-        .GET => .GET,
-        .HEAD => .HEAD,
-        .POST => .POST,
-        .PUT => .PUT,
-        .DELETE => .DELETE,
-        .CONNECT => .CONNECT,
-        .OPTIONS => .OPTIONS,
-        .PATCH => .PATCH,
-        .OTHER => .CONNECT,
-    };
-}
+/// httpz ↔ std.http conversions.
+const conv = struct {
+    fn method(m: httpz.Method) std.http.Method {
+        return switch (m) {
+            .GET => .GET,
+            .HEAD => .HEAD,
+            .POST => .POST,
+            .PUT => .PUT,
+            .DELETE => .DELETE,
+            .CONNECT => .CONNECT,
+            .OPTIONS => .OPTIONS,
+            .PATCH => .PATCH,
+            .OTHER => .CONNECT,
+        };
+    }
 
-fn convertProtocol(protocol: httpz.Protocol) std.http.Version {
-    return switch (protocol) {
-        .HTTP10 => .@"HTTP/1.0",
-        .HTTP11 => .@"HTTP/1.1",
-    };
-}
+    fn protocol(p: httpz.Protocol) std.http.Version {
+        return switch (p) {
+            .HTTP10 => .@"HTTP/1.0",
+            .HTTP11 => .@"HTTP/1.1",
+        };
+    }
 
+    fn mime(ct: ?httpz.ContentType) ?[]const u8 {
+        return if (ct) |c| switch (c) {
+            .BINARY => "application/octet-stream",
+            .CSS => "text/css",
+            .CSV => "text/csv",
+            .EOT => "application/vnd.ms-fontobject",
+            .EVENTS => "text/event-stream",
+            .GIF => "image/gif",
+            .GZ => "application/gzip",
+            .HTML => "text/html",
+            .ICO => "image/vnd.microsoft.icon",
+            .JPG => "image/jpeg",
+            .JS => "text/javascript",
+            .JSON => "application/json",
+            .OTF => "font/otf",
+            .PDF => "application/pdf",
+            .PNG => "image/png",
+            .SVG => "image/svg+xml",
+            .TAR => "application/x-tar",
+            .TEXT => "text/plain",
+            .TTF => "font/ttf",
+            .WASM => "application/wasm",
+            .WEBP => "image/webp",
+            .WOFF => "font/woff",
+            .WOFF2 => "font/woff2",
+            .XML => "text/xml",
+            .UNKNOWN => null,
+        } else null;
+    }
+};
 // --- Backend context --- //
 pub const HttpzCtx = struct {
     req: *httpz.Request,
@@ -231,12 +264,12 @@ pub fn createRequest(ctx: *HttpzCtx) Request {
     const inner = ctx.req;
     return .init(.{
         .url = inner.url.raw,
-        .method = convertMethod(inner.method),
+        .method = conv.method(inner.method),
         .method_str = inner.method_string,
         .pathname = inner.url.path,
         .referrer = inner.headers.get("referer") orelse "",
         .search = inner.url.query,
-        .protocol = convertProtocol(inner.protocol),
+        .protocol = conv.protocol(inner.protocol),
         .arena = inner.arena,
         .cookie_header = inner.headers.get("cookie") orelse "",
         .http = ctx.http(),
@@ -246,7 +279,7 @@ pub fn createRequest(ctx: *HttpzCtx) Request {
 /// Build an abstract `Response` backed by the given httpz request/response pair.
 pub fn createResponse(ctx: *HttpzCtx, arena: std.mem.Allocator) Response {
     if (!ctx.res.headers.has("Server")) {
-        ctx.res.header("Server", server_token);
+        ctx.res.header("Server", token);
     }
     return .init(.{
         .status = ctx.res.status,
@@ -293,8 +326,8 @@ pub const UpgradeBackend = struct {
 
 // --- Native httpz server --- //
 
-pub fn Server(comptime H: type) type {
-    const AppCtxType = switch (@typeInfo(H)) {
+pub fn Backend(comptime H: type) type {
+    const Ctx = switch (@typeInfo(H)) {
         .@"struct" => H,
         .pointer => |ptr| ptr.child,
         .void => void,
@@ -307,7 +340,7 @@ pub fn Server(comptime H: type) type {
         allocator: std.mem.Allocator,
         meta: ServerApp,
         handler: HandlerType,
-        server: httpz.Server(*HandlerType),
+        inner: httpz.Server(*HandlerType),
         config: AppConfig,
         app_ctx: H,
         io: std.Io,
@@ -318,7 +351,7 @@ pub fn Server(comptime H: type) type {
 
         _is_listening: bool = false,
 
-        const HandlerType = Handler(AppCtxType);
+        const HandlerType = Handler(Ctx);
 
         pub fn init(io: std.Io, allocator: std.mem.Allocator, config: AppConfig, app_ctx: H, inita: zx.Init) !*Self {
             const self = try allocator.create(Self);
@@ -329,12 +362,12 @@ pub fn Server(comptime H: type) type {
             self.app_ctx = app_ctx;
             self.io = io;
             self._is_listening = false;
-            self.inner_port = parseEnvPort(allocator, inita, "ZIEX_INNER_PORT");
-            self.outer_port = parseEnvPort(allocator, inita, "ZIEX_OUTER_PORT");
+            self.inner_port = Pipeline.net.port(allocator, inita, .inner);
+            self.outer_port = Pipeline.net.port(allocator, inita, .outer);
 
             // Get pointer to app context for handler initialization
             // When H is void, pass undefined; when H is pointer, use directly; when H is value, get pointer from self
-            const app_ctx_ptr: *AppCtxType = if (H == void)
+            const app_ctx_ptr: *Ctx = if (H == void)
                 undefined
             else if (@typeInfo(H) == .pointer)
                 app_ctx
@@ -344,14 +377,14 @@ pub fn Server(comptime H: type) type {
             self.config = config;
             self.handler = try HandlerType.init(self.io, allocator, &self.meta, config, app_ctx_ptr);
             errdefer self.handler.deinit();
-            self.server = try httpz.Server(*HandlerType).init(self.io, allocator, mapStruct(httpz.Config, config.server), &self.handler);
+            self.inner = try httpz.Server(*HandlerType).init(self.io, allocator, mapStruct(httpz.Config, config.server), &self.handler);
 
             // -- Routing -- //
-            var router = try self.server.router(.{});
+            var router = try self.inner.router(.{});
 
             // Static assets
-            router.get("/assets/*", HandlerType.assets, .{});
-            router.get("/*", HandlerType.public, .{});
+            router.get("/assets/*", HandlerType.static, .{});
+            router.get("/*", HandlerType.static, .{});
 
             // Routes
             inline for (server_app.routes) |*route| {
@@ -425,17 +458,17 @@ pub fn Server(comptime H: type) type {
             const allocator = self.allocator;
 
             if (self._is_listening) {
-                self.server.stop();
+                self.inner.stop();
                 self._is_listening = false;
             }
-            self.server.deinit();
+            self.inner.deinit();
             self.handler.deinit();
             allocator.destroy(self);
         }
 
         pub fn stop(self: *Self) void {
             if (self._is_listening) {
-                self.server.stop();
+                self.inner.stop();
                 self._is_listening = false;
             }
         }
@@ -447,20 +480,19 @@ pub fn Server(comptime H: type) type {
             // When running under the dev proxy, bind to the inner port on
             // loopback only - the proxy owns the user-facing port.
             if (self.inner_port) |inner_port| {
-                setServerAddress(&self.server.config, "127.0.0.1", inner_port);
+                setServerAddress(&self.inner.config, "127.0.0.1", inner_port);
             }
 
-            self.server.listen() catch |err| {
+            self.inner.listen() catch |err| {
                 self._is_listening = false;
 
                 switch (err) {
                     error.AddressInUse => {
                         // Dev port fallback lives in DevServer (outer proxy).
                         // The app binary must stay on ZIEX_INNER_PORT when proxied.
-                        const port = serverPort(&self.server.config).?;
+                        const port = serverPort(&self.inner.config).?;
                         self.infoWithCrossedOutPort(port);
-                        std.debug.print("{s}Port {d} is already in use{s}\n", .{ colors.red, port, colors.reset_all });
-                        std.debug.print("\nTo kill the port, run:\n  {s}kill -9 $(lsof -t -i:{d}){s}\n\n", .{ colors.dim, port, colors.reset_all });
+                        Pipeline.net.busy(port);
                         return err;
                     },
                     else => return err,
@@ -471,42 +503,48 @@ pub fn Server(comptime H: type) type {
         /// Print the server info to the console
         /// ZX - v{version} | http://localhost:{port}
         pub fn info(self: *Self) void {
-            const display_port: u16 = self.outer_port orelse serverPort(&self.server.config).?;
-            std.debug.print("{s}ZX{s} {s}- v{s}{s} | http://localhost:{d}\n", .{ colors.bold, colors.reset_all, colors.dim, zx.info.version, colors.reset_all, display_port });
+            const display_port: u16 = self.outer_port orelse serverPort(&self.inner.config).?;
+            Pipeline.net.banner(display_port, "");
         }
+
+        pub fn server(self: *Self) Server {
+            return .{ .userdata = self, .vtable = &vtable };
+        }
+
+        const vtable = Server.bind(Self);
 
         /// Print the info line with the address/port part crossed out
         fn infoWithCrossedOutPort(_: *Self, port: u16) void {
+            const c = Pipeline.colors;
             std.debug.print(
-                "{s}{s}{s}ZX{s} {s}- v{s}{s} {s} | {s}http://localhost:{d}{s}\n",
+                "{s}\r{s}ZX{s} {s}- v{s}{s} {s} | {s}http://localhost:{d}{s}\n",
                 .{
-                    colors.move_up,
-                    colors.reset,
-                    colors.bold,
-                    colors.reset_all,
-                    colors.dim,
+                    c.move_up,
+                    c.bold,
+                    c.reset,
+                    c.dim,
                     zx.info.version,
-                    colors.reset_all,
-                    colors.dim,
-                    colors.strikethrough,
+                    c.reset,
+                    c.dim,
+                    c.strikethrough,
                     port,
-                    colors.reset_all,
+                    c.reset,
                 },
             );
         }
 
         fn applyServerDefaults(self: *Self) void {
-            const port = (if (app_opts.server_port != null) app_opts.server_port else serverPort(&self.server.config)) orelse constants.default_port;
-            const address = app_opts.server_address orelse self.config.server.address orelse constants.default_address;
+            const port = (if (app_opts.server_port != null) app_opts.server_port else serverPort(&self.inner.config)) orelse Pipeline.defaults.port;
+            const address = app_opts.server_address orelse self.config.server.address orelse Pipeline.defaults.address;
 
-            setServerAddress(&self.server.config, address, port);
+            setServerAddress(&self.inner.config, address, port);
             // Config already carries ziex form defaults; keep httpz in sync if
             // an older mapped null somehow remains.
-            if (self.server.config.request.max_form_count == null) {
-                self.server.config.request.max_form_count = constants.default_max_form_count;
+            if (self.inner.config.request.max_form_count == null) {
+                self.inner.config.request.max_form_count = constants.default_max_form_count;
             }
-            if (self.server.config.request.max_multiform_count == null) {
-                self.server.config.request.max_multiform_count = constants.default_max_multiform_count;
+            if (self.inner.config.request.max_multiform_count == null) {
+                self.inner.config.request.max_multiform_count = constants.default_max_multiform_count;
             }
         }
     };
@@ -537,8 +575,8 @@ pub fn mapStruct(comptime T: type, src: anytype) T {
 
 fn mapServerAddress(src: AppConfig.ServerConfig) httpz.Config.Address {
     if (src.unix_path) |unix_path| return .{ .unix = unix_path };
-    const port = src.port orelse constants.default_port;
-    const address = src.address orelse constants.default_address;
+    const port = src.port orelse Pipeline.defaults.port;
+    const address = src.address orelse Pipeline.defaults.address;
 
     if (std.mem.eql(u8, address, "localhost")) return httpz.Config.Address.localhost(port);
     if (std.mem.eql(u8, address, "0.0.0.0")) return httpz.Config.Address.all(port);
@@ -561,29 +599,6 @@ fn setServerAddress(config: *httpz.Config, address: []const u8, port: u16) void 
     else
         .{ .ip = std.Io.net.IpAddress.parse(address, port) catch .{ .ip4 = .{ .bytes = .{ 127, 0, 0, 1 }, .port = port } } };
 }
-
-fn parseEnvPort(alloc: std.mem.Allocator, inita: zx.Init, name: []const u8) ?u16 {
-    const minimal: std.process.Init.Minimal = switch (@TypeOf(inita)) {
-        std.process.Init.Minimal => inita,
-        std.process.Init => inita.minimal,
-        else => return null,
-    };
-    const value = minimal.environ.getAlloc(alloc, name) catch return null;
-    defer alloc.free(value);
-    return std.fmt.parseInt(u16, value, 10) catch null;
-}
-
-const colors = struct {
-    const move_up = "\x1b[1A";
-    const reset = "\r";
-    const bold = "\x1b[1m";
-    const dim = "\x1b[2m";
-    const strikethrough = "\x1b[9m";
-    const reset_all = "\x1b[0m";
-    const yellow = "\x1b[33m";
-    const red = "\x1b[31m";
-    const blink = "\x1b[5m";
-};
 
 // --- Client WebSocket (outbound `ws://`/`wss://` connections) --- //
 
@@ -800,7 +815,7 @@ pub const websocket = struct {
 
 /// Converts transport-specific (httpz) types to abstract Request/Response,
 /// then runs cache / Router / render / static / WebSocket orchestration.
-fn Handler(comptime AppCtxType: type) type {
+fn Handler(comptime Ctx: type) type {
     const is_dev = App.mode == .dev;
     const is_export = App.mode == .@"export";
     const feat_cache = app_opts.feat_cache_server;
@@ -812,10 +827,10 @@ fn Handler(comptime AppCtxType: type) type {
         config: AppConfig,
         page_cache: if (feat_cache) PageCache else void,
         allocator: std.mem.Allocator,
-        app_ctx: *AppCtxType,
+        app_ctx: *Ctx,
         io: std.Io,
 
-        pub fn init(io: std.Io, allocator: std.mem.Allocator, meta: *ServerApp, config: AppConfig, app_ctx: *AppCtxType) !Self {
+        pub fn init(io: std.Io, allocator: std.mem.Allocator, meta: *ServerApp, config: AppConfig, app_ctx: *Ctx) !Self {
             const cache_config = config.cache;
 
             return Self{
@@ -854,7 +869,7 @@ fn Handler(comptime AppCtxType: type) type {
                     self.page_cache.store(abstract_req, abstract_res, .{
                         .status = res.status,
                         .body = body,
-                        .content_type = httpzContentTypeMime(res.content_type),
+                        .content_type = conv.mime(res.content_type),
                     });
                 }
             }
@@ -906,23 +921,11 @@ fn Handler(comptime AppCtxType: type) type {
             };
         }
 
-        fn injectDevScript(arena: Allocator, component: *Component) void {
-            core_handler.injectDevScript(arena, component);
-        }
-
-        fn markProxyStatus(proxy: zx.Router.ProxyResult) void {
-            if (proxy.aborted) {
-                AccessLog.ProxyStatus.markAborted();
-            } else if (proxy.state_ptr != null) {
-                AccessLog.ProxyStatus.markExecuted();
-            }
-        }
-
         fn emitHtmlOrPlain(self: *Self, req: *httpz.Request, res: *httpz.Response, component: ?Component) !void {
             _ = self;
             if (component) |cmp| {
                 var page_component = cmp;
-                if (comptime is_dev) injectDevScript(req.arena, &page_component);
+                if (comptime is_dev) core_handler.injectDevScript(req.arena, &page_component);
 
                 res.clearWriter();
                 const writer = res.writer();
@@ -938,16 +941,7 @@ fn Handler(comptime AppCtxType: type) type {
             }
         }
 
-        /// Shared page/API entry used by both httpz registrations.
-        pub fn api(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {
-            return self.dispatchRequest(req, res);
-        }
-
         pub fn page(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {
-            return self.dispatchRequest(req, res);
-        }
-
-        fn dispatchRequest(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {
             const allocator = self.allocator;
 
             if (comptime is_dev) {
@@ -1017,7 +1011,7 @@ fn Handler(comptime AppCtxType: type) type {
                 .app_ctx = @ptrCast(self.app_ctx),
                 .socket = socket,
             });
-            markProxyStatus(result.proxy);
+            Pipeline.proxyStatus(result.proxy);
 
             switch (result.outcome) {
                 .response_ready => {},
@@ -1030,7 +1024,7 @@ fn Handler(comptime AppCtxType: type) type {
                             try Devtool.writeComponents(page_component, Devtool.componentOptions(http), res.writer());
                             return;
                         }
-                        injectDevScript(req.arena, &page_component);
+                        core_handler.injectDevScript(req.arena, &page_component);
                     }
 
                     if (c.streaming) {
@@ -1120,7 +1114,7 @@ fn Handler(comptime AppCtxType: type) type {
             };
 
             if (async_components.len > 0) {
-                res.chunk(rndr.streaming_bootstrap_script) catch |err| {
+                res.chunk(Pipeline.ssr_bootstrap) catch |err| {
                     log.err("sending bootstrap script: {}", .{err});
                     return err;
                 };
@@ -1226,15 +1220,8 @@ fn Handler(comptime AppCtxType: type) type {
             }
         }
 
-        pub fn assets(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {
-            try self.static(req, res);
-        }
-        pub fn public(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {
-            try self.static(req, res);
-        }
-
-        pub inline fn static(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {
-            const staticdir = self.config.staticdir orelse constants.default_staticdir;
+        pub fn static(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {
+            const staticdir = self.config.staticdir orelse Pipeline.defaults.staticdir;
             const assets_path = try std.fs.path.join(res.arena, &.{ staticdir, req.url.path });
 
             const body = std.Io.Dir.cwd().readFileAlloc(self.io, assets_path, res.arena, .unlimited) catch |err| {
@@ -1280,7 +1267,7 @@ fn Handler(comptime AppCtxType: type) type {
                     .ws_allocator = ctx.allocator,
                     .io = ctx.io,
                     .upgrade_data = ctx.upgrade_data,
-                    .subscriber = PubSub.Subscriber.init(ctx.allocator, ctx.io, conn, httpzWsWrite),
+                    .subscriber = PubSub.Subscriber.init(ctx.allocator, ctx.io, conn, onPublish),
                 };
             }
 
@@ -1388,34 +1375,4 @@ fn Handler(comptime AppCtxType: type) type {
             }
         };
     };
-}
-
-fn httpzContentTypeMime(ct: ?httpz.ContentType) ?[]const u8 {
-    return if (ct) |c| switch (c) {
-        .BINARY => "application/octet-stream",
-        .CSS => "text/css",
-        .CSV => "text/csv",
-        .EOT => "application/vnd.ms-fontobject",
-        .EVENTS => "text/event-stream",
-        .GIF => "image/gif",
-        .GZ => "application/gzip",
-        .HTML => "text/html",
-        .ICO => "image/vnd.microsoft.icon",
-        .JPG => "image/jpeg",
-        .JS => "text/javascript",
-        .JSON => "application/json",
-        .OTF => "font/otf",
-        .PDF => "application/pdf",
-        .PNG => "image/png",
-        .SVG => "image/svg+xml",
-        .TAR => "application/x-tar",
-        .TEXT => "text/plain",
-        .TTF => "font/ttf",
-        .WASM => "application/wasm",
-        .WEBP => "image/webp",
-        .WOFF => "font/woff",
-        .WOFF2 => "font/woff2",
-        .XML => "text/xml",
-        .UNKNOWN => null,
-    } else null;
 }

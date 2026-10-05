@@ -6,32 +6,14 @@ const builtin = @import("builtin");
 const app_opts = @import("app_opts");
 
 const zx = @import("../../../../root.zig");
-const constants = @import("../../constants.zig");
-const App = @import("../../App.zig");
-const AppConfig = @import("../Config.zig");
-const server_meta = @import("../../../server/Server.zig");
-const core_handler = @import("../Router/Handler.zig");
-const render = @import("../../../server/render.zig");
-const AccessLog = @import("AccessLog.zig");
-const Devtool = @import("Devtool.zig");
-const PubSub = @import("PubSub.zig");
+const Server = @import("../Server.zig");
+const Pipeline = @import("Pipeline.zig");
 const con = @import("../../../../util/conn.zig");
 
-const Router = zx.Router;
-const Component = zx.Component;
-const Conn = zx.Http.Conn;
-const HeaderEntry = zx.Http.Conn.HeaderEntry;
-const ServerApp = server_meta.ServerApp;
-const server_app = server_meta.server_app;
+pub const token = "ziex/std";
 
-const base_path = app_opts.app_base_path;
-const is_dev = App.mode == .dev;
-const is_export = App.mode == .@"export";
-
-pub const server_token = "ziex/std";
-
-pub fn Server(comptime H: type) type {
-    const AppCtxType = switch (@typeInfo(H)) {
+pub fn Backend(comptime H: type) type {
+    const Ctx = switch (@typeInfo(H)) {
         .@"struct" => H,
         .pointer => |ptr| ptr.child,
         .void => void,
@@ -43,10 +25,9 @@ pub fn Server(comptime H: type) type {
 
         allocator: std.mem.Allocator,
         io: std.Io,
-        config: AppConfig,
+        config: Pipeline.Config,
         app_ctx: H,
-        app_ctx_ptr: *AppCtxType,
-        meta: ServerApp,
+        app_ctx_ptr: *Ctx,
         address: std.Io.net.IpAddress,
         tcp: ?std.Io.net.Server = null,
         shutting_down: std.atomic.Value(bool) = .init(false),
@@ -66,12 +47,12 @@ pub fn Server(comptime H: type) type {
 
         live_connections: con = .{},
 
-        pub fn init(io: std.Io, allocator: std.mem.Allocator, config: AppConfig, app_ctx: H, inita: zx.Init) !*Self {
+        pub fn init(io: std.Io, allocator: std.mem.Allocator, config: Pipeline.Config, app_ctx: H, inita: zx.Init) !*Self {
             const self = try allocator.create(Self);
             errdefer allocator.destroy(self);
 
-            const port: u16 = (if (app_opts.server_port) |p| p else config.server.port) orelse constants.default_port;
-            const address_str = app_opts.server_address orelse config.server.address orelse constants.default_address;
+            const port: u16 = (if (app_opts.server_port) |p| p else config.server.port) orelse Pipeline.defaults.port;
+            const address_str = app_opts.server_address orelse config.server.address orelse Pipeline.defaults.address;
 
             const worker_count: u32 = @max(@as(u32, config.server.thread_pool.count orelse 1), 1);
             const queue_cap: u32 = @max(config.server.thread_pool.backlog, 1);
@@ -82,11 +63,10 @@ pub fn Server(comptime H: type) type {
                 .config = config,
                 .app_ctx = app_ctx,
                 .app_ctx_ptr = if (H == void) undefined else if (@typeInfo(H) == .pointer) app_ctx else &self.app_ctx,
-                .meta = server_app,
-                .address = resolveAddress(address_str, port),
+                .address = Pipeline.net.address(address_str, port),
                 .port = port,
-                .inner_port = parseEnvPort(allocator, inita, "ZIEX_INNER_PORT"),
-                .outer_port = parseEnvPort(allocator, inita, "ZIEX_OUTER_PORT"),
+                .inner_port = Pipeline.net.port(allocator, inita, .inner),
+                .outer_port = Pipeline.net.port(allocator, inita, .outer),
                 .worker_count = worker_count,
                 .queue_cap = @max(queue_cap, 1),
             };
@@ -101,10 +81,10 @@ pub fn Server(comptime H: type) type {
 
         pub fn stop(self: *Self) void {
             if (self.shutting_down.swap(true, .acq_rel)) return;
-            if (self.tcp) |*server| {
-                const listener: std.Io.net.Stream = .{ .socket = server.socket };
+            if (self.tcp) |*tcp| {
+                const listener: std.Io.net.Stream = .{ .socket = tcp.socket };
                 listener.shutdown(self.io, .both) catch {
-                    wakeAccept(self.io, self.inner_port orelse self.port);
+                    http.wake(self.io, self.inner_port orelse self.port);
                 };
             }
             self.live_connections.shutdownAll(self.io);
@@ -122,8 +102,7 @@ pub fn Server(comptime H: type) type {
                 .reuse_address = self.inner_port != null,
             }) catch |err| switch (err) {
                 error.AddressInUse => {
-                    std.debug.print("{s}Port {d} is already in use{s}\n", .{ colors.red, bind_address.getPort(), colors.reset_all });
-                    std.debug.print("\nTo kill the port, run:\n  {s}kill -9 $(lsof -t -i:{d}){s}\n\n", .{ colors.dim, bind_address.getPort(), colors.reset_all });
+                    Pipeline.net.busy(bind_address.getPort());
                     return err;
                 },
                 else => return err,
@@ -138,10 +117,10 @@ pub fn Server(comptime H: type) type {
             try self.startWorkers();
             defer self.shutdownWorkers();
 
-            const server = &self.tcp.?;
+            const tcp = &self.tcp.?;
             while (true) {
                 if (self.shutting_down.load(.acquire)) return;
-                const stream = server.accept(self.io) catch {
+                const stream = tcp.accept(self.io) catch {
                     if (self.shutting_down.load(.acquire)) return;
                     continue;
                 };
@@ -257,8 +236,14 @@ pub fn Server(comptime H: type) type {
         /// Print the server info to the console: ZX - v{version} | http://localhost:{port}
         pub fn info(self: *Self) void {
             const display_port = self.outer_port orelse self.port;
-            std.debug.print("{s}ZX{s} {s}- v{s}{s} | http://localhost:{d}\n", .{ colors.bold, colors.reset_all, colors.dim, zx.info.version, colors.reset_all, display_port });
+            Pipeline.net.banner(display_port, "");
         }
+
+        pub fn server(self: *Self) Server {
+            return .{ .userdata = self, .vtable = &vtable };
+        }
+
+        const vtable = Server.bind(Self);
 
         fn handleConnection(self: *Self, stream: std.Io.net.Stream) void {
             const live_token = self.live_connections.track(stream) orelse {
@@ -292,11 +277,7 @@ pub fn Server(comptime H: type) type {
             defer arena_instance.deinit();
             const arena = arena_instance.allocator();
 
-            const target_raw = request.head.target;
-            const qpos = std.mem.indexOfScalar(u8, target_raw, '?');
-            const target = try arena.dupe(u8, target_raw);
-            const pathname = if (qpos) |p| target[0..p] else target;
-            const search = if (qpos) |p| target[p..] else "";
+            const target = try arena.dupe(u8, request.head.target);
             const method = request.head.method;
             const upgrade = request.upgradeRequested();
             const ws_key: ?[]const u8 = switch (upgrade) {
@@ -304,23 +285,13 @@ pub fn Server(comptime H: type) type {
                 else => null,
             };
 
-            const start_time = if (comptime is_dev) std.Io.Timestamp.now(self.io, .awake) else std.Io.Timestamp.zero;
-            if (comptime is_dev) AccessLog.ProxyStatus.reset();
-
-            var header_entries: std.ArrayList(HeaderEntry) = .empty;
+            var header_entries: std.ArrayList(Pipeline.HeaderEntry) = .empty;
             var header_iter = request.iterateHeaders();
             while (header_iter.next()) |h| {
                 header_entries.append(arena, .{
                     .name = try arena.dupe(u8, h.name),
                     .value = try arena.dupe(u8, h.value),
                 }) catch {};
-            }
-
-            var content_type: []const u8 = "";
-            var cookie_header: []const u8 = "";
-            for (header_entries.items) |e| {
-                if (std.ascii.eqlIgnoreCase(e.name, "content-type")) content_type = e.value;
-                if (std.ascii.eqlIgnoreCase(e.name, "cookie")) cookie_header = e.value;
             }
 
             var body_scratch: [8192]u8 = undefined;
@@ -331,365 +302,178 @@ pub fn Server(comptime H: type) type {
             else |_|
                 "";
 
-            var backend = Conn.init(arena);
-            backend.headers = header_entries.items;
-            backend.search = search;
-            backend.body = body;
-            backend.content_type = content_type;
-            backend.cookie_header = cookie_header;
-            backend.route_match = Router.matchRoute(pathname, .{ .match = .exact });
-
-            const req_obj = backend.request(method, pathname, target);
-            const res_obj = backend.response();
-            const http = backend.http();
-            http.resHeaderSet("Server", server_token);
-
-            if (comptime is_dev) {
-                if (try self.handleDevtool(request, arena, &backend, http, method)) return true;
-            }
-
-            const matched = if (backend.route_match) |m| m.route else null;
-            const handlers = if (matched) |r| r.route else null;
-            const socket: zx.Socket = if (handlers != null and handlers.?.socket != null)
-                .{ ._internal = .{ .http = http, .attached = true } }
-            else
-                .{};
-
-            // Export-only early outs (parity with Httpz backend)
-            if (comptime is_export) {
-                if (http.reqHeaderHas("x-zx-export-notfound")) {
-                    if (core_handler.prepareNotFound(http, pathname, req_obj, res_obj, arena, self.io, matched)) |cmp| {
-                        var page = cmp;
-                        if (http.resHeaderGet("Content-Type") == null) backend.setContentTypeStr("text/html");
-                        try self.streamHtmlDocument(arena, request, &backend, &page);
-                    } else {
-                        backend.status = 404;
-                        try self.respondBody(arena, request, &backend, "404 Not Found");
-                    }
-                    return true;
-                }
-
-                if (matched) |route| {
-                    if (http.reqHeaderHas("x-zx-static-data")) {
-                        if (try route.resolveStaticParams(arena, self.io)) |params| {
-                            var aw: std.Io.Writer.Allocating = .init(arena);
-                            try std.zon.stringify.serialize(params, .{ .whitespace = true }, &aw.writer);
-                            try self.respondBody(arena, request, &backend, aw.written());
-                        } else {
-                            try self.respondBody(arena, request, &backend, "");
-                        }
-                        return true;
-                    }
-
-                    if (route.isDynamic()) {
-                        http.resHeaderSet("x-zx-dynamic", "true");
-                        var aw: std.Io.Writer.Allocating = .init(arena);
-                        try std.zon.stringify.serialize(.{ .dynamic = true }, .{ .whitespace = true }, &aw.writer);
-                        try self.respondBody(arena, request, &backend, aw.written());
-                        return true;
-                    }
-                }
-            }
-
-            const result = try Router.handle(.{ .is_dev = is_dev }, .{
-                .http = http,
-                .request = req_obj,
-                .response = res_obj,
-                .pathname = pathname,
-                .method = method,
-                .allocator = self.allocator,
+            var ctx: Request = .{
+                .server = self,
+                .request = request,
                 .arena = arena,
-                .io = self.io,
-                .base_path = base_path,
-                .app_ctx = @ptrCast(self.app_ctx_ptr),
-                .socket = socket,
-            });
-            if (comptime is_dev) markProxyStatus(result.proxy);
-
-            const keep_going = blk: {
-                switch (result.outcome) {
-                    .response_ready => try self.flushRespond(arena, request, &backend),
-
-                    .component => |c| {
-                        var component = c.component;
-                        if (comptime is_dev) {
-                            if (Devtool.isComponentsMode(http.reqHeaderGet(Devtool.header_mode))) {
-                                try self.respondDevtoolComponents(arena, request, &backend, http, &component);
-                                break :blk true;
-                            }
-                            core_handler.injectDevScript(arena, &component);
-                        }
-                        if (http.resHeaderGet("Content-Type") == null) backend.setContentTypeStr("text/html");
-                        if (c.streaming) {
-                            try self.streamHtmlSsr(arena, request, &backend, component, http, pathname, req_obj, res_obj, matched);
-                        } else {
-                            try self.streamHtmlDocument(arena, request, &backend, &component);
-                        }
-                    },
-
-                    .ws_upgraded => {
-                        if (!backend.upgraded) {
-                            try self.flushRespond(arena, request, &backend);
-                            break :blk true;
-                        }
-                        try self.handleWsUpgrade(request, ws_key, handlers.?, backend.upgradeData(), arena);
-                        break :blk false;
-                    },
-
-                    .not_found => |nf| {
-                        if (try self.respondStatic(arena, request, pathname)) {
-                            backend.status = 200;
-                            break :blk true;
-                        }
-                        if (nf.component) |cmp| {
-                            var page = cmp;
-                            if (comptime is_dev) core_handler.injectDevScript(arena, &page);
-                            if (http.resHeaderGet("Content-Type") == null) backend.setContentTypeStr("text/html");
-                            try self.streamHtmlDocument(arena, request, &backend, &page);
-                        } else {
-                            try self.flushRespond(arena, request, &backend);
-                        }
-                    },
-                }
-                break :blk true;
+                .ws_key = ws_key,
             };
 
-            if ((comptime is_dev) and !AccessLog.isNoisyPath(pathname)) {
-                AccessLog.log(arena, self.io, .{
-                    .method = @tagName(method),
-                    .path = pathname,
-                    .status = backend.status,
-                    .start_time = start_time,
-                    .cache_status = .disabled,
+            const result = try Pipeline.serve(
+                Pipeline.opts,
+                Pipeline.context(Pipeline.opts, arena, self.allocator, self.io, self.config.server, @ptrCast(self.app_ctx_ptr)),
+                method,
+                target,
+                header_entries.items,
+                body,
+                ctx.transport(),
+                token,
+            );
+
+            return result.keep_http;
+        }
+
+        const Request = struct {
+            server: *Self,
+            request: *std.http.Server.Request,
+            arena: std.mem.Allocator,
+            ws_key: ?[]const u8,
+
+            fn transport(self: *Request) Pipeline.Transport {
+                return .{
+                    .ptr = self,
+                    .flush = &flush,
+                    .write = &write,
+                    .html = &html,
+                    .ssr = &ssr,
+                    .static = &static,
+                    .upgrade = &upgrade,
+                };
+            }
+
+            fn of(ptr: *anyopaque) *Request {
+                return @ptrCast(@alignCast(ptr));
+            }
+
+            fn flush(ptr: *anyopaque, backend: *Pipeline.Conn) anyerror!void {
+                const ctx = of(ptr);
+                try respondBody(ctx.arena, ctx.request, backend, backend.bodySlice());
+            }
+
+            fn write(ptr: *anyopaque, backend: *Pipeline.Conn, body: []const u8) anyerror!void {
+                const ctx = of(ptr);
+                try respondBody(ctx.arena, ctx.request, backend, body);
+            }
+
+            fn html(ptr: *anyopaque, backend: *Pipeline.Conn, component: *Pipeline.Component) anyerror!void {
+                const ctx = of(ptr);
+                var chunk_buf: [16 * 1024]u8 = undefined;
+                const headers = try http.headers(ctx.arena, backend);
+                var body = try ctx.request.respondStreaming(&chunk_buf, .{
+                    .respond_options = .{
+                        .status = http.status(backend.status),
+                        .extra_headers = headers,
+                    },
                 });
+                Pipeline.renderHtml(&body.writer, component, Pipeline.opts.base_path) catch {
+                    try body.end();
+                    return;
+                };
+                try body.end();
             }
 
-            return keep_going;
-        }
-
-        fn markProxyStatus(proxy: zx.Router.ProxyResult) void {
-            if (proxy.aborted) {
-                AccessLog.ProxyStatus.markAborted();
-            } else if (proxy.state_ptr != null) {
-                AccessLog.ProxyStatus.markExecuted();
+            fn ssr(
+                ptr: *anyopaque,
+                backend: *Pipeline.Conn,
+                shell: []const u8,
+                async_components: []Pipeline.AsyncComponent,
+            ) anyerror!void {
+                const ctx = of(ptr);
+                var chunk_buf: [16 * 1024]u8 = undefined;
+                const headers = try http.headers(ctx.arena, backend);
+                var body = try ctx.request.respondStreaming(&chunk_buf, .{
+                    .respond_options = .{
+                        .status = http.status(backend.status),
+                        .extra_headers = headers,
+                    },
+                });
+                try http.chunk(&body, "<!DOCTYPE html>\n");
+                try http.chunk(&body, shell);
+                if (async_components.len > 0) {
+                    try http.chunk(&body, Pipeline.ssr_bootstrap);
+                    try http.streamAsync(ctx.server.io, &body, async_components);
+                }
+                try body.end();
             }
-        }
 
-        /// Devtool probe via `x-zx-devtool` (proxied from `/.well-known/_zx/devtool`).
-        /// Returns true when the request is fully handled (OPTIONS / meta / info).
-        fn handleDevtool(
-            self: *Self,
-            request: *std.http.Server.Request,
-            arena: std.mem.Allocator,
-            backend: *Conn,
-            http: zx.Http,
-            method: std.http.Method,
-        ) !bool {
-            const action = Devtool.early(http.reqHeaderGet(Devtool.header_mode), method == .OPTIONS);
-            if (action == .none) return false;
-            Devtool.applyCors(http);
-
-            switch (action) {
-                .none => unreachable,
-                .empty => {
-                    try self.flushRespond(arena, request, backend);
-                    return true;
-                },
-                .meta, .info => {
-                    var aw: std.Io.Writer.Allocating = .init(arena);
-                    if (action == .meta)
-                        try Devtool.writeMeta(arena, &self.meta, self.config.server, &aw.writer)
-                    else
-                        try Devtool.writeInfo(arena, &self.meta, self.config.server, &aw.writer);
-                    backend.setContentTypeStr("application/json");
-                    try self.respondBody(arena, request, backend, aw.written());
-                    return true;
-                },
-                .continue_render => return false,
+            fn static(ptr: *anyopaque, pathname: []const u8) anyerror!bool {
+                const ctx = of(ptr);
+                const staticdir = ctx.server.config.staticdir orelse Pipeline.defaults.staticdir;
+                const data = try Pipeline.web.staticFile(ctx.server.io, ctx.arena, staticdir, pathname) orelse return false;
+                const headers = [_]std.http.Header{
+                    .{ .name = "Server", .value = token },
+                    .{ .name = "Content-Type", .value = Pipeline.web.mime(pathname) },
+                };
+                try ctx.request.respond(data, .{ .status = .ok, .extra_headers = &headers });
+                return true;
             }
-        }
 
-        fn respondDevtoolComponents(
-            self: *Self,
-            arena: std.mem.Allocator,
-            request: *std.http.Server.Request,
-            backend: *Conn,
-            http: zx.Http,
-            component: *Component,
-        ) !void {
-            Devtool.applyCors(http);
-            var aw: std.Io.Writer.Allocating = .init(arena);
-            try Devtool.writeComponents(component.*, Devtool.componentOptions(http), &aw.writer);
-            backend.setContentTypeStr("application/json");
-            try self.respondBody(arena, request, backend, aw.written());
-        }
+            fn upgrade(ptr: *anyopaque, handlers: Pipeline.RouteHandlers, upgrade_data: ?[]const u8) anyerror!void {
+                const ctx = of(ptr);
+                const key = ctx.ws_key orelse {
+                    ctx.request.respond("Invalid WebSocket handshake", .{ .status = .bad_request }) catch {};
+                    return;
+                };
 
-        fn respondBody(self: *Self, arena: std.mem.Allocator, request: *std.http.Server.Request, backend: *Conn, body: []const u8) !void {
-            _ = self;
-            const headers = try collectHeaders(arena, backend);
+                var ws = ctx.request.respondWebSocket(.{ .key = key }) catch return;
+                try ws.flush();
+
+                var conn: Ws = .{
+                    .ws = &ws,
+                    .io = ctx.server.io,
+                    .subscriber = undefined,
+                };
+                conn.subscriber = Pipeline.PubSub.Subscriber.init(ctx.server.allocator, ctx.server.io, &conn, Ws.onPublish);
+                defer conn.subscriber.unsubscribeAll();
+
+                const sock = conn.socket();
+
+                if (handlers.socket_open) |open_fn| {
+                    open_fn(sock, upgrade_data, ctx.server.allocator, ctx.arena, ctx.server.io) catch {};
+                }
+
+                while (true) {
+                    const msg = ws.readSmallMessage() catch break;
+                    switch (msg.opcode) {
+                        .ping => {
+                            conn.writeRaw(msg.data, .pong) catch break;
+                            continue;
+                        },
+                        else => {},
+                    }
+                    if (handlers.socket) |socket_fn| {
+                        const msg_type: Pipeline.SocketMessageType = if (msg.opcode == .binary) .binary else .text;
+                        socket_fn(sock, msg.data, msg_type, upgrade_data, ctx.server.allocator, ctx.arena, ctx.server.io) catch {};
+                    }
+                }
+
+                if (handlers.socket_close) |close_fn| {
+                    close_fn(sock, upgrade_data, ctx.server.allocator, ctx.server.io);
+                }
+            }
+        };
+
+        fn respondBody(arena: std.mem.Allocator, request: *std.http.Server.Request, backend: *Pipeline.Conn, body: []const u8) !void {
+            const headers = try http.headers(arena, backend);
             try request.respond(body, .{
-                .status = statusFrom(backend.status),
+                .status = http.status(backend.status),
                 .extra_headers = headers,
             });
-        }
-
-        /// Write-through HTML: `Component.render` → `BodyWriter` (chunked).
-        fn streamHtmlDocument(
-            self: *Self,
-            arena: std.mem.Allocator,
-            request: *std.http.Server.Request,
-            backend: *Conn,
-            component: *Component,
-        ) !void {
-            _ = self;
-            var chunk_buf: [16 * 1024]u8 = undefined;
-            const headers = try collectHeaders(arena, backend);
-            var body = try request.respondStreaming(&chunk_buf, .{
-                .respond_options = .{
-                    .status = statusFrom(backend.status),
-                    .extra_headers = headers,
-                },
-            });
-            core_handler.renderHtmlDocument(&body.writer, component, base_path) catch {
-                try body.end();
-                return;
-            };
-            try body.end();
-        }
-
-        /// Shell-first SSR: stream DOCTYPE + shell, then async component scripts.
-        fn streamHtmlSsr(
-            self: *Self,
-            arena: std.mem.Allocator,
-            request: *std.http.Server.Request,
-            backend: *Conn,
-            component: Component,
-            http: zx.Http,
-            pathname: []const u8,
-            req_obj: zx.Http.Request,
-            res_obj: zx.Http.Response,
-            matched: ?*const ServerApp.Route,
-        ) !void {
-            var shell_writer = std.Io.Writer.Allocating.init(arena);
-            const async_components = Router.streamComponent(component, arena, &shell_writer.writer, base_path) catch |stream_err| {
-                var page = component;
-                switch (stream_err) {
-                    error.NotFound => {
-                        if (core_handler.prepareNotFound(http, pathname, req_obj, res_obj, arena, self.io, matched)) |c| {
-                            page = c;
-                            backend.setContentTypeStr("text/html");
-                        } else {
-                            try self.flushRespond(arena, request, backend);
-                            return;
-                        }
-                    },
-                    else => {},
-                }
-                try self.streamHtmlDocument(arena, request, backend, &page);
-                return;
-            };
-
-            var chunk_buf: [16 * 1024]u8 = undefined;
-            const headers = try collectHeaders(arena, backend);
-            var body = try request.respondStreaming(&chunk_buf, .{
-                .respond_options = .{
-                    .status = statusFrom(backend.status),
-                    .extra_headers = headers,
-                },
-            });
-            try writeAndFlushChunk(&body, "<!DOCTYPE html>\n");
-            try writeAndFlushChunk(&body, shell_writer.written());
-            if (async_components.len > 0) {
-                try writeAndFlushChunk(&body, render.streaming_bootstrap_script);
-                try streamAsyncComponents(self.io, &body, async_components);
-            }
-            try body.end();
-        }
-
-        fn handleWsUpgrade(
-            self: *Self,
-            request: *std.http.Server.Request,
-            ws_key: ?[]const u8,
-            handlers: ServerApp.RouteHandlers,
-            upgrade_data: ?[]const u8,
-            arena: std.mem.Allocator,
-        ) !void {
-            const key = ws_key orelse {
-                request.respond("Invalid WebSocket handshake", .{ .status = .bad_request }) catch {};
-                return;
-            };
-
-            var ws = request.respondWebSocket(.{ .key = key }) catch return;
-            try ws.flush();
-
-            var conn: WsConn = .{
-                .ws = &ws,
-                .io = self.io,
-                .subscriber = undefined,
-            };
-            conn.subscriber = PubSub.Subscriber.init(self.allocator, self.io, &conn, stdWsWrite);
-            defer conn.subscriber.unsubscribeAll();
-
-            const socket = conn.socket();
-
-            if (handlers.socket_open) |open_fn| {
-                open_fn(socket, upgrade_data, self.allocator, arena, self.io) catch {};
-            }
-
-            while (true) {
-                const msg = ws.readSmallMessage() catch break;
-                switch (msg.opcode) {
-                    .ping => {
-                        conn.writeRaw(msg.data, .pong) catch break;
-                        continue;
-                    },
-                    else => {},
-                }
-                if (handlers.socket) |socket_fn| {
-                    const msg_type: zx.SocketMessageType = if (msg.opcode == .binary) .binary else .text;
-                    socket_fn(socket, msg.data, msg_type, upgrade_data, self.allocator, arena, self.io) catch {};
-                }
-            }
-
-            if (handlers.socket_close) |close_fn| {
-                close_fn(socket, upgrade_data, self.allocator, self.io);
-            }
-        }
-
-        fn flushRespond(self: *Self, arena: std.mem.Allocator, request: *std.http.Server.Request, backend: *Conn) !void {
-            try self.respondBody(arena, request, backend, backend.bodySlice());
-        }
-
-        /// Serve a static file from the staticdir.
-        fn respondStatic(self: *Self, arena: std.mem.Allocator, request: *std.http.Server.Request, pathname: []const u8) !bool {
-            const staticdir = self.config.staticdir orelse constants.default_staticdir;
-            const rel = if (pathname.len > 0 and pathname[0] == '/') pathname[1..] else pathname;
-            if (rel.len == 0) return false;
-
-            const file_path = std.fs.path.join(arena, &.{ staticdir, rel }) catch return false;
-            const data = std.Io.Dir.cwd().readFileAlloc(self.io, file_path, arena, .unlimited) catch return false;
-
-            const headers = [_]std.http.Header{
-                .{ .name = "Server", .value = server_token },
-                .{ .name = "Content-Type", .value = mimeForPath(pathname) },
-            };
-            try request.respond(data, .{ .status = .ok, .extra_headers = &headers });
-            return true;
         }
     };
 }
 
-const WsConn = struct {
+const Ws = struct {
     ws: *std.http.Server.WebSocket,
     io: std.Io,
     write_mu: std.Io.Mutex = .init,
-    subscriber: PubSub.Subscriber,
+    subscriber: Pipeline.PubSub.Subscriber,
 
-    fn socket(self: *WsConn) zx.Socket {
+    fn socket(self: *Ws) Pipeline.Socket {
         return .{ ._internal = .{ .http = .{ .userdata = @ptrCast(self), .vtable = &vtable }, .attached = true } };
     }
 
-    fn writeRaw(self: *WsConn, data: []const u8, op: std.http.Server.WebSocket.Opcode) !void {
+    fn writeRaw(self: *Ws, data: []const u8, op: std.http.Server.WebSocket.Opcode) !void {
         self.write_mu.lockUncancelable(self.io);
         defer self.write_mu.unlock(self.io);
         try self.ws.writeMessage(data, op);
@@ -697,195 +481,161 @@ const WsConn = struct {
 
     const vtable = blk: {
         var vt = zx.Http.failing_vtable;
-        vt.wsWrite = &wsWrite;
-        vt.wsClose = &wsClose;
-        vt.wsSubscribe = &wsSubscribe;
-        vt.wsUnsubscribe = &wsUnsubscribe;
-        vt.wsPublish = &wsPublish;
-        vt.wsIsSubscribed = &wsIsSubscribed;
-        vt.wsSetPublishToSelf = &wsSetPublishToSelf;
+        vt.wsWrite = &write;
+        vt.wsClose = &close;
+        vt.wsSubscribe = &subscribe;
+        vt.wsUnsubscribe = &unsubscribe;
+        vt.wsPublish = &publish;
+        vt.wsIsSubscribed = &isSubscribed;
+        vt.wsSetPublishToSelf = &setPublishToSelf;
         break :blk vt;
     };
 
-    fn of(userdata: ?*anyopaque) *WsConn {
+    fn of(userdata: ?*anyopaque) *Ws {
         return @ptrCast(@alignCast(userdata.?));
     }
 
-    fn wsWrite(userdata: ?*anyopaque, data: []const u8) anyerror!void {
+    fn write(userdata: ?*anyopaque, data: []const u8) anyerror!void {
         try of(userdata).writeRaw(data, .text);
     }
 
-    fn wsClose(userdata: ?*anyopaque) void {
+    fn close(userdata: ?*anyopaque) void {
         of(userdata).writeRaw("", .connection_close) catch {};
     }
 
-    fn wsSubscribe(userdata: ?*anyopaque, topic: []const u8) void {
+    fn subscribe(userdata: ?*anyopaque, topic: []const u8) void {
         of(userdata).subscriber.subscribe(topic);
     }
 
-    fn wsUnsubscribe(userdata: ?*anyopaque, topic: []const u8) void {
+    fn unsubscribe(userdata: ?*anyopaque, topic: []const u8) void {
         of(userdata).subscriber.unsubscribe(topic);
     }
 
-    fn wsPublish(userdata: ?*anyopaque, topic: []const u8, message: []const u8) usize {
-        return PubSub.publish(&of(userdata).subscriber, topic, message);
+    fn publish(userdata: ?*anyopaque, topic: []const u8, message: []const u8) usize {
+        return Pipeline.PubSub.publish(&of(userdata).subscriber, topic, message);
     }
 
-    fn wsIsSubscribed(userdata: ?*anyopaque, topic: []const u8) bool {
+    fn isSubscribed(userdata: ?*anyopaque, topic: []const u8) bool {
         return of(userdata).subscriber.isSubscribed(topic);
     }
 
-    fn wsSetPublishToSelf(userdata: ?*anyopaque, value: bool) void {
+    fn setPublishToSelf(userdata: ?*anyopaque, value: bool) void {
         of(userdata).subscriber.publish_to_self = value;
+    }
+
+    fn onPublish(ctx: *anyopaque, message: []const u8) anyerror!void {
+        try of(ctx).writeRaw(message, .text);
     }
 };
 
-fn stdWsWrite(ctx: *anyopaque, message: []const u8) anyerror!void {
-    const self: *WsConn = @ptrCast(@alignCast(ctx));
-    try self.writeRaw(message, .text);
-}
-
-fn collectHeaders(arena: std.mem.Allocator, backend: *Conn) ![]const std.http.Header {
-    const headers = try arena.alloc(std.http.Header, backend.resp_headers.items.len);
-    for (backend.resp_headers.items, 0..) |h, i| headers[i] = .{ .name = h.name, .value = h.value };
-    return headers;
-}
-
-fn writeAndFlushChunk(body: *std.http.BodyWriter, data: []const u8) !void {
-    if (data.len == 0) return;
-    try body.writer.writeAll(data);
-    try body.writer.flush();
-    try body.flush();
-}
-
-/// Render async stream components in parallel and flush each script as it finishes.
-fn streamAsyncComponents(io: std.Io, body: *std.http.BodyWriter, async_components: []render.AsyncComponent) !void {
-    const AsyncResult = struct {
-        script: []const u8 = &.{},
-        done: std.atomic.Value(bool) = .init(false),
-    };
-
-    const results = try std.heap.page_allocator.alloc(AsyncResult, async_components.len);
-    defer std.heap.page_allocator.free(results);
-    for (results) |*result_entry| result_entry.* = .{};
-
-    var remaining = std.atomic.Value(usize).init(async_components.len);
-
-    const TaskContext = struct {
-        async_comp: render.AsyncComponent,
-        result: *AsyncResult,
-        remaining_ref: *std.atomic.Value(usize),
-
-        fn work(ctx: *@This()) void {
-            defer {
-                _ = ctx.remaining_ref.fetchSub(1, .seq_cst);
-                std.heap.page_allocator.destroy(ctx);
-            }
-
-            const script = ctx.async_comp.renderScript(std.heap.page_allocator) catch {
-                ctx.result.done.store(true, .seq_cst);
-                return;
-            };
-            ctx.result.script = script;
-            ctx.result.done.store(true, .seq_cst);
-        }
-    };
-
-    const threads = try std.heap.page_allocator.alloc(?std.Thread, async_components.len);
-    defer std.heap.page_allocator.free(threads);
-
-    for (async_components, 0..) |async_comp, i| {
-        const ctx = std.heap.page_allocator.create(TaskContext) catch {
-            threads[i] = null;
-            continue;
-        };
-        ctx.* = .{
-            .async_comp = async_comp,
-            .result = &results[i],
-            .remaining_ref = &remaining,
-        };
-        threads[i] = std.Thread.spawn(.{}, TaskContext.work, .{ctx}) catch blk: {
-            std.heap.page_allocator.destroy(ctx);
-            _ = remaining.fetchSub(1, .seq_cst);
-            results[i].done.store(true, .seq_cst);
-            break :blk null;
-        };
+/// std.http response bridging.
+const http = struct {
+    fn headers(arena: std.mem.Allocator, backend: *Pipeline.Conn) ![]const std.http.Header {
+        const out = try arena.alloc(std.http.Header, backend.resp_headers.items.len);
+        for (backend.resp_headers.items, 0..) |h, i| out[i] = .{ .name = h.name, .value = h.value };
+        return out;
     }
 
-    const streamed = try std.heap.page_allocator.alloc(bool, async_components.len);
-    defer std.heap.page_allocator.free(streamed);
-    @memset(streamed, false);
+    fn chunk(body: *std.http.BodyWriter, data: []const u8) !void {
+        if (data.len == 0) return;
+        try body.writer.writeAll(data);
+        try body.writer.flush();
+        try body.flush();
+    }
 
-    var completed: usize = 0;
-    var connection_closed = false;
-    while (completed < async_components.len and !connection_closed) {
-        for (results, 0..) |*result_entry, i| {
-            if (streamed[i]) continue;
-            if (!result_entry.done.load(.seq_cst)) continue;
+    fn status(code: u16) std.http.Status {
+        return @fromBackingInt(@intCast(@as(u10, @intCast(code))));
+    }
 
-            if (result_entry.script.len > 0) {
-                writeAndFlushChunk(body, result_entry.script) catch {
-                    connection_closed = true;
-                    break;
+    fn wake(io: std.Io, port: u16) void {
+        if (comptime builtin.os.tag == .wasi) return;
+        const addr = std.Io.net.IpAddress.parse("127.0.0.1", port) catch return;
+        if (addr.connect(io, .{ .mode = .stream })) |s| {
+            s.close(io);
+        } else |_| {}
+    }
+
+    /// Render async stream components in parallel and flush each script as it finishes.
+    fn streamAsync(io: std.Io, body: *std.http.BodyWriter, async_components: []Pipeline.AsyncComponent) !void {
+        const AsyncResult = struct {
+            script: []const u8 = &.{},
+            done: std.atomic.Value(bool) = .init(false),
+        };
+
+        const results = try std.heap.page_allocator.alloc(AsyncResult, async_components.len);
+        defer std.heap.page_allocator.free(results);
+        for (results) |*result_entry| result_entry.* = .{};
+
+        var remaining = std.atomic.Value(usize).init(async_components.len);
+
+        const TaskContext = struct {
+            async_comp: Pipeline.AsyncComponent,
+            result: *AsyncResult,
+            remaining_ref: *std.atomic.Value(usize),
+
+            fn work(ctx: *@This()) void {
+                defer {
+                    _ = ctx.remaining_ref.fetchSub(1, .seq_cst);
+                    std.heap.page_allocator.destroy(ctx);
+                }
+
+                const script = ctx.async_comp.renderScript(std.heap.page_allocator) catch {
+                    ctx.result.done.store(true, .seq_cst);
+                    return;
                 };
+                ctx.result.script = script;
+                ctx.result.done.store(true, .seq_cst);
             }
-            streamed[i] = true;
-            completed += 1;
+        };
+
+        const threads = try std.heap.page_allocator.alloc(?std.Thread, async_components.len);
+        defer std.heap.page_allocator.free(threads);
+
+        for (async_components, 0..) |async_comp, i| {
+            const ctx = std.heap.page_allocator.create(TaskContext) catch {
+                threads[i] = null;
+                continue;
+            };
+            ctx.* = .{
+                .async_comp = async_comp,
+                .result = &results[i],
+                .remaining_ref = &remaining,
+            };
+            threads[i] = std.Thread.spawn(.{}, TaskContext.work, .{ctx}) catch blk: {
+                std.heap.page_allocator.destroy(ctx);
+                _ = remaining.fetchSub(1, .seq_cst);
+                results[i].done.store(true, .seq_cst);
+                break :blk null;
+            };
         }
-        if (completed < async_components.len and !connection_closed) {
-            _ = try std.Io.sleep(io, std.Io.Duration.fromMilliseconds(5), .awake);
+
+        const streamed = try std.heap.page_allocator.alloc(bool, async_components.len);
+        defer std.heap.page_allocator.free(streamed);
+        @memset(streamed, false);
+
+        var completed: usize = 0;
+        var connection_closed = false;
+        while (completed < async_components.len and !connection_closed) {
+            for (results, 0..) |*result_entry, i| {
+                if (streamed[i]) continue;
+                if (!result_entry.done.load(.seq_cst)) continue;
+
+                if (result_entry.script.len > 0) {
+                    chunk(body, result_entry.script) catch {
+                        connection_closed = true;
+                        break;
+                    };
+                }
+                streamed[i] = true;
+                completed += 1;
+            }
+            if (completed < async_components.len and !connection_closed) {
+                _ = try std.Io.sleep(io, std.Io.Duration.fromMilliseconds(5), .awake);
+            }
+        }
+
+        for (threads) |maybe_thread| {
+            if (maybe_thread) |thread| thread.join();
         }
     }
-
-    for (threads) |maybe_thread| {
-        if (maybe_thread) |thread| thread.join();
-    }
-}
-
-fn statusFrom(code: u16) std.http.Status {
-    return @fromBackingInt(@intCast(@as(u10, @intCast(code))));
-}
-
-fn mimeForPath(path: []const u8) []const u8 {
-    const ext = std.fs.path.extension(path);
-    if (std.mem.eql(u8, ext, ".html")) return "text/html";
-    if (std.mem.eql(u8, ext, ".css")) return "text/css";
-    if (std.mem.eql(u8, ext, ".js")) return "text/javascript";
-    if (std.mem.eql(u8, ext, ".png")) return "image/png";
-    if (std.mem.eql(u8, ext, ".svg")) return "image/svg+xml";
-    if (std.mem.eql(u8, ext, ".json")) return "application/json";
-    if (std.mem.eql(u8, ext, ".wasm")) return "application/wasm";
-    if (std.mem.eql(u8, ext, ".woff2")) return "font/woff2";
-    return "application/octet-stream";
-}
-
-fn resolveAddress(address_str: []const u8, port: u16) std.Io.net.IpAddress {
-    const addr = if (std.mem.eql(u8, address_str, "localhost")) "127.0.0.1" else address_str;
-    return std.Io.net.IpAddress.parse(addr, port) catch (std.Io.net.IpAddress.parse("0.0.0.0", port) catch unreachable);
-}
-
-fn wakeAccept(io: std.Io, port: u16) void {
-    if (comptime builtin.os.tag == .wasi) return;
-    const addr = std.Io.net.IpAddress.parse("127.0.0.1", port) catch return;
-    if (addr.connect(io, .{ .mode = .stream })) |s| {
-        s.close(io);
-    } else |_| {}
-}
-
-fn parseEnvPort(alloc: std.mem.Allocator, inita: zx.Init, name: []const u8) ?u16 {
-    const minimal: std.process.Init.Minimal = switch (@TypeOf(inita)) {
-        std.process.Init.Minimal => inita,
-        std.process.Init => inita.minimal,
-        else => return null,
-    };
-    const value = minimal.environ.getAlloc(alloc, name) catch return null;
-    defer alloc.free(value);
-    return std.fmt.parseInt(u16, value, 10) catch null;
-}
-
-const colors = struct {
-    const bold = "\x1b[1m";
-    const dim = "\x1b[2m";
-    const reset_all = "\x1b[0m";
-    const red = "\x1b[31m";
 };

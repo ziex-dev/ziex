@@ -1,69 +1,87 @@
-const std = @import("std");
-const builtin = @import("builtin");
+const Server = @This();
 
-const App = @import("../App.zig");
-const meta = @import("../../server/Server.zig");
+const std = @import("std");
 
 pub const Std = @import("Server/Std.zig");
 pub const Wasm = @import("Server/Wasm.zig");
 pub const Httpz = @import("Server/Httpz.zig");
 
-/// Wire a transport server instance into the shared App vtable.
-pub fn bind(comptime ServerType: type, instance: *ServerType, alloc: std.mem.Allocator) !App {
-    const Holder = struct {
-        instance: *ServerType,
-        alloc: std.mem.Allocator,
+pub const Pipeline = @import("Server/Pipeline.zig");
+pub const PubSub = Pipeline.PubSub;
+pub const Config = Pipeline.Config;
+pub const AccessLog = @import("Server/AccessLog.zig");
+pub const Devtool = @import("Server/Devtool.zig");
+pub const Handler = @import("Router/Handler.zig");
 
-        const Self = @This();
+userdata: ?*anyopaque = null,
+vtable: *const VTable,
 
-        fn from(userdata: ?*anyopaque) *Self {
-            return @ptrCast(@alignCast(userdata.?));
-        }
+pub const VTable = struct {
+    start: *const fn (userdata: ?*anyopaque) anyerror!void,
+    stop: *const fn (userdata: ?*anyopaque) void,
+    deinit: *const fn (userdata: ?*anyopaque) void,
+    info: *const fn (userdata: ?*anyopaque) void,
+};
 
-        fn vtStart(userdata: ?*anyopaque) anyerror!void {
-            const self = from(userdata);
-            if (comptime builtin.optimize == .debug) {
-                const stopFn = struct {
-                    fn call(ctx: *anyopaque) void {
-                        const s: *ServerType = @ptrCast(@alignCast(ctx));
-                        s.stop();
-                    }
-                }.call;
-                App.armSignal(self.instance, stopFn);
+/// Forwarding vtable for backends that expose `start` / `stop` / `deinit` / `info` on `*T`.
+pub fn bind(comptime T: type) VTable {
+    return .{
+        .start = struct {
+            fn call(userdata: ?*anyopaque) anyerror!void {
+                try cast(T, userdata).start();
             }
-            defer if (comptime builtin.optimize == .debug) App.disarmSignal();
-            try self.instance.start();
-        }
-
-        fn vtStop(userdata: ?*anyopaque) void {
-            from(userdata).instance.stop();
-        }
-
-        fn vtDeinit(userdata: ?*anyopaque) void {
-            const self = from(userdata);
-            const alloc_copy = self.alloc;
-            self.instance.deinit();
-            App.release(alloc_copy);
-            alloc_copy.destroy(self);
-            App.assertNoLeaks();
-        }
-
-        fn vtInfo(userdata: ?*anyopaque) void {
-            from(userdata).instance.info();
-        }
-
-        const vtable = App.VTable{
-            .start = &vtStart,
-            .stop = &vtStop,
-            .deinit = &vtDeinit,
-            .info = &vtInfo,
-        };
+        }.call,
+        .stop = struct {
+            fn call(userdata: ?*anyopaque) void {
+                cast(T, userdata).stop();
+            }
+        }.call,
+        .deinit = struct {
+            fn call(userdata: ?*anyopaque) void {
+                cast(T, userdata).deinit();
+            }
+        }.call,
+        .info = struct {
+            fn call(userdata: ?*anyopaque) void {
+                cast(T, userdata).info();
+            }
+        }.call,
     };
-
-    const holder = try alloc.create(Holder);
-    holder.* = .{ .instance = instance, .alloc = alloc };
-
-    if (App.mode != .@"export") instance.info();
-
-    return .{ .userdata = @ptrCast(holder), .vtable = &Holder.vtable };
 }
+
+fn cast(comptime T: type, userdata: ?*anyopaque) *T {
+    return @ptrCast(@alignCast(userdata.?));
+}
+
+pub fn start(self: Server) !void {
+    return self.vtable.start(self.userdata);
+}
+
+pub fn stop(self: Server) void {
+    self.vtable.stop(self.userdata);
+}
+
+pub fn deinit(self: *Server) void {
+    self.vtable.deinit(self.userdata);
+    self.* = failing;
+}
+
+pub fn info(self: Server) void {
+    self.vtable.info(self.userdata);
+}
+
+fn failStart(_: ?*anyopaque) anyerror!void {
+    return error.AppUnavailable;
+}
+fn failStop(_: ?*anyopaque) void {}
+fn failDeinit(_: ?*anyopaque) void {}
+fn failInfo(_: ?*anyopaque) void {}
+
+pub const failing_vtable = VTable{
+    .start = &failStart,
+    .stop = &failStop,
+    .deinit = &failDeinit,
+    .info = &failInfo,
+};
+
+pub const failing: Server = .{ .vtable = &failing_vtable };

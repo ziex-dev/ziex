@@ -33,16 +33,17 @@ test.describe('Todo App Example - Edge Cases', () => {
 
   test('Delete todo from the middle', async ({ page }) => {
     await page.goto('/examples/todo');
-   
-    
-    const todos = [`A${Date.now()}`, `B${Date.now()}`, `C${Date.now()}`];
+
+    const t = Date.now();
+    const todos = [`A${t}`, `B${t}`, `C${t}`];
     for (const todo of todos) {
       await page.getByRole('textbox', { name: /Add a new todo/ }).fill(todo);
       await page.getByRole('button', { name: 'Add' }).click();
+      await expect(page.getByText(todo)).toBeVisible();
     }
     // Find the todo item for the middle todo and click its delete button
     const middleTodo = todos[1];
-    const todoItem = page.locator('li', { hasText: middleTodo }).filter({ has: page.getByText(middleTodo) });
+    const todoItem = page.locator('li', { hasText: middleTodo });
     await todoItem.getByRole('button', { name: /×/ }).click();
     await expect(page.getByText(middleTodo)).not.toBeVisible();
     await expect(page.getByText(todos[0])).toBeVisible();

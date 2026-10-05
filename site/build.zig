@@ -4,13 +4,19 @@ const ziex = @import("ziex");
 const build_zon = @import("build.zig.zon");
 const ziex_version = 9; // Increment this when site js changes
 
+const ServerBackend = enum {
+    std,
+    auto,
+    dusty,
+};
+
 pub fn build(b: *std.Build) !void {
     // --- Target and Optimize from `zig build` arguments ---
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const id = assetId(b, optimize);
     const log_level = b.option(std.log.Level, "log-level", "Log level: debug, info, warn, error") orelse .info;
-    const std_server = b.option(bool, "std-server", "Use std server backend") orelse false;
+    const server_backend = b.option(ServerBackend, "server", "Server backend: std, auto, dusty") orelse .auto;
     const build_zig = b.option(bool, "build-zig", "Build zig/compiler_rt wasm from source") orelse false;
 
     const jsbinding_name = b.fmt("app.{s}.js", .{id});
@@ -204,6 +210,10 @@ pub fn build(b: *std.Build) !void {
 
     app_exe.step.dependOn(pg_step);
 
+    const site_opts = b.addOptions();
+    site_opts.addOption(bool, "use_dusty", server_backend == .dusty);
+    app_exe.root_module.addOptions("site_opts", site_opts);
+
     // --- ZX setup: wires dependencies and adds `zx`/`dev` build steps --- //
     var zx = try ziex.init(b, app_exe, .{
         .app = .{
@@ -212,12 +222,20 @@ pub fn build(b: *std.Build) !void {
             .features = app_features,
             .client = app_client,
             .server = .{
-                .backend = if (std_server) .std else .httpz,
+                .backend = switch (server_backend) {
+                    .std => .std,
+                    .auto, .dusty => .auto,
+                },
             },
         },
         .cli = .{ .optimize = optimize, .log_level = log_level },
     });
     zx.addImport("cli_args", ziex_dep.module("cli_args"));
+    if (!target.result.cpu.arch.isWasm() and server_backend == .dusty) {
+        if (b.lazyDependency("dusty", .{ .target = target, .optimize = optimize, .use_tls = false })) |dusty_dep| {
+            zx.addImport("dusty", dusty_dep.module("dusty"));
+        }
+    }
 
     // --- ZX Components --- //
     if (true) {

@@ -5,17 +5,17 @@ pub const Client = impl.Client;
 
 pub const run = impl.Client.run;
 
-pub fn app() App {
+pub fn server() App.Server {
     return .{ .userdata = null, .vtable = &vtable };
 }
 
-fn vtStart(_: ?*anyopaque) anyerror!void {
+fn start(_: ?*anyopaque) anyerror!void {
     return impl.Client.run();
 }
 
-const vtable = App.VTable{
-    .start = &vtStart,
-    .stop = App.failing_vtable.stop,
-    .deinit = App.failing_vtable.deinit,
-    .info = App.failing_vtable.info,
+const vtable = App.Server.VTable{
+    .start = &start,
+    .stop = App.Server.failing_vtable.stop,
+    .deinit = App.Server.failing_vtable.deinit,
+    .info = App.Server.failing_vtable.info,
 };

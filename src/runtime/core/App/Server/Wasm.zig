@@ -5,6 +5,7 @@ const app_opts = @import("app_opts");
 
 const zx = @import("../../../../root.zig");
 const App = @import("../../App.zig");
+const Server = @import("../Server.zig");
 const AppConfig = @import("../Config.zig");
 const ext = @import("../../../server/wasm/extern.zig");
 const core_handler = @import("../Router/Handler.zig");
@@ -23,19 +24,19 @@ const is_dev = App.mode == .dev;
 
 var g_inita: zx.Init = undefined;
 
-pub fn app(inita: zx.Init) App {
+pub fn server(inita: zx.Init) Server {
     g_inita = inita;
     return .{ .userdata = null, .vtable = &vtable };
 }
 
-const vtable = App.VTable{
-    .start = &vtStart,
-    .stop = App.failing_vtable.stop,
-    .deinit = App.failing_vtable.deinit,
-    .info = App.failing_vtable.info,
+const vtable = Server.VTable{
+    .start = &start,
+    .stop = Server.failing_vtable.stop,
+    .deinit = Server.failing_vtable.deinit,
+    .info = Server.failing_vtable.info,
 };
 
-fn vtStart(_: ?*anyopaque) anyerror!void {
+fn start(_: ?*anyopaque) anyerror!void {
     return run(g_inita);
 }
 

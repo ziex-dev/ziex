@@ -9,6 +9,11 @@
         .tailwindcss = .{ .path = "../pkg/plugin-tailwindcss" },
         .ui = .{ .path = "../pkg/ui" },
         .ziex_jsbindings = .{ .path = "../pkg/ziex" },
+        .dusty = .{
+            .url = "git+https://github.com/lalinsky/dusty#6f7544f99ec2540e93b0e864d618f8b9f771a414",
+            .hash = "dusty-0.3.1-Qdw7RkH1IQBOa3m2yEhRHPW8J-q--UWYwobluQpxqM8q",
+            .lazy = true,
+        },
         .branding = .{
             .url = "git+https://github.com/ziex-dev/branding.git#04a22af76e2198d06c429e4025f960f76d93bf9f",
             .hash = "N-V-__8AACJRHgCH8MXnlovqXGaz3lrGQkWP6HqE81M04zkV",
