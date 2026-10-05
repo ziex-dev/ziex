@@ -71,10 +71,14 @@ export default defineConfig({
 
   ...(!process.env.BASE_URL && {
     webServer: {
-      command: 'cd site && zig build dev',
+      command: process.env.TEMPLATE_TESTS
+        ? 'cd templates/_base && zig build dev'
+        : 'cd site && zig build dev',
       cwd: '../../',
       url: 'http://localhost:3000',
-      reuseExistingServer: process.env.TEMPLATE_TESTS || !process.env.CI,
+      // Locally, reuse a server you already started. In CI always start fresh.
+      // Template tests historically reused an existing `_base` dev server.
+      reuseExistingServer: !process.env.CI,
       // First `zig build dev` compiles the site, playground wasm, and lazy
       // deps (zls, lunasvg, …). That regularly exceeds 5 minutes on a cold
       // GitHub runner, so wait 15 minutes before treating startup as failed.

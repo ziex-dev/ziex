@@ -7,6 +7,10 @@ on:
     paths:
       - 'templates/**'
       - 'tools/template.sh'
+      - 'test/e2e/specs/template/**'
+      - 'test/e2e/playwright.config.ts'
+      - 'test/e2e/package.json'
+      - 'test/e2e/package-lock.json'
       - '.github/workflows/template.yml'
   workflow_dispatch:
 
@@ -82,10 +86,70 @@ jobs:
           cd templates/${{ matrix.template }}
           zig build
 
-  sync:
+  e2e:
     needs: [discover, check]
     runs-on: ubuntu-latest
-    if: needs.discover.outputs.templates != '[]'
+    # Run after a successful template build, or when only template e2e files
+    # changed (check is skipped because discover found no template matrix).
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.discover.result == 'success' &&
+      (needs.check.result == 'success' || needs.check.result == 'skipped')
+    name: Template E2E
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+          cache-size-limit: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Update ziex dependency to current commit
+        run: |
+          cd templates/_base
+          zig fetch --save "git+https://github.com/ziex-dev/ziex#${{ github.sha }}"
+
+      - name: Install E2E Dependencies
+        working-directory: test/e2e
+        run: npm install
+
+      - name: Install Playwright Browsers
+        working-directory: test/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Template E2E Tests
+        working-directory: test/e2e
+        run: npx playwright test specs/template --reporter=html,github --browser chromium
+        env:
+          CI: true
+          TEMPLATE_TESTS: '1'
+
+      - name: Upload Playwright Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: template-playwright-report
+          path: test/e2e/playwright-report/
+          retention-days: 30
+
+  sync:
+    needs: [discover, check, e2e]
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.discover.outputs.templates != '[]' &&
+      needs.check.result == 'success' &&
+      needs.e2e.result == 'success'
     strategy:
       matrix:
         template: ${{ fromJson(needs.discover.outputs.templates) }}
