@@ -22,6 +22,16 @@ pub fn offsetToPosition(source: []const u8, offset: usize, encoding: Encoding) P
     return lsp.offsets.indexToPosition(source, @min(offset, source.len), encoding);
 }
 
+/// Position of a `line`/`byte_column` pair, such as a tree-sitter point.
+pub fn byteColumnToPosition(source: []const u8, line: u32, byte_column: u32, encoding: Encoding) Position {
+    return lsp.offsets.convertPositionEncoding(
+        source,
+        .{ .line = line, .character = byte_column },
+        .@"utf-8",
+        encoding,
+    );
+}
+
 /// Apply one `textDocument/didChange` incremental edit and return the new
 /// document. Caller owns the returned memory.
 pub fn applyIncrementalChange(

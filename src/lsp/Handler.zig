@@ -309,7 +309,7 @@ fn storeAndDiagnose(handler: *Handler, uri: []const u8, source: []const u8) void
     var result = lang.Ast.parse(handler.allocator, source_z, .{}) catch return;
     defer result.deinit(handler.allocator);
 
-    handler.publishZxDiagnostics(uri, result.diagnostics) catch {};
+    handler.publishZxDiagnostics(uri, source, result.diagnostics) catch {};
 
     const zx_block_ranges = handler.collectZxBlockRanges(source) catch (handler.allocator.alloc(ByteRange, 0) catch return);
 
@@ -401,17 +401,18 @@ fn filterInlayHintsForZxBlocks(
     return try filtered.toOwnedSlice(arena);
 }
 
-fn publishZxDiagnostics(handler: *Handler, uri: []const u8, diag_list: lang.Ast.check.DiagnosticList) !void {
+fn publishZxDiagnostics(handler: *Handler, uri: []const u8, source: []const u8, diag_list: lang.Ast.check.DiagnosticList) !void {
     var aa = std.heap.ArenaAllocator.init(handler.allocator);
     defer aa.deinit();
     const arena = aa.allocator();
 
+    const encoding = handler.offset_encoding;
     const lsp_diags = try arena.alloc(lsp.types.flat.Diagnostic, diag_list.items.len);
     for (diag_list.items, 0..) |d, i| {
         lsp_diags[i] = .{
             .range = .{
-                .start = .{ .line = d.start_line, .character = d.start_column },
-                .end = .{ .line = d.end_line, .character = d.end_column },
+                .start = text.byteColumnToPosition(source, d.start_line, d.start_column, encoding),
+                .end = text.byteColumnToPosition(source, d.end_line, d.end_column, encoding),
             },
             .severity = switch (d.severity) {
                 .err => .Error,

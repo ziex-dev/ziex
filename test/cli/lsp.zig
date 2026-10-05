@@ -1,5 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
+const lang = @import("lang");
 const html = @import("html_hover");
 const html_hover = html.hover;
 const html_complete = html.complete;
@@ -515,6 +516,44 @@ test "text > offsetToPosition roundtrips through positionToOffset" {
         const pos = lsp_text.offsetToPosition(src, offset, .@"utf-16");
         try testing.expectEqual(offset, lsp_text.positionToOffset(src, pos, .@"utf-16"));
     }
+}
+
+test "text > byteColumnToPosition counts utf-16 code units" {
+    const src = "a🠁b\nCafé x\n";
+
+    const pos = lsp_text.byteColumnToPosition(src, 1, 5, .@"utf-16");
+    try testing.expectEqual(@as(u32, 1), pos.line);
+    try testing.expectEqual(@as(u32, 4), pos.character);
+
+    try testing.expectEqual(@as(u32, 3), lsp_text.byteColumnToPosition(src, 0, 5, .@"utf-16").character);
+    try testing.expectEqual(@as(u32, 2), lsp_text.byteColumnToPosition(src, 0, 5, .@"utf-32").character);
+    try testing.expectEqual(@as(u32, 5), lsp_text.byteColumnToPosition(src, 0, 5, .@"utf-8").character);
+}
+
+test "text > diagnostic columns are re-encoded" {
+    const allocator = testing.allocator;
+
+    const src: [:0]const u8 =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>Café <blnk>x</blnk></p>);
+        \\}
+    ;
+    var result = try lang.Ast.parse(allocator, src, .{});
+    defer result.deinit(allocator);
+
+    try testing.expect(result.diagnostics.items.len > 0);
+    const d = result.diagnostics.items[0];
+    try testing.expect(std.mem.indexOf(u8, d.message, "blnk") != null);
+
+    // tree-sitter columns count bytes; `é` makes them one ahead of utf-16.
+    const tag_col: u32 = @intCast(std.mem.indexOf(u8, src, "blnk").? - (std.mem.indexOf(u8, src, "\n").? + 1));
+    try testing.expectEqual(tag_col, d.start_column);
+
+    const start = lsp_text.byteColumnToPosition(src, d.start_line, d.start_column, .@"utf-16");
+    const end = lsp_text.byteColumnToPosition(src, d.end_line, d.end_column, .@"utf-16");
+    try testing.expectEqual(@as(u32, 1), start.line);
+    try testing.expectEqual(tag_col - 1, start.character);
+    try testing.expectEqual(tag_col - 1 + 4, end.character);
 }
 
 test "text > applyIncrementalChange edits at the utf-16 position" {
