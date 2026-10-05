@@ -7,7 +7,7 @@
     "dev": "wrangler dev"
   },
   "dependencies": {
-    "ziex": "0.1.0-dev.1573"
+    "ziex": "0.1.0-dev.1574"
   },
   "devDependencies": {
     "wrangler": "4.100.0",
