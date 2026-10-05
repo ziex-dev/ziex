@@ -308,6 +308,134 @@ test "hover > lowercase button still shows HTML docs" {
     try testing.expect(std.mem.indexOf(u8, md, "<button>") != null);
 }
 
+fn completionLabels(arena: std.mem.Allocator, src: []const u8, offset: u32) ![]const []const u8 {
+    const result = (try html_complete.complete(arena, src, offset)) orelse return &.{};
+    const items = switch (result) {
+        .completion_list => |list| list.items,
+        .completion_items => |items| items,
+    };
+    const labels = try arena.alloc([]const u8, items.len);
+    for (items, 0..) |item, i| labels[i] = item.label;
+    return labels;
+}
+
+fn hasLabel(labels: []const []const u8, want: []const u8) bool {
+    for (labels) |label| {
+        if (std.mem.eql(u8, label, want)) return true;
+    }
+    return false;
+}
+
+test "completion > tag name after element text" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const src =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>hello <b
+    ;
+    const labels = try completionLabels(arena, src, @intCast(src.len));
+    try testing.expect(hasLabel(labels, "b"));
+    try testing.expect(hasLabel(labels, "br"));
+}
+
+test "completion > tag name after expression block" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const src =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>{name} <str
+    ;
+    const labels = try completionLabels(arena, src, @intCast(src.len));
+    try testing.expect(hasLabel(labels, "strong"));
+}
+
+test "completion > bare < after element text" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const src =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>hello <
+    ;
+    const labels = try completionLabels(arena, src, @intCast(src.len));
+    try testing.expect(hasLabel(labels, "span"));
+}
+
+test "completion > attribute after element text" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const src =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>hello <a hr
+    ;
+    const labels = try completionLabels(arena, src, @intCast(src.len));
+    try testing.expect(hasLabel(labels, "href"));
+    try testing.expect(hasLabel(labels, "hreflang"));
+}
+
+test "completion > builtin attribute after element text" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const src =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>hello <Counter @rend
+    ;
+    const labels = try completionLabels(arena, src, @intCast(src.len));
+    try testing.expect(hasLabel(labels, "@rendering"));
+}
+
+test "completion > closing tag after element text" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const src =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>hello </
+    ;
+    const labels = try completionLabels(arena, src, @intCast(src.len));
+    try testing.expect(hasLabel(labels, "p"));
+}
+
+test "completion > zig less-than after markup stays null" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    // A `<` used as a comparison must not be mistaken for a tag, even in a file
+    // that also contains ZX markup.
+    const src =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>hi</p>);
+        \\}
+        \\
+        \\fn lt(x: usize, y: usize) bool {
+        \\    return x <y
+    ;
+    try testing.expect((try html_complete.complete(arena, src, @intCast(src.len))) == null);
+}
+
+test "completion > zig less-than inside expression block stays null" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const src =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>{if (x <y
+    ;
+    try testing.expect((try html_complete.complete(arena, src, @intCast(src.len))) == null);
+}
+
 const lsp_text = html.text;
 
 test "text > positionToOffset counts utf-16 code units" {
@@ -445,130 +573,4 @@ test "text > applyIncrementalChange rejects an inverted range" {
         "x",
         .@"utf-16",
     ));
-fn completionLabels(arena: std.mem.Allocator, src: []const u8, offset: u32) ![]const []const u8 {
-    const result = (try html_complete.complete(arena, src, offset)) orelse return &.{};
-    const items = switch (result) {
-        .completion_list => |list| list.items,
-        .completion_items => |items| items,
-    };
-    const labels = try arena.alloc([]const u8, items.len);
-    for (items, 0..) |item, i| labels[i] = item.label;
-    return labels;
-}
-
-fn hasLabel(labels: []const []const u8, want: []const u8) bool {
-    for (labels) |label| {
-        if (std.mem.eql(u8, label, want)) return true;
-    }
-    return false;
-}
-
-test "completion > tag name after element text" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    const src =
-        \\pub fn Page(a: zx.Allocator) zx.Component {
-        \\    return (<p @allocator={a}>hello <b
-    ;
-    const labels = try completionLabels(arena, src, @intCast(src.len));
-    try testing.expect(hasLabel(labels, "b"));
-    try testing.expect(hasLabel(labels, "br"));
-}
-
-test "completion > tag name after expression block" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    const src =
-        \\pub fn Page(a: zx.Allocator) zx.Component {
-        \\    return (<p @allocator={a}>{name} <str
-    ;
-    const labels = try completionLabels(arena, src, @intCast(src.len));
-    try testing.expect(hasLabel(labels, "strong"));
-}
-
-test "completion > bare < after element text" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    const src =
-        \\pub fn Page(a: zx.Allocator) zx.Component {
-        \\    return (<p @allocator={a}>hello <
-    ;
-    const labels = try completionLabels(arena, src, @intCast(src.len));
-    try testing.expect(hasLabel(labels, "span"));
-}
-
-test "completion > attribute after element text" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    const src =
-        \\pub fn Page(a: zx.Allocator) zx.Component {
-        \\    return (<p @allocator={a}>hello <a hr
-    ;
-    const labels = try completionLabels(arena, src, @intCast(src.len));
-    try testing.expect(hasLabel(labels, "href"));
-    try testing.expect(hasLabel(labels, "hreflang"));
-}
-
-test "completion > builtin attribute after element text" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    const src =
-        \\pub fn Page(a: zx.Allocator) zx.Component {
-        \\    return (<p @allocator={a}>hello <Counter @rend
-    ;
-    const labels = try completionLabels(arena, src, @intCast(src.len));
-    try testing.expect(hasLabel(labels, "@rendering"));
-}
-
-test "completion > closing tag after element text" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    const src =
-        \\pub fn Page(a: zx.Allocator) zx.Component {
-        \\    return (<p @allocator={a}>hello </
-    ;
-    const labels = try completionLabels(arena, src, @intCast(src.len));
-    try testing.expect(hasLabel(labels, "p"));
-}
-
-test "completion > zig less-than after markup stays null" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    // A `<` used as a comparison must not be mistaken for a tag, even in a file
-    // that also contains ZX markup.
-    const src =
-        \\pub fn Page(a: zx.Allocator) zx.Component {
-        \\    return (<p @allocator={a}>hi</p>);
-        \\}
-        \\
-        \\fn lt(x: usize, y: usize) bool {
-        \\    return x <y
-    ;
-    try testing.expect((try html_complete.complete(arena, src, @intCast(src.len))) == null);
-}
-
-test "completion > zig less-than inside expression block stays null" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    const src =
-        \\pub fn Page(a: zx.Allocator) zx.Component {
-        \\    return (<p @allocator={a}>{if (x <y
-    ;
-    try testing.expect((try html_complete.complete(arena, src, @intCast(src.len))) == null);
 }
