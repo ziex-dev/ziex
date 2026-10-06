@@ -7,6 +7,7 @@ const lang = @import("lang");
 const zx_info = @import("zx_info");
 const html_hover = @import("features/hover.zig");
 const html_complete = @import("features/autocomplete.zig");
+const text = @import("text.zig");
 pub const Zls = @import("Handler/Zls.zig");
 
 const ByteRange = struct {
@@ -308,7 +309,7 @@ fn storeAndDiagnose(handler: *Handler, uri: []const u8, source: []const u8) void
     var result = lang.Ast.parse(handler.allocator, source_z, .{}) catch return;
     defer result.deinit(handler.allocator);
 
-    handler.publishZxDiagnostics(uri, result.diagnostics) catch {};
+    handler.publishZxDiagnostics(uri, source, result.diagnostics) catch {};
 
     const zx_block_ranges = handler.collectZxBlockRanges(source) catch (handler.allocator.alloc(ByteRange, 0) catch return);
 
@@ -382,6 +383,7 @@ fn filterInlayHintsForZxBlocks(
     arena: std.mem.Allocator,
     hints: []const lsp.types.flat.InlayHint,
     state: *const ZxFileState,
+    encoding: lsp.offsets.Encoding,
 ) ![]const lsp.types.flat.InlayHint {
     if (hints.len == 0 or state.zx_block_ranges.len == 0) return hints;
 
@@ -390,10 +392,7 @@ fn filterInlayHintsForZxBlocks(
     try filtered.ensureTotalCapacity(arena, hints.len);
 
     for (hints) |hint| {
-        const offset = positionToOffset(state.source, hint.position) orelse {
-            try filtered.append(arena, hint);
-            continue;
-        };
+        const offset = text.positionToOffset(state.source, hint.position, encoding);
 
         if (offsetInAnyRange(offset, state.zx_block_ranges)) continue;
         try filtered.append(arena, hint);
@@ -402,17 +401,18 @@ fn filterInlayHintsForZxBlocks(
     return try filtered.toOwnedSlice(arena);
 }
 
-fn publishZxDiagnostics(handler: *Handler, uri: []const u8, diag_list: lang.Ast.check.DiagnosticList) !void {
+fn publishZxDiagnostics(handler: *Handler, uri: []const u8, source: []const u8, diag_list: lang.Ast.check.DiagnosticList) !void {
     var aa = std.heap.ArenaAllocator.init(handler.allocator);
     defer aa.deinit();
     const arena = aa.allocator();
 
+    const encoding = handler.offset_encoding;
     const lsp_diags = try arena.alloc(lsp.types.flat.Diagnostic, diag_list.items.len);
     for (diag_list.items, 0..) |d, i| {
         lsp_diags[i] = .{
             .range = .{
-                .start = .{ .line = d.start_line, .character = d.start_column },
-                .end = .{ .line = d.end_line, .character = d.end_column },
+                .start = text.byteColumnToPosition(source, d.start_line, d.start_column, encoding),
+                .end = text.byteColumnToPosition(source, d.end_line, d.end_column, encoding),
             },
             .severity = switch (d.severity) {
                 .err => .Error,
@@ -612,7 +612,13 @@ pub fn @"textDocument/didChange"(
                     needs_free = false;
                 },
                 .text_document_content_change_partial => |inc| {
-                    const new_text = applyIncrementalChange(handler.allocator, full_text, inc.range, inc.text) catch {
+                    const new_text = text.applyIncrementalChange(
+                        handler.allocator,
+                        full_text,
+                        inc.range,
+                        inc.text,
+                        handler.offset_encoding,
+                    ) catch {
                         continue;
                     };
                     if (needs_free) handler.allocator.free(full_text);
@@ -636,50 +642,6 @@ pub fn @"textDocument/didChange"(
         return;
     }
     handler.sendNotificationSync(arena, "textDocument/didChange", params);
-}
-
-fn applyIncrementalChange(
-    allocator: std.mem.Allocator,
-    source: []const u8,
-    range: lsp.types.flat.Range,
-    new_text: []const u8,
-) ![]const u8 {
-    const start_offset = positionToOffset(source, range.start) orelse return error.InvalidRange;
-    const end_offset = positionToOffset(source, range.end) orelse return error.InvalidRange;
-
-    const new_len = start_offset + new_text.len + (source.len - end_offset);
-    const result = try allocator.alloc(u8, new_len);
-    @memcpy(result[0..start_offset], source[0..start_offset]);
-    @memcpy(result[start_offset..][0..new_text.len], new_text);
-    @memcpy(result[start_offset + new_text.len ..], source[end_offset..]);
-    return result;
-}
-
-fn positionToOffset(source: []const u8, pos: lsp.types.flat.Position) ?usize {
-    var line: u32 = 0;
-    var i: usize = 0;
-    while (line < pos.line and i < source.len) {
-        if (source[i] == '\n') line += 1;
-        i += 1;
-    }
-    if (line != pos.line) return null;
-    const offset = i + pos.character;
-    if (offset > source.len) return null;
-    return offset;
-}
-
-fn offsetToPosition(source: []const u8, offset: u32) lsp.types.flat.Position {
-    var line: u32 = 0;
-    var line_start: usize = 0;
-    const limit = @min(offset, source.len);
-    var i: usize = 0;
-    while (i < limit) : (i += 1) {
-        if (source[i] == '\n') {
-            line += 1;
-            line_start = i + 1;
-        }
-    }
-    return .{ .line = line, .character = @intCast(limit - line_start) };
 }
 
 pub fn @"textDocument/didSave"(
@@ -747,7 +709,7 @@ fn htmlHover(
     params: lsp.types.flat.HoverParams,
 ) ?lsp.types.flat.Hover {
     const state = handler.zx_files.get(params.textDocument.uri) orelse return null;
-    const offset = positionToOffset(state.source, params.position) orelse return null;
+    const offset = text.positionToOffset(state.source, params.position, handler.offset_encoding);
 
     const result = html_hover.hover(arena, state.source, @intCast(offset)) catch return null;
     const hover = result orelse return null;
@@ -760,8 +722,8 @@ fn htmlHover(
             },
         },
         .range = .{
-            .start = offsetToPosition(state.source, hover.start_byte),
-            .end = offsetToPosition(state.source, hover.end_byte),
+            .start = text.offsetToPosition(state.source, hover.start_byte, handler.offset_encoding),
+            .end = text.offsetToPosition(state.source, hover.end_byte, handler.offset_encoding),
         },
     };
 }
@@ -785,7 +747,7 @@ fn htmlComplete(
     params: lsp.types.flat.CompletionParams,
 ) ?lsp.types.completion.Result {
     const state = handler.zx_files.get(params.textDocument.uri) orelse return null;
-    const offset = positionToOffset(state.source, params.position) orelse return null;
+    const offset = text.positionToOffset(state.source, params.position, handler.offset_encoding);
     return html_complete.complete(arena, state.source, @intCast(offset)) catch null;
 }
 
@@ -916,7 +878,7 @@ pub fn @"textDocument/inlayHint"(
         const hints = handler.sendRequestSync(arena, "textDocument/inlayHint", new_params) catch null;
         if (hints) |backing_hints| {
             if (handler.zx_files.get(params.textDocument.uri)) |state| {
-                return try filterInlayHintsForZxBlocks(arena, backing_hints, &state);
+                return try filterInlayHintsForZxBlocks(arena, backing_hints, &state, handler.offset_encoding);
             }
         }
         return hints;
@@ -958,7 +920,7 @@ pub fn @"textDocument/formatting"(
                 return null;
             }
 
-            const end = offsetToPosition(state.source, @intCast(state.source.len));
+            const end = text.offsetToPosition(state.source, state.source.len, handler.offset_encoding);
             const edits = try arena.alloc(lsp.types.flat.TextEdit, 1);
             edits[0] = .{
                 .range = .{

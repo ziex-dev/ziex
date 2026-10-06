@@ -1,5 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
+const lang = @import("lang");
 const html = @import("html_hover");
 const html_hover = html.hover;
 const html_complete = html.complete;
@@ -434,4 +435,181 @@ test "completion > zig less-than inside expression block stays null" {
         \\    return (<p @allocator={a}>{if (x <y
     ;
     try testing.expect((try html_complete.complete(arena, src, @intCast(src.len))) == null);
+}
+
+const lsp_text = html.text;
+
+test "text > positionToOffset counts utf-16 code units" {
+    // `é` is two bytes but one utf-16 code unit, so the byte offset of the
+    // character after "Café" is 5 while its utf-16 column is 4.
+    const src = "Café x\nsecond\n";
+
+    try testing.expectEqual(
+        @as(usize, 5),
+        lsp_text.positionToOffset(src, .{ .line = 0, .character = 4 }, .@"utf-16"),
+    );
+    try testing.expectEqual(
+        @as(usize, 4),
+        lsp_text.positionToOffset(src, .{ .line = 0, .character = 4 }, .@"utf-8"),
+    );
+    try testing.expectEqual(
+        @as(usize, 5),
+        lsp_text.positionToOffset(src, .{ .line = 0, .character = 4 }, .@"utf-32"),
+    );
+}
+
+test "text > positionToOffset handles surrogate pairs" {
+    // `🠁` is four bytes and two utf-16 code units.
+    const src = "a🠁b\n";
+
+    try testing.expectEqual(
+        @as(usize, 5),
+        lsp_text.positionToOffset(src, .{ .line = 0, .character = 3 }, .@"utf-16"),
+    );
+    try testing.expectEqual(
+        @as(usize, 5),
+        lsp_text.positionToOffset(src, .{ .line = 0, .character = 2 }, .@"utf-32"),
+    );
+}
+
+test "text > positionToOffset clamps to the end of the line" {
+    const src = "ab\ncdef\n";
+
+    // A column past the end of line 0 must not spill into line 1.
+    try testing.expectEqual(
+        @as(usize, 2),
+        lsp_text.positionToOffset(src, .{ .line = 0, .character = 40 }, .@"utf-16"),
+    );
+    try testing.expectEqual(
+        @as(usize, 3),
+        lsp_text.positionToOffset(src, .{ .line = 1, .character = 0 }, .@"utf-16"),
+    );
+}
+
+test "text > offsetToPosition counts utf-16 code units" {
+    const src = "Café x\nsecond\n";
+
+    const pos = lsp_text.offsetToPosition(src, 5, .@"utf-16");
+    try testing.expectEqual(@as(u32, 0), pos.line);
+    try testing.expectEqual(@as(u32, 4), pos.character);
+
+    const bytes = lsp_text.offsetToPosition(src, 5, .@"utf-8");
+    try testing.expectEqual(@as(u32, 5), bytes.character);
+
+    // Byte 7 is the newline that ends line 0; line 1 starts at byte 8.
+    const eol = lsp_text.offsetToPosition(src, 7, .@"utf-16");
+    try testing.expectEqual(@as(u32, 0), eol.line);
+    try testing.expectEqual(@as(u32, 6), eol.character);
+
+    const second = lsp_text.offsetToPosition(src, 8, .@"utf-16");
+    try testing.expectEqual(@as(u32, 1), second.line);
+    try testing.expectEqual(@as(u32, 0), second.character);
+}
+
+test "text > offsetToPosition roundtrips through positionToOffset" {
+    const src = "<p>Café ↉ x</p>\n<b>🠁</b>\n";
+
+    var offset: usize = 0;
+    while (offset <= src.len) : (offset += 1) {
+        // Only round-trip codepoint boundaries.
+        if (offset < src.len and src[offset] & 0xC0 == 0x80) continue;
+        const pos = lsp_text.offsetToPosition(src, offset, .@"utf-16");
+        try testing.expectEqual(offset, lsp_text.positionToOffset(src, pos, .@"utf-16"));
+    }
+}
+
+test "text > byteColumnToPosition counts utf-16 code units" {
+    const src = "a🠁b\nCafé x\n";
+
+    const pos = lsp_text.byteColumnToPosition(src, 1, 5, .@"utf-16");
+    try testing.expectEqual(@as(u32, 1), pos.line);
+    try testing.expectEqual(@as(u32, 4), pos.character);
+
+    try testing.expectEqual(@as(u32, 3), lsp_text.byteColumnToPosition(src, 0, 5, .@"utf-16").character);
+    try testing.expectEqual(@as(u32, 2), lsp_text.byteColumnToPosition(src, 0, 5, .@"utf-32").character);
+    try testing.expectEqual(@as(u32, 5), lsp_text.byteColumnToPosition(src, 0, 5, .@"utf-8").character);
+}
+
+test "text > diagnostic columns are re-encoded" {
+    const allocator = testing.allocator;
+
+    const src: [:0]const u8 =
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<p @allocator={a}>Café <blnk>x</blnk></p>);
+        \\}
+    ;
+    var result = try lang.Ast.parse(allocator, src, .{});
+    defer result.deinit(allocator);
+
+    try testing.expect(result.diagnostics.items.len > 0);
+    const d = result.diagnostics.items[0];
+    try testing.expect(std.mem.indexOf(u8, d.message, "blnk") != null);
+
+    // tree-sitter columns count bytes; `é` makes them one ahead of utf-16.
+    const tag_col: u32 = @intCast(std.mem.indexOf(u8, src, "blnk").? - (std.mem.indexOf(u8, src, "\n").? + 1));
+    try testing.expectEqual(tag_col, d.start_column);
+
+    const start = lsp_text.byteColumnToPosition(src, d.start_line, d.start_column, .@"utf-16");
+    const end = lsp_text.byteColumnToPosition(src, d.end_line, d.end_column, .@"utf-16");
+    try testing.expectEqual(@as(u32, 1), start.line);
+    try testing.expectEqual(tag_col - 1, start.character);
+    try testing.expectEqual(tag_col - 1 + 4, end.character);
+}
+
+test "text > applyIncrementalChange edits at the utf-16 position" {
+    const allocator = testing.allocator;
+
+    const src = "pub fn Page() zx.Component {\n    return (<p>Café </p>);\n}\n";
+    // A client using utf-16 asks to insert "x" right before `</p>`. On line 1
+    // that is column 20 in utf-16 code units, but byte 21 because of `é`.
+    const edited = try lsp_text.applyIncrementalChange(
+        allocator,
+        src,
+        .{
+            .start = .{ .line = 1, .character = 20 },
+            .end = .{ .line = 1, .character = 20 },
+        },
+        "x",
+        .@"utf-16",
+    );
+    defer allocator.free(edited);
+
+    try testing.expectEqualStrings(
+        "pub fn Page() zx.Component {\n    return (<p>Café x</p>);\n}\n",
+        edited,
+    );
+}
+
+test "text > applyIncrementalChange replaces a range" {
+    const allocator = testing.allocator;
+
+    const src = "<p>Café</p>\n";
+    const edited = try lsp_text.applyIncrementalChange(
+        allocator,
+        src,
+        .{
+            .start = .{ .line = 0, .character = 3 },
+            .end = .{ .line = 0, .character = 7 },
+        },
+        "Tea",
+        .@"utf-16",
+    );
+    defer allocator.free(edited);
+
+    try testing.expectEqualStrings("<p>Tea</p>\n", edited);
+}
+
+test "text > applyIncrementalChange rejects an inverted range" {
+    const allocator = testing.allocator;
+
+    try testing.expectError(error.InvalidRange, lsp_text.applyIncrementalChange(
+        allocator,
+        "abcdef\n",
+        .{
+            .start = .{ .line = 0, .character = 4 },
+            .end = .{ .line = 0, .character = 1 },
+        },
+        "x",
+        .@"utf-16",
+    ));
 }
