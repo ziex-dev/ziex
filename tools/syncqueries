@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Script to copy tree-sitter-zx query files to editor directories
 
@@ -9,7 +10,12 @@ PROJECT_ROOT="$(pwd)"
 SOURCE_DIR="$PROJECT_ROOT/pkg/tree-sitter-zx/queries"
 ZED_DIR="$PROJECT_ROOT/ide/zed/languages/zx"
 NEOVIM_DIR="$PROJECT_ROOT/ide/neovim/queries/zx"
-SITE_PAGES_DIR="$PROJECT_ROOT/site/pages/docs"
+SITE_PAGES_DIR="$PROJECT_ROOT/site/app/pages/reference"
+
+if [ ! -d "$SOURCE_DIR" ]; then
+    echo "error: source directory not found: $SOURCE_DIR" >&2
+    exit 1
+fi
 
 # Ensure destination directories exist
 mkdir -p "$ZED_DIR"
@@ -24,16 +30,25 @@ copy_files() {
     echo "Copying .scm files to $editor_name..."
     echo "  Destination: $dest_dir"
     
+    local copied=0
+    local file
     for file in "$SOURCE_DIR"/*.scm; do
         if [ -f "$file" ]; then
+            local filename dest_file
             filename=$(basename "$file")
             dest_file="$dest_dir/$filename"
             # Remove existing file or symlink first
             rm -f "$dest_file"
             cp "$file" "$dest_file"
             echo "  Copied: $filename"
+            copied=1
         fi
     done
+
+    if [ "$copied" -eq 0 ]; then
+        echo "error: no .scm files found in $SOURCE_DIR" >&2
+        exit 1
+    fi
     
     echo ""
 }
@@ -42,8 +57,8 @@ copy_files() {
 copy_files "$ZED_DIR" "Zed"
 copy_files "$NEOVIM_DIR" "Neovim"
 
-# Copy highlights.scm to site/pages
-echo "Copying highlights.scm to site/pages..."
+# Copy highlights.scm to the docs site
+echo "Copying highlights.scm to the docs site..."
 rm -f "$SITE_PAGES_DIR/highlights.scm"
 cp "$SOURCE_DIR/highlights.scm" "$SITE_PAGES_DIR/highlights.scm"
 echo "  Copied: highlights.scm"
