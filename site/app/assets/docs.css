@@ -1642,7 +1642,8 @@ code[class*="language-"] {
 #tab-editor-vscode:checked~.simple-tab-label[for="tab-editor-vscode"],
 #tab-editor-neovim:checked~.simple-tab-label[for="tab-editor-neovim"],
 #tab-editor-helix:checked~.simple-tab-label[for="tab-editor-helix"],
-#tab-editor-zed:checked~.simple-tab-label[for="tab-editor-zed"] {
+#tab-editor-zed:checked~.simple-tab-label[for="tab-editor-zed"],
+#tab-editor-emacs:checked~.simple-tab-label[for="tab-editor-emacs"] {
     color: var(--link-color);
     border-bottom-color: var(--link-color);
     border-bottom-width: 2px;
@@ -1663,7 +1664,8 @@ div:has(#tab-control-while:checked) #control-content-while,
 div:has(#tab-editor-vscode:checked) #content-editor-vscode,
 div:has(#tab-editor-neovim:checked) #content-editor-neovim,
 div:has(#tab-editor-helix:checked) #content-editor-helix,
-div:has(#tab-editor-zed:checked) #content-editor-zed {
+div:has(#tab-editor-zed:checked) #content-editor-zed,
+div:has(#tab-editor-emacs:checked) #content-editor-emacs {
     display: block;
 }
 
