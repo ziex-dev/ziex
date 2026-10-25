@@ -85,6 +85,7 @@ inline fn escapeByte(w: *std.Io.Writer, c: u8) !void {
         '\n' => try w.writeAll("\\n"),
         '\r' => try w.writeAll("\\r"),
         '\t' => try w.writeAll("\\t"),
+        0...0x08, 0x0b, 0x0c, 0x0e...0x1f => try w.print("\\u{x:0>4}", .{c}),
         else => try w.writeByte(c),
     }
 }
@@ -197,7 +198,7 @@ fn readSlice(comptime Child: type, allocator: std.mem.Allocator, d: []const u8, 
     return error.UnexpectedEnd;
 }
 
-fn readStr(allocator: std.mem.Allocator, d: []const u8, p: *usize) ![]const u8 {
+fn readStr(allocator: std.mem.Allocator, d: []const u8, p: *usize) ![]u8 {
     if (peek(d, p) != '"') return error.ExpectedString;
     p.* += 1;
 
@@ -216,30 +217,49 @@ fn readStr(allocator: std.mem.Allocator, d: []const u8, p: *usize) ![]const u8 {
     const end = p.*;
     if (p.* < d.len) p.* += 1; // closing quote
 
-    if (!has_escapes) return allocator.dupe(u8, d[start..end]) catch "";
+    if (!has_escapes) return allocator.dupe(u8, d[start..end]);
 
-    var buf: [4096]u8 = undefined;
-    var len: usize = 0;
+    var out: std.ArrayList(u8) = try .initCapacity(allocator, end - start);
+    errdefer out.deinit(allocator);
     var i = start;
-    while (i < end and len < buf.len) {
-        if (d[i] == '\\' and i + 1 < end) {
-            buf[len] = switch (d[i + 1]) {
-                'n' => '\n',
-                'r' => '\r',
-                't' => '\t',
-                '"' => '"',
-                '\\' => '\\',
-                else => d[i + 1],
-            };
-            len += 1;
-            i += 2;
-        } else {
-            buf[len] = d[i];
-            len += 1;
+    while (i < end) {
+        if (d[i] != '\\' or i + 1 >= end) {
+            out.appendAssumeCapacity(d[i]);
             i += 1;
+            continue;
         }
+        const e = d[i + 1];
+        i += 2;
+        if (e == 'u') {
+            var cp: u21 = try hex4(d, i, end);
+            i += 4;
+            if (cp >= 0xd800 and cp <= 0xdbff and i + 6 <= end and d[i] == '\\' and d[i + 1] == 'u') {
+                const lo = try hex4(d, i + 2, end);
+                if (lo >= 0xdc00 and lo <= 0xdfff) {
+                    cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
+                    i += 6;
+                }
+            }
+            var buf: [4]u8 = undefined;
+            const n = std.unicode.utf8Encode(cp, &buf) catch std.unicode.utf8Encode(0xfffd, &buf) catch unreachable;
+            try out.appendSlice(allocator, buf[0..n]);
+            continue;
+        }
+        out.appendAssumeCapacity(switch (e) {
+            'n' => '\n',
+            'r' => '\r',
+            't' => '\t',
+            'b' => 0x08,
+            'f' => 0x0c,
+            else => e,
+        });
     }
-    return allocator.dupe(u8, buf[0..len]) catch "";
+    return out.toOwnedSlice(allocator);
+}
+
+fn hex4(d: []const u8, at: usize, end: usize) !u21 {
+    if (at + 4 > end) return error.InvalidEscape;
+    return std.fmt.parseInt(u16, d[at..][0..4], 16) catch error.InvalidEscape;
 }
 
 fn readInt(comptime T: type, d: []const u8, p: *usize) !T {

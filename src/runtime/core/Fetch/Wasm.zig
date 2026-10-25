@@ -1,5 +1,6 @@
 const std = @import("std");
 const Fetch = @import("../Fetch.zig");
+const zxon = @import("../../../util/zxon.zig");
 
 const Response = Fetch.Response;
 const Headers = Fetch.Headers;
@@ -61,9 +62,9 @@ fn writeHeadersJson(writer: *std.Io.Writer, headers: ?[]const RequestInit.Header
     try writer.writeByte('{');
     for (headers orelse &.{}, 0..) |h, i| {
         if (i > 0) try writer.writeByte(',');
-        try std.json.Stringify.encodeJsonString(h.name, .{}, writer);
+        zxon.serialize(h.name, writer, .{}) catch return error.WriteFailed;
         try writer.writeByte(':');
-        try std.json.Stringify.encodeJsonString(h.value, .{}, writer);
+        zxon.serialize(h.value, writer, .{}) catch return error.WriteFailed;
     }
     try writer.writeByte('}');
 }

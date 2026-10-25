@@ -73,6 +73,7 @@ writer: *Io.Writer,
 reader: *Io.Reader,
 thread: ?Thread = null,
 mutex: Io.Mutex = .init,
+interactive: bool = true,
 
 /// Initiate a new Spinner instance.
 ///
@@ -101,7 +102,7 @@ pub fn deinit(self: *Spinner) void {
 }
 
 pub fn print(self: *Spinner, comptime format: []const u8, args: anytype) !void {
-    self.writer.print("\r\x1b[2K", .{}) catch {};
+    self.clearLine();
     try self.writer.print(format, args);
 }
 
@@ -118,6 +119,11 @@ pub fn start(self: *Spinner, comptime format: []const u8, args: anytype) !void {
 
     if (self.is_spinning.load(.acquire)) return;
     self.is_spinning.store(true, .release);
+
+    if (!self.interactive) {
+        try self.writer.print("{s}\n", .{self.message});
+        return;
+    }
 
     // WASI / single-threaded builds cannot spawn spinner threads.
     if (comptime builtin.single_threaded) return;
@@ -138,7 +144,7 @@ pub fn stop(self: *Spinner) void {
 pub fn clear(self: *Spinner) void {
     if (!self.is_spinning.load(.monotonic)) return;
     self.stop();
-    self.writer.print("\r\x1b[2K", .{}) catch {};
+    self.clearLine();
 }
 
 pub fn updateStyle(self: *Spinner, options: SpinnerOptions) void {
@@ -176,7 +182,7 @@ pub fn writeAbove(self: *Spinner, io: Io, file: Io.File, bytes: []const u8) void
     self.mutex.lockUncancelable(lock_io);
     defer self.mutex.unlock(lock_io);
 
-    if (!self.is_spinning.load(.acquire)) {
+    if (!self.is_spinning.load(.acquire) or !self.interactive) {
         file.writeStreamingAll(io, bytes) catch {};
         return;
     }
@@ -220,12 +226,16 @@ fn finalize(self: *Spinner, state: State, comptime format: []const u8, args: any
     }
     self.message = try std.fmt.allocPrint(self.allocator, format, args);
 
-    self.writer.print("\r\x1b[2K", .{}) catch {};
+    self.clearLine();
 
     try self.writer.print("{s}{s}\n", .{ ticker, self.message });
 
     self.allocator.free(self.message);
     self.message = "";
+}
+
+fn clearLine(self: *Spinner) void {
+    if (self.interactive) self.writer.writeAll("\r\x1b[2K") catch {};
 }
 
 fn spinLoop(self: *Spinner) void {

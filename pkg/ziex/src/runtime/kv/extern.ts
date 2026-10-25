@@ -37,7 +37,8 @@ function maybeThen<T, R>(r: T | Promise<T>, f: (v: T) => R): R | Promise<R> {
 }
 
 function readStr(getMemory: () => WebAssembly.Memory, ptr: number, len: number): string {
-    return textDecoder.decode(new Uint8Array(getMemory().buffer, ptr, len));
+    if (len === 0) return "";
+    return textDecoder.decode(new Uint8Array(getMemory().buffer, ptr >>> 0, len >>> 0));
 }
 
 function resolve(
@@ -113,6 +114,23 @@ function wrapImport<T extends (...args: number[]) => number | Promise<number>>(i
     return new Suspending!(impl);
 }
 
+export type KVImportOptions = {
+    // "background" never suspends put/delete: a suspended event handler's shadow
+    // stack frames get overwritten by the next event's handler.
+    writes?: "await" | "background";
+};
+
+function background<T extends (...args: number[]) => number | Promise<number>>(impl: T): T {
+    return ((...args: Parameters<T>) => {
+        const r = impl(...args);
+        if (r instanceof Promise) {
+            r.catch((err) => console.error("zx.kv write failed:", err));
+            return 0;
+        }
+        return r;
+    }) as T;
+}
+
 /**
  * Build the `__zx_kv` host functions for key/value namespace bindings.
  *
@@ -124,7 +142,9 @@ export function createKVImports(
     bindings: Record<string, KVNamespace>,
     getMemory: () => WebAssembly.Memory,
     allocRef: WasmAllocRef,
+    options: KVImportOptions = {},
 ): WebAssembly.ModuleImports {
+    const write = options.writes === "background" ? background : wrapImport;
     return {
         kv_get: wrapImport((ns_ptr, ns_len, key_ptr, key_len, out_ptr) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
@@ -132,7 +152,7 @@ export function createKVImports(
             return get(b, readStr(getMemory, key_ptr, key_len), out_ptr, getMemory, allocRef);
         }),
 
-        kv_put: wrapImport((ns_ptr, ns_len, key_ptr, key_len, val_ptr, val_len, ttl_seconds) => {
+        kv_put: write((ns_ptr, ns_len, key_ptr, key_len, val_ptr, val_len, ttl_seconds) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) return miss;
             return put(
@@ -143,7 +163,7 @@ export function createKVImports(
             );
         }),
 
-        kv_delete: wrapImport((ns_ptr, ns_len, key_ptr, key_len) => {
+        kv_delete: write((ns_ptr, ns_len, key_ptr, key_len) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) return miss;
             return del(b, readStr(getMemory, key_ptr, key_len));

@@ -11,7 +11,8 @@ export function createFetchImports(
     const decoder = new TextDecoder();
 
     function readStr(ptr: number, len: number): string {
-        return decoder.decode(new Uint8Array(getMemory().buffer, ptr, len));
+        if (len === 0) return "";
+        return decoder.decode(new Uint8Array(getMemory().buffer, ptr >>> 0, len >>> 0));
     }
 
     function writeBytes(buf_ptr: number, buf_max: number, data: Uint8Array): number {

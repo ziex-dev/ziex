@@ -142,7 +142,8 @@ export function createDbImports(
     const decoder = new TextDecoder();
 
     function readStr(ptr: number, len: number): string {
-        return decoder.decode(new Uint8Array(getMemory().buffer, ptr, len));
+        if (len === 0) return "";
+        return decoder.decode(new Uint8Array(getMemory().buffer, ptr >>> 0, len >>> 0));
     }
 
     function binding(ns: string): Database | null {

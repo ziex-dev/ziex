@@ -75,19 +75,25 @@ pub fn jsonDevtool(allocator: std.mem.Allocator, props: anytype) ?[]const u8 {
         if (comptime isActionType(field_type)) {
             if (!first) aw.writer.writeByte(',') catch return null;
             first = false;
-            std.json.Stringify.value(field_name, .{}, &aw.writer) catch return null;
+            writeJsonValue(&aw.writer, field_name) catch return null;
             aw.writer.writeAll(":\"fn()\"") catch return null;
         } else if (comptime serializable(field_type)) {
             if (!first) aw.writer.writeByte(',') catch return null;
             first = false;
-            std.json.Stringify.value(field_name, .{}, &aw.writer) catch return null;
+            writeJsonValue(&aw.writer, field_name) catch return null;
             aw.writer.writeByte(':') catch return null;
-            std.json.Stringify.value(value, .{}, &aw.writer) catch return null;
+            writeJsonValue(&aw.writer, value) catch return null;
         }
     }
 
     aw.writer.writeByte('}') catch return null;
     return aw.toOwnedSlice() catch null;
+}
+
+// zxon in the client, which ships without std.json.
+fn writeJsonValue(w: *std.Io.Writer, value: anytype) !void {
+    if (comptime platform.role == .client) return zxon_mod.serialize(value, w, .{});
+    return std.json.Stringify.value(value, .{}, w);
 }
 
 fn isActionType(comptime T: type) bool {

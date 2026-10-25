@@ -2,6 +2,7 @@ const Wasm = @This();
 
 const std = @import("std");
 const Kv = @import("../Kv.zig");
+const zxon = @import("../../../util/zxon.zig");
 
 fn get(_: ?*anyopaque, ns: []const u8, allocator: std.mem.Allocator, key: []const u8) !?[]u8 {
     var ptr: [*]u8 = undefined;
@@ -31,11 +32,7 @@ fn list(_: ?*anyopaque, ns: []const u8, allocator: std.mem.Allocator, prefix: []
     if (n == 0) return &[_][]u8{};
     defer std.heap.wasm_allocator.free(ptr[0..@intCast(n)]);
 
-    const parsed = try std.json.parseFromSlice([][]const u8, allocator, ptr[0..@intCast(n)], .{});
-    defer parsed.deinit();
-    const keys = try allocator.alloc([]u8, parsed.value.len);
-    for (parsed.value, 0..) |k, i| keys[i] = try allocator.dupe(u8, k);
-    return keys;
+    return zxon.parse([][]u8, allocator, ptr[0..@intCast(n)], .{});
 }
 
 const ext = struct {

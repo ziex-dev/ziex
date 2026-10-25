@@ -559,6 +559,7 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
             options.kv ?? createBrowserKVBindings(),
             getMemory,
             allocRef,
+            { writes: "background" },
         );
     }
 
