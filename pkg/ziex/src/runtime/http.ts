@@ -8,6 +8,7 @@ export type HttpState = {
     headers: Headers;
     bodyChunks: Uint8Array[];
     streamWriter: WritableStreamDefaultWriter<Uint8Array> | null;
+    commitWaiters: Array<() => void>;
 };
 
 export function newHttpState(): HttpState {
@@ -19,7 +20,22 @@ export function newHttpState(): HttpState {
         headers: new Headers(),
         bodyChunks: [],
         streamWriter: null,
+        commitWaiters: [],
     };
+}
+
+function notifyCommitted(http: HttpState): void {
+    const waiters = http.commitWaiters;
+    if (waiters.length === 0) return;
+    http.commitWaiters = [];
+    for (const resolve of waiters) resolve();
+}
+
+function whenCommitted(http: HttpState): Promise<void> {
+    if (http.committed) return Promise.resolve();
+    return new Promise((resolve) => {
+        http.commitWaiters.push(resolve);
+    });
 }
 
 export function buildHttpImports(
@@ -33,15 +49,17 @@ export function buildHttpImports(
             http.committed = true;
             http.headers = new Headers();
             http.streaming = false;
-            if (meta_len <= 0) return;
-            try {
-                const raw = decoder.decode(new Uint8Array(mem().buffer, meta_ptr >>> 0, meta_len >>> 0));
-                const meta = JSON.parse(raw) as { streaming?: boolean; headers?: [string, string][] };
-                http.streaming = meta.streaming === true;
-                for (const [name, value] of meta.headers ?? []) http.headers.append(name, value);
-            } catch {
-                // Keep defaults on malformed meta.
+            if (meta_len > 0) {
+                try {
+                    const raw = decoder.decode(new Uint8Array(mem().buffer, meta_ptr >>> 0, meta_len >>> 0));
+                    const meta = JSON.parse(raw) as { streaming?: boolean; headers?: [string, string][] };
+                    http.streaming = meta.streaming === true;
+                    for (const [name, value] of meta.headers ?? []) http.headers.append(name, value);
+                } catch {
+                    // Keep defaults on malformed meta.
+                }
             }
+            notifyCommitted(http);
         },
         write: (ptr: number, len: number): void => {
             if (len <= 0) return;
@@ -51,6 +69,8 @@ export function buildHttpImports(
         },
         end: (): void => {
             http.ended = true;
+            // Unblock toResponse if the handler finished without committing.
+            if (!http.committed) notifyCommitted(http);
             closeStream(http);
         },
     };
@@ -66,6 +86,8 @@ function closeStream(http: HttpState): void {
 const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
 
 export async function toResponse(http: HttpState, done: Promise<void>): Promise<Response> {
+    await Promise.race([done, whenCommitted(http)]);
+
     if (http.committed && http.streaming) {
         const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
         http.streamWriter = writable.getWriter();
