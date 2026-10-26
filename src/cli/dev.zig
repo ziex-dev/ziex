@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 
 const util = @import("shared/util.zig");
 const context = @import("shared/context.zig");
+const build_status = @import("shared/status.zig");
 const Builder = @import("dev/Builder.zig");
 const tui = @import("../tui/main.zig");
 const Diagnostics = @import("dev/Diagnostics.zig");
@@ -304,7 +305,7 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
             .step_progress => |progress| {
                 if (!rebuilding_shown) continue;
                 var status_buf: [256]u8 = undefined;
-                try status.updateMessage("{s}", .{formatBuildStatus(&status_buf, build_label, progress)});
+                try status.updateMessage("{s}", .{build_status.formatStepProgress(&status_buf, build_label, progress)});
             },
             .errors => |result_val| {
                 var build_result = result_val;
@@ -544,26 +545,6 @@ fn startStatus(status: *tui.Spinner, animated: bool, comptime format: []const u8
     else
         .{ .frames = &.{Colors.cyan ++ "↺ " ++ Colors.reset}, .refresh_rate_ms = 100 });
     try status.start(format, args);
-}
-
-fn formatBuildStatus(buf: []u8, label: []const u8, progress: Builder.StepProgress) []const u8 {
-    const step = progress.step orelse return std.fmt.bufPrint(buf, "{s}{s}{s}...{s} {s}[{d}/{d}]{s}", .{
-        Colors.cyan, Colors.bold, label, Colors.reset, Colors.dim, progress.completed, progress.total, Colors.reset,
-    }) catch label;
-    const shown = truncateStepName(step);
-    return std.fmt.bufPrint(buf, "{s}{s}{s}{s} {s}({s}{s}) [{d}/{d}]{s}", .{
-        Colors.cyan, Colors.bold, label, Colors.reset, Colors.dim, shown.text, shown.ellipsis, progress.completed, progress.total, Colors.reset,
-    }) catch label;
-}
-
-const max_step_name_len = 60;
-
-/// Keeps the status on one line; a wrapped line breaks the `\r` redraw.
-fn truncateStepName(name: []const u8) struct { text: []const u8, ellipsis: []const u8 } {
-    if (name.len <= max_step_name_len) return .{ .text = name, .ellipsis = "" };
-    var end: usize = max_step_name_len;
-    while (end > 0 and (name[end] & 0xC0) == 0x80) end -= 1;
-    return .{ .text = name[0..end], .ellipsis = "…" };
 }
 
 /// Print the first captured line (prefer stderr, fallback to stdout)

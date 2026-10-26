@@ -122,6 +122,7 @@ pub fn start(self: *Spinner, comptime format: []const u8, args: anytype) !void {
 
     if (!self.interactive) {
         try self.writer.print("{s}\n", .{self.message});
+        try self.writer.flush();
         return;
     }
 
@@ -229,6 +230,7 @@ fn finalize(self: *Spinner, state: State, comptime format: []const u8, args: any
     self.clearLine();
 
     try self.writer.print("{s}{s}\n", .{ ticker, self.message });
+    if (!self.interactive) try self.writer.flush();
 
     self.allocator.free(self.message);
     self.message = "";

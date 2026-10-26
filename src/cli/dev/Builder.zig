@@ -89,6 +89,7 @@ pub const InitOptions = struct {
     /// Base `zig build …` argv (without `--watch` / `--listen`).
     argv: []const []const u8,
     environ_map: ?*std.process.Environ.Map = null,
+    watch: bool = true,
 };
 
 pub fn deinit(self: Builder, io: std.Io) void {

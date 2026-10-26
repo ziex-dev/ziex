@@ -35,6 +35,7 @@ previous_had_errors: bool = false,
 cycle_started_at: ?Io.Timestamp = null,
 /// Accumulated during one build_started…build_completed cycle.
 cycle: Cycle = .{},
+want_watch: bool = true,
 watching: bool = false,
 closed: bool = false,
 
@@ -102,6 +103,7 @@ pub fn init(self: *Bsp, io: Io, options: InitOptions) !void {
         .io = io,
         .child_process = child_process,
         .conf_arena = .init(options.allocator),
+        .want_watch = options.watch,
     };
     errdefer self.conf_arena.deinit();
 
@@ -223,8 +225,8 @@ fn configurationFailed(self: *Bsp, body: []const u8) !void {
 /// `bsp_configuration`, including reconfigures triggered by build.zig edits.
 fn serveDefaultStep(self: *Bsp) !void {
     const c = &self.configuration.?;
-    try self.client.serveBuildSteps(&.{c.default_step}, .{ .watch = true });
-    self.watching = true;
+    try self.client.serveBuildSteps(&.{c.default_step}, .{ .watch = self.want_watch });
+    self.watching = self.want_watch;
 }
 
 fn nextEvent(self: *Bsp, io: Io) !?Event {
@@ -320,6 +322,10 @@ fn handleMessage(self: *Bsp, tag: Server.Message.Tag, body: []const u8) !?Event 
             return self.advanceShownStep(c, bsc.step_index);
         },
         .bsp_build_completed => {
+            // One-shot builds (`watch = false`) leave the runner waiting for
+            // another message; stop the event loop after this cycle.
+            if (!self.watching) self.closed = true;
+
             const duration_ms = self.cycleDurationMs();
             if (self.cycle.had_failure or self.cycle.diagnostics.items.len > 0) {
                 self.previous_had_errors = true;
