@@ -284,6 +284,10 @@ test "expression_text_lifetime" {
     try test_transpile("expression/text_lifetime");
     try test_render("expression/text_lifetime", @import("./../data/expression/text_lifetime.zig").Page);
 }
+test "expression_sibling_space" {
+    try test_transpile("expression/sibling_space");
+    try test_render("expression/sibling_space", @import("./../data/expression/sibling_space.zig").Page);
+}
 test "expression_format" {
     try test_transpile("expression/format");
     try test_render("expression/format", @import("./../data/expression/format.zig").Page);
@@ -547,6 +551,7 @@ fn getPageFn(comptime path: []const u8) ?fn (std.mem.Allocator) zx.Component {
         .{ "control_flow/if_for_if", @import("./../data/control_flow/if_for_if.zig") },
         .{ "expression/text", @import("./../data/expression/text.zig") },
         .{ "expression/text_lifetime", @import("./../data/expression/text_lifetime.zig") },
+        .{ "expression/sibling_space", @import("./../data/expression/sibling_space.zig") },
         .{ "expression/format", @import("./../data/expression/format.zig") },
         .{ "expression/component", @import("./../data/expression/component.zig") },
         .{ "expression/mixed", @import("./../data/expression/mixed.zig") },

@@ -1,0 +1,33 @@
+pub fn Page(allocator: zx.Allocator) zx.Component {
+    const bank = "Tada Bank TTC";
+    const kind = "Cash";
+    return (
+        <div @allocator={allocator}>
+            <span>
+                {bank}
+                · {kind}
+                · {kind}
+            </span>
+            <span>{bank} · {kind}</span>
+            <span>
+                {bank}
+                {kind}
+            </span>
+            <span>
+                <b>{bank}</b>
+                · {kind}
+            </span>
+            <span>
+                {bank}
+                {" "}
+                {kind}
+            </span>
+            <span>
+                Try
+                <a href="/x">{kind}</a>
+            </span>
+        </div>
+    );
+}
+
+const zx = @import("zx");

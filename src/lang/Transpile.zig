@@ -822,7 +822,14 @@ fn isPreElement(tag: []const u8) bool {
     return std.mem.eql(u8, tag, "pre");
 }
 
-fn normalizeText(source: []const u8, node_start: u32, node_end: u32) ?[]const u8 {
+pub const NormalizedText = struct {
+    text: []const u8,
+    /// Space before `text` when a newline would glue it to a prior `{expr}` or `</tag>`.
+    leading_space: bool = false,
+};
+
+/// Exported for unit tests; used by transpileChild for HTML-like inline spacing.
+pub fn normalizeText(source: []const u8, node_start: u32, node_end: u32) ?NormalizedText {
     if (node_start >= node_end or node_end > source.len) return null;
     const text = source[node_start..node_end];
     if (text.len == 0) return null;
@@ -833,7 +840,7 @@ fn normalizeText(source: []const u8, node_start: u32, node_end: u32) ?[]const u8
     const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
     if (trimmed.len == 0) {
         if (std.mem.indexOfAny(u8, text, "\n\r") != null or preceded_by_newline) return null;
-        return text;
+        return .{ .text = text };
     }
 
     const content_start = @intFromPtr(trimmed.ptr) - @intFromPtr(text.ptr);
@@ -846,11 +853,60 @@ fn normalizeText(source: []const u8, node_start: u32, node_end: u32) ?[]const u8
 
     const start: usize = if (strip_leading) content_start else 0;
     const end: usize = if (strip_trailing) content_end else text.len;
-    return text[start..end];
+    return .{
+        .text = text[start..end],
+        .leading_space = strip_leading and continuesInlineSibling(source, node_start),
+    };
 }
 
 fn isNewline(c: u8) bool {
     return c == '\n' or c == '\r';
+}
+
+/// Newline after `{expr}` / `</tag>` → one leading space (HTML-like).
+/// Not after open/self-closing/void tags, and not after `{" "}` / `{ }` / `{' '}`.
+fn continuesInlineSibling(source: []const u8, node_start: u32) bool {
+    var i = node_start;
+    while (i > 0 and std.ascii.isWhitespace(source[i - 1])) i -= 1;
+    if (i == 0) return false;
+    return switch (source[i - 1]) {
+        '}' => !exprIsWhitespaceOnly(source, i),
+        '>' => isClosingTagEnd(source, i),
+        else => false,
+    };
+}
+
+fn isClosingTagEnd(source: []const u8, end_exclusive: u32) bool {
+    if (end_exclusive >= 2 and source[end_exclusive - 2] == '/') return false;
+    var j = end_exclusive;
+    while (j > 0) {
+        j -= 1;
+        if (source[j] == '<') return j + 1 < end_exclusive and source[j + 1] == '/';
+    }
+    return false;
+}
+
+fn exprIsWhitespaceOnly(source: []const u8, end_exclusive: u32) bool {
+    if (end_exclusive == 0 or source[end_exclusive - 1] != '}') return false;
+    var depth: i32 = 0;
+    var j = end_exclusive;
+    while (j > 0) {
+        j -= 1;
+        if (source[j] == '}') {
+            depth += 1;
+        } else if (source[j] == '{') {
+            depth -= 1;
+            if (depth == 0) {
+                const inner = std.mem.trim(u8, source[j + 1 .. end_exclusive - 1], &std.ascii.whitespace);
+                if (inner.len == 0) return true;
+                if (inner.len >= 2 and (inner[0] == '\'' or inner[0] == '"') and inner[inner.len - 1] == inner[0]) {
+                    return std.mem.trim(u8, inner[1 .. inner.len - 1], &std.ascii.whitespace).len == 0;
+                }
+                return false;
+            }
+        }
+    }
+    return false;
 }
 
 /// Escape text for use in Zig string literal
@@ -1429,7 +1485,8 @@ fn transpileChild(self: *Transpile, node: ts.Node, preserve_whitespace: bool, is
                     const normalized = normalizeText(self.ast.source, child.startByte(), child.endByte()) orelse continue;
 
                     try self.printM("{s}.txt(\"", .{self.zx_name}, child.startByte());
-                    try self.escapeZigString(normalized);
+                    if (normalized.leading_space) try self.write(" ");
+                    try self.escapeZigString(normalized.text);
                     try self.write("\")");
                     had_output = true;
                 }

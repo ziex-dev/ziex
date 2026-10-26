@@ -26,6 +26,7 @@ test {
     _ = @import("cli/lsp.zig");
     _ = @import("cli/dev.zig");
     _ = @import("util/sig.zig");
+    _ = @import("core/whitespace.zig");
 }
 
 pub const std_options = std.Options{

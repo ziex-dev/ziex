@@ -56,6 +56,7 @@ pub const TestFileCache = struct {
         // Expression
         "expression/text",
         "expression/text_lifetime",
+        "expression/sibling_space",
         "expression/format",
         "expression/component",
         "expression/mixed",
