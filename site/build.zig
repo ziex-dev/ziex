@@ -2,7 +2,7 @@ const std = @import("std");
 const ziex = @import("ziex");
 
 const build_zon = @import("build.zig.zon");
-const ziex_version = 11; // Increment this when site js changes
+const ziex_version = 12; // Increment this when site js changes
 
 const ServerBackend = enum {
     std,
