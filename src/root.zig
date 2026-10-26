@@ -94,6 +94,7 @@ pub const Router = app_mod.Router;
 // --- Storage --- //
 pub const Db = @import("runtime/core/Db.zig");
 pub const Kv = @import("runtime/core/Kv.zig");
+pub const Wire = @import("runtime/core/Wire.zig");
 pub const Cache = @import("runtime/core/Cache.zig");
 
 pub var db: Db = .failing;

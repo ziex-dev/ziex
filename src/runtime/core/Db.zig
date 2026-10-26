@@ -1,6 +1,7 @@
 const Db = @This();
 
 const std = @import("std");
+const Wire = @import("Wire.zig");
 
 userdata: ?*anyopaque = null,
 vtable: *const VTable,
@@ -41,29 +42,7 @@ pub const ColumnType = enum {
     unknown,
 };
 
-pub const Value = union(enum) {
-    null,
-    integer: i64,
-    float: f64,
-    text: []const u8,
-    blob: []const u8,
-    boolean: bool,
-
-    pub fn of(value: anytype) Value {
-        const T = @TypeOf(value);
-        if (T == Value) return value;
-
-        return switch (@typeInfo(T)) {
-            .null => .null,
-            .bool => .{ .boolean = value },
-            .int, .comptime_int => .{ .integer = @intCast(value) },
-            .float, .comptime_float => .{ .float = @floatCast(value) },
-            .optional => if (value) |inner| Value.of(inner) else .null,
-            .pointer, .array => .{ .text = stringBytes(value) },
-            else => @compileError("Db bindings: unsupported value type " ++ @typeName(T)),
-        };
-    }
-};
+pub const Value = Wire.Value;
 
 pub const Field = struct {
     name: []const u8,
@@ -148,23 +127,6 @@ pub const Bindings = union(enum) {
         return .{ .named = values };
     }
 };
-
-fn stringBytes(value: anytype) []const u8 {
-    const T = @TypeOf(value);
-    switch (@typeInfo(T)) {
-        .pointer => |ptr| switch (ptr.size) {
-            .slice => if (ptr.child == u8) return value,
-            .one => switch (@typeInfo(ptr.child)) {
-                .array => |arr| if (arr.child == u8) return value,
-                else => {},
-            },
-            else => {},
-        },
-        .array => |arr| if (arr.child == u8) return &value,
-        else => {},
-    }
-    @compileError("Db bindings: expected []const u8 / string for text value, got " ++ @typeName(T));
-}
 
 fn BoundArgs(comptime ArgsT: type) type {
     if (ArgsT == Bindings) return struct {
@@ -352,11 +314,26 @@ pub const Statement = struct {
 
     pub fn rows(self: *Statement, allocator: std.mem.Allocator, comptime T: type, args: anytype) ![]const T {
         const all_rows = try self.all(allocator, args);
+        // Field names are shared across rows from the wasm columnar decoder; do not
+        // free individual field name slices. Arena request allocators reclaim all.
         const typed_rows = try allocator.alloc(T, all_rows.len);
         errdefer allocator.free(typed_rows);
 
+        if (all_rows.len == 0) return typed_rows;
+
+        // Build name→index once; O(fields) lookups instead of O(rows·fields²).
+        var index_of: [infoFieldCount(T)]?usize = @splat(null);
+        inline for (@typeInfo(T).@"struct".field_names, 0..) |field_name, fi| {
+            for (all_rows[0].fields, 0..) |field, i| {
+                if (std.mem.eql(u8, field.name, field_name)) {
+                    index_of[fi] = i;
+                    break;
+                }
+            }
+        }
+
         for (all_rows, 0..) |result_row, index| {
-            typed_rows[index] = try rowToType(T, result_row);
+            typed_rows[index] = try rowToTypeIndexed(T, result_row, &index_of);
         }
         return typed_rows;
     }
@@ -426,6 +403,10 @@ pub const Statement = struct {
     }
 };
 
+fn infoFieldCount(comptime T: type) usize {
+    return @typeInfo(T).@"struct".field_names.len;
+}
+
 fn rowToType(comptime T: type, source_row: Row) !T {
     const info = @typeInfo(T);
     if (info != .@"struct") {
@@ -435,6 +416,21 @@ fn rowToType(comptime T: type, source_row: Row) !T {
     var value: T = undefined;
     inline for (info.@"struct".field_names, info.@"struct".field_types) |field_name, field_type| {
         @field(value, field_name) = try source_row.getTyped(field_type, field_name);
+    }
+    return value;
+}
+
+fn rowToTypeIndexed(comptime T: type, source_row: Row, index_of: *const [infoFieldCount(T)]?usize) !T {
+    const info = @typeInfo(T);
+    if (info != .@"struct") {
+        @compileError("Db.Statement.row/rows expects a struct type, got " ++ @typeName(T));
+    }
+
+    var value: T = undefined;
+    inline for (info.@"struct".field_names, info.@"struct".field_types, 0..) |field_name, field_type, fi| {
+        const idx = index_of.*[fi] orelse return DbError.InvalidQuery;
+        if (idx >= source_row.fields.len) return DbError.InvalidQuery;
+        @field(value, field_name) = try valueToType(field_type, source_row.fields[idx].value);
     }
     return value;
 }

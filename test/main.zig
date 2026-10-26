@@ -19,6 +19,7 @@ test {
     _ = @import("core/csr.zig");
     _ = @import("core/dx.zig");
     _ = @import("core/db.zig");
+    _ = @import("core/wire.zig");
     _ = @import("core/cache.zig");
     _ = @import("core/kv.zig");
     _ = @import("core/style.zig");

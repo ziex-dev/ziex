@@ -3,10 +3,10 @@ import {
     textDecoder,
     textEncoder,
     writeBytesOut,
-    writeJsonOut,
 } from "../../wasm/core";
 import type { KVNamespace, SyncKVNamespace } from "../kv";
 import { Suspending } from "../jspi";
+import { encodeStrings } from "../wire";
 
 export type { WasmAllocRef };
 
@@ -70,7 +70,7 @@ function encodeList(
         new DataView(getMemory().buffer).setUint32(out_ptr, 0, true);
         return 0;
     }
-    return writeJsonOut(getMemory, allocRef, out_ptr, names);
+    return writeBytesOut(getMemory, allocRef, out_ptr, encodeStrings(names));
 }
 
 function get(
@@ -171,7 +171,10 @@ export function createKVImports(
 
         kv_list: wrapImport((ns_ptr, ns_len, pfx_ptr, pfx_len, out_ptr) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
-            if (!b) return writeJsonOut(getMemory, allocRef, out_ptr, []);
+            if (!b) {
+                new DataView(getMemory().buffer).setUint32(out_ptr, 0, true);
+                return 0;
+            }
             return list(b, readStr(getMemory, pfx_ptr, pfx_len), out_ptr, getMemory, allocRef);
         }),
     };

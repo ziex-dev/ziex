@@ -2,41 +2,10 @@ const Wasm = @This();
 
 const std = @import("std");
 const Db = @import("../Db.zig");
+const Wire = @import("../Wire.zig");
 
 binding_name: []u8,
 allocator: std.mem.Allocator,
-
-const WireRunResult = struct {
-    last_insert_rowid: i64 = 0,
-    changes: usize = 0,
-};
-
-const WireValueKind = enum {
-    null,
-    integer,
-    float,
-    text,
-    blob,
-    boolean,
-};
-
-const WireValue = struct {
-    kind: WireValueKind,
-    integer: ?i64 = null,
-    float: ?f64 = null,
-    text: ?[]const u8 = null,
-    blob: ?[]const u8 = null,
-    boolean: ?bool = null,
-};
-
-const WireField = struct {
-    name: []const u8,
-    value: WireValue,
-};
-
-const WireRow = struct {
-    fields: []const WireField,
-};
 
 const StatementCtx = struct {
     binding_name: []u8,
@@ -183,21 +152,35 @@ const HostQuery = fn (
     out_ptr: *[*]u8,
 ) callconv(.c) i32;
 
-// Allocated by the host via `__zx_alloc`.
-const HostJson = struct {
+const HostBytes = struct {
     bytes: []u8,
 
-    fn free(self: HostJson) void {
+    fn free(self: HostBytes) void {
         std.heap.wasm_allocator.free(self.bytes);
     }
 };
 
-// null: empty result.
-fn callHost(comptime op: HostQuery, binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) !?HostJson {
-    var bindings_json = std.Io.Writer.Allocating.init(std.heap.wasm_allocator);
-    defer bindings_json.deinit();
-    try writeBindingsJson(&bindings_json.writer, bindings);
-    const bindings_bytes = bindings_json.written();
+fn encodeBindings(w: *std.Io.Writer, bindings: Db.Bindings) !void {
+    switch (bindings) {
+        .none => try Wire.encodeArgs(w, .none),
+        .positional => |vals| try Wire.encodeArgs(w, .{ .list = vals }),
+        .named => return error.Unsupported,
+    }
+}
+
+fn cloneValue(allocator: std.mem.Allocator, v: Wire.Value) !Db.Value {
+    return switch (v) {
+        .text => |t| .{ .text = try allocator.dupe(u8, t) },
+        .blob => |b| .{ .blob = try allocator.dupe(u8, b) },
+        else => v,
+    };
+}
+
+fn callHost(comptime op: HostQuery, binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) !?HostBytes {
+    var bindings_buf = std.Io.Writer.Allocating.init(std.heap.wasm_allocator);
+    defer bindings_buf.deinit();
+    try encodeBindings(&bindings_buf.writer, bindings);
+    const bindings_bytes = bindings_buf.written();
 
     var ptr: [*]u8 = undefined;
     const n = op(
@@ -214,25 +197,30 @@ fn callHost(comptime op: HostQuery, binding_name: []const u8, sql: []const u8, b
     return .{ .bytes = ptr[0..@intCast(n)] };
 }
 
-const parse_options: std.json.ParseOptions = .{
-    .ignore_unknown_fields = true,
-    .allocate = .alloc_always,
-};
+fn mapWire(err: anyerror) anyerror {
+    return switch (err) {
+        error.EndOfStream, error.BadMagic, error.BadKind, error.Unsupported => error.DatabaseQueryFailed,
+        else => err,
+    };
+}
 
 fn runQuery(binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) !Db.RunResult {
     const result = callHost(ext.db_run, binding_name, sql, bindings) catch |err| switch (err) {
         error.DatabaseQueryFailed => return error.DatabaseRunFailed,
         else => |e| return e,
     };
-    const json = result orelse return error.DatabaseRunFailed;
-    defer json.free();
+    const payload = result orelse return error.DatabaseRunFailed;
+    defer payload.free();
 
-    const parsed = try std.json.parseFromSlice(WireRunResult, std.heap.wasm_allocator, json.bytes, parse_options);
-    defer parsed.deinit();
+    const decoded = Wire.decodePair(payload.bytes) catch return error.DatabaseRunFailed;
+    return .{ .last_insert_id = decoded.a, .changes = @intCast(decoded.b) };
+}
 
-    return .{
-        .last_insert_id = parsed.value.last_insert_rowid,
-        .changes = parsed.value.changes,
+fn freeRowValues(allocator: std.mem.Allocator, fields: []const Db.Field) void {
+    for (fields) |f| switch (f.value) {
+        .text => |t| allocator.free(t),
+        .blob => |b| allocator.free(b),
+        else => {},
     };
 }
 
@@ -243,111 +231,85 @@ fn selectRows(
     sql: []const u8,
     bindings: Db.Bindings,
 ) ![]const Db.Row {
-    const json = try callHost(op, binding_name, sql, bindings) orelse return &.{};
-    defer json.free();
+    const payload = try callHost(op, binding_name, sql, bindings) orelse return &.{};
+    defer payload.free();
 
-    const parsed = try std.json.parseFromSlice([]WireRow, allocator, json.bytes, parse_options);
-    defer parsed.deinit();
+    var arena_state = std.heap.ArenaAllocator.init(std.heap.wasm_allocator);
+    defer arena_state.deinit();
 
-    return cloneRows(allocator, parsed.value);
+    const records = Wire.decodeRecords(arena_state.allocator(), payload.bytes) catch |err| return mapWire(err);
+    if (records.len == 0) return &.{};
+
+    const ncols = records[0].fields.len;
+    // Column names are shared across rows (same pointers); callers free them once.
+    const names = try allocator.alloc([]const u8, ncols);
+    var names_pending = true;
+    errdefer {
+        if (names_pending) {
+            for (names) |n| allocator.free(n);
+            allocator.free(names);
+        }
+    }
+    for (names, records[0].fields) |*n, f| n.* = try allocator.dupe(u8, f.name);
+
+    const rows = try allocator.alloc(Db.Row, records.len);
+    errdefer allocator.free(rows);
+    var filled: usize = 0;
+    errdefer {
+        while (filled > 0) {
+            filled -= 1;
+            freeRowValues(allocator, rows[filled].fields);
+            allocator.free(rows[filled].fields);
+        }
+    }
+
+    for (records, rows) |rec, *row| {
+        const fields = try allocator.alloc(Db.Field, ncols);
+        errdefer allocator.free(fields);
+        for (fields, rec.fields, names) |*df, wf, name| {
+            df.* = .{ .name = name, .value = try cloneValue(allocator, wf.value) };
+        }
+        row.* = .{ .fields = fields };
+        filled += 1;
+    }
+    // Transfer name string ownership to row fields; drop the temporary pointer array.
+    names_pending = false;
+    allocator.free(names);
+    return rows;
 }
 
 fn selectValues(allocator: std.mem.Allocator, binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) ![]const []const Db.Value {
-    const json = try callHost(ext.db_values, binding_name, sql, bindings) orelse return &.{};
-    defer json.free();
+    const payload = try callHost(ext.db_values, binding_name, sql, bindings) orelse return &.{};
+    defer payload.free();
 
-    const parsed = try std.json.parseFromSlice([][]WireValue, allocator, json.bytes, parse_options);
-    defer parsed.deinit();
+    var arena_state = std.heap.ArenaAllocator.init(std.heap.wasm_allocator);
+    defer arena_state.deinit();
 
-    const rows = try allocator.alloc([]const Db.Value, parsed.value.len);
-    for (parsed.value, rows) |wire_row, *row| {
-        const values_row = try allocator.alloc(Db.Value, wire_row.len);
-        for (wire_row, values_row) |wire_value, *value| value.* = try cloneValue(allocator, wire_value);
-        row.* = values_row;
-    }
-    return rows;
-}
+    const wire_rows = Wire.decodeRows(arena_state.allocator(), payload.bytes) catch |err| return mapWire(err);
 
-fn cloneRows(allocator: std.mem.Allocator, wire_rows: []const WireRow) ![]const Db.Row {
-    const rows = try allocator.alloc(Db.Row, wire_rows.len);
-    for (wire_rows, 0..) |wire_row, row_index| {
-        const fields = try allocator.alloc(Db.Field, wire_row.fields.len);
-        for (wire_row.fields, 0..) |wire_field, field_index| {
-            fields[field_index] = .{
-                .name = try allocator.dupe(u8, wire_field.name),
-                .value = try cloneValue(allocator, wire_field.value),
+    const rows = try allocator.alloc([]const Db.Value, wire_rows.len);
+    errdefer allocator.free(rows);
+    var filled: usize = 0;
+    errdefer {
+        while (filled > 0) {
+            filled -= 1;
+            for (rows[filled]) |v| switch (v) {
+                .text => |t| allocator.free(t),
+                .blob => |b| allocator.free(b),
+                else => {},
             };
+            allocator.free(rows[filled]);
         }
-        rows[row_index] = .{ .fields = fields };
+    }
+
+    for (wire_rows, rows) |wr, *row| {
+        const cells = try allocator.alloc(Db.Value, wr.len);
+        errdefer allocator.free(cells);
+        for (wr, cells) |wv, *dv| dv.* = try cloneValue(allocator, wv);
+        row.* = cells;
+        filled += 1;
     }
     return rows;
-}
-
-fn cloneValue(allocator: std.mem.Allocator, wire_value: WireValue) !Db.Value {
-    return switch (wire_value.kind) {
-        .null => .null,
-        .integer => .{ .integer = wire_value.integer orelse 0 },
-        .float => .{ .float = wire_value.float orelse 0 },
-        .text => .{ .text = try allocator.dupe(u8, wire_value.text orelse "") },
-        .blob => .{ .blob = try decodeBlob(allocator, wire_value.blob orelse "") },
-        .boolean => .{ .boolean = wire_value.boolean orelse false },
-    };
-}
-
-fn decodeBlob(allocator: std.mem.Allocator, encoded: []const u8) ![]const u8 {
-    const size = try std.base64.standard.Decoder.calcSizeForSlice(encoded);
-    const bytes = try allocator.alloc(u8, size);
-    _ = try std.base64.standard.Decoder.decode(bytes, encoded);
-    return bytes;
-}
-
-fn writeBindingsJson(writer: *std.Io.Writer, bindings: Db.Bindings) !void {
-    try writer.writeByte('{');
-    switch (bindings) {
-        .none => try writer.writeAll("\"kind\":\"none\""),
-        .positional => |positional_values| {
-            try writer.writeAll("\"kind\":\"positional\",\"values\":[");
-            for (positional_values, 0..) |value, i| {
-                if (i > 0) try writer.writeByte(',');
-                try writeValueJson(writer, value);
-            }
-            try writer.writeByte(']');
-        },
-        .named => |named_values| {
-            try writer.writeAll("\"kind\":\"named\",\"values\":[");
-            for (named_values, 0..) |entry, i| {
-                if (i > 0) try writer.writeByte(',');
-                try writer.writeAll("{\"name\":");
-                try std.json.Stringify.value(entry.name, .{}, writer);
-                try writer.writeAll(",\"value\":");
-                try writeValueJson(writer, entry.value);
-                try writer.writeByte('}');
-            }
-            try writer.writeByte(']');
-        },
-    }
-    try writer.writeByte('}');
-}
-
-fn writeValueJson(writer: *std.Io.Writer, value: Db.Value) !void {
-    try writer.writeByte('{');
-    switch (value) {
-        .null => try writer.writeAll("\"kind\":\"null\""),
-        .integer => |v| try writer.print("\"kind\":\"integer\",\"integer\":{d}", .{v}),
-        .float => |v| try writer.print("\"kind\":\"float\",\"float\":{d}", .{v}),
-        .text => |v| {
-            try writer.writeAll("\"kind\":\"text\",\"text\":");
-            try std.json.Stringify.value(v, .{}, writer);
-        },
-        .blob => |v| {
-            try writer.writeAll("\"kind\":\"blob\",\"blob\":");
-            try writer.writeByte('"');
-            try std.base64.standard.Encoder.encodeWriter(writer, v);
-            try writer.writeByte('"');
-        },
-        .boolean => |v| try writer.writeAll(if (v) "\"kind\":\"boolean\",\"boolean\":true" else "\"kind\":\"boolean\",\"boolean\":false"),
-    }
-    try writer.writeByte('}');
 }
 
 const ext = struct {

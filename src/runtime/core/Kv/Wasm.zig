@@ -2,7 +2,7 @@ const Wasm = @This();
 
 const std = @import("std");
 const Kv = @import("../Kv.zig");
-const zxon = @import("../../../util/zxon.zig");
+const Wire = @import("../Wire.zig");
 
 fn get(_: ?*anyopaque, ns: []const u8, allocator: std.mem.Allocator, key: []const u8) !?[]u8 {
     var ptr: [*]u8 = undefined;
@@ -32,7 +32,7 @@ fn list(_: ?*anyopaque, ns: []const u8, allocator: std.mem.Allocator, prefix: []
     if (n == 0) return &[_][]u8{};
     defer std.heap.wasm_allocator.free(ptr[0..@intCast(n)]);
 
-    return zxon.parse([][]u8, allocator, ptr[0..@intCast(n)], .{});
+    return Wire.decodeStrings(allocator, ptr[0..@intCast(n)]) catch return error.InvalidResponse;
 }
 
 const ext = struct {
