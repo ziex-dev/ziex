@@ -81,33 +81,33 @@ function stubHttpImports(getMemory: () => WebAssembly.Memory | null, sink: {
 
 function noopWsImports() {
     return {
-        ws_upgrade: () => {},
-        ws_write: () => {},
-        ws_close: () => {},
-        ws_recv: () => -1,
-        ws_subscribe: () => {},
-        ws_unsubscribe: () => {},
-        ws_publish: () => 0,
-        ws_is_subscribed: () => 0,
+        upgrade: () => {},
+        write: () => {},
+        close: () => {},
+        recv: () => -1,
+        subscribe: () => {},
+        unsubscribe: () => {},
+        publish: () => 0,
+        is_subscribed: () => 0,
     };
 }
 
 function stubKvImports() {
     return {
-        kv_get: () => -1,
-        kv_put: () => 0,
-        kv_delete: () => 0,
-        kv_list: () => 0,
+        get: () => -1,
+        put: () => 0,
+        delete: () => 0,
+        list: () => 0,
     };
 }
 
 function stubDbImports() {
     return {
-        db_open: () => -1,
-        db_run: () => -1,
-        db_get: () => -1,
-        db_all: () => -1,
-        db_values: () => -1,
+        open: () => -1,
+        run: () => -1,
+        get: () => -1,
+        all: () => -1,
+        values: () => -1,
     };
 }
 

@@ -91,18 +91,18 @@ export function createDbImports(
 
     if (!Suspending) {
         return {
-            db_open: (_ns: number, _ns_len: number): number => -1,
-            db_run: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
-            db_get: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
-            db_all: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
-            db_values: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
+            open: (_ns: number, _ns_len: number): number => -1,
+            run: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
+            get: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
+            all: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
+            values: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
         };
     }
 
     return {
-        db_open: (ns_ptr: number, ns_len: number): number => binding(readStr(ns_ptr, ns_len)) ? 0 : -1,
+        open: (ns_ptr: number, ns_len: number): number => binding(readStr(ns_ptr, ns_len)) ? 0 : -1,
 
-        db_run: new Suspending(async (
+        run: new Suspending(async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -119,7 +119,7 @@ export function createDbImports(
             );
         }),
 
-        db_get: new Suspending(async (
+        get: new Suspending(async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -135,7 +135,7 @@ export function createDbImports(
             return writeBytesOut(getMemory, allocRef, out_ptr, encodeTableFromRecord(row));
         }),
 
-        db_all: new Suspending(async (
+        all: new Suspending(async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -164,7 +164,7 @@ export function createDbImports(
             }
         }),
 
-        db_values: new Suspending(async (
+        values: new Suspending(async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,

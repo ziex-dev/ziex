@@ -99,7 +99,7 @@ export function createStatefulFetch(
                 ws: conn,
             });
 
-            // Runs synchronously until the first Suspending import (ws_recv).
+            // Runs synchronously until the first Suspending import (`__zx_ws.recv`).
             const done = promising!(instance.exports._start as () => void)()
                 .then(() => {}, (e: unknown) => {
                     if (!isProcExit(e)) console.error("[StatefulFetch] WASM error:", e);

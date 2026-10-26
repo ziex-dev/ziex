@@ -89,7 +89,7 @@ export async function run({
     const { instance } = instantiate({ module, request, stdinData, kv, db, imports, wasi, http, ws });
     const done = start(instance, ws);
 
-    // start() runs synchronously until the first suspension (ws_recv for sockets),
+    // start() runs synchronously until the first suspension (`__zx_ws.recv` for sockets),
     // so an upgrade is already visible here.
     if (ws.upgraded) {
         const { client } = attachWebSocket(ws);
@@ -115,6 +115,6 @@ function start(instance: WebAssembly.Instance, ws: WsState): Promise<void> {
         .then(() => {}, (e: unknown) => {
             if (!isProcExit(e)) throw e;
         })
-        // Unblock a pending ws_recv.
+        // Unblock a pending `__zx_ws.recv`.
         .finally(() => deliverToWasm(ws, null));
 }

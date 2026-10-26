@@ -57,22 +57,22 @@ export function buildWsImports(
     };
 
     return {
-        ws_upgrade: (): void => { ws.upgraded = true; },
-        ws_write: (ptr: number, len: number): void => {
+        upgrade: (): void => { ws.upgraded = true; },
+        write: (ptr: number, len: number): void => {
             const data = readBytes(ptr, len).slice();
             if (ws.server) ws.server.send(data);
             else ws.pendingWrites.push(data);
         },
-        ws_close: (code: number, reason_ptr: number, reason_len: number): void => {
+        close: (code: number, reason_ptr: number, reason_len: number): void => {
             ws.server?.close(code, readStr(reason_ptr, reason_len));
         },
         // Without JSPI the guest cannot wait: report closed.
-        ws_recv: Suspending ? new Suspending(recv) : (_buf_ptr: number, _buf_max: number): number => -1,
-        ws_subscribe: (ptr: number, len: number): void => { ws.subscribe?.(readStr(ptr, len)); },
-        ws_unsubscribe: (ptr: number, len: number): void => { ws.unsubscribe?.(readStr(ptr, len)); },
-        ws_publish: (topic_ptr: number, topic_len: number, data_ptr: number, data_len: number): number =>
+        recv: Suspending ? new Suspending(recv) : (_buf_ptr: number, _buf_max: number): number => -1,
+        subscribe: (ptr: number, len: number): void => { ws.subscribe?.(readStr(ptr, len)); },
+        unsubscribe: (ptr: number, len: number): void => { ws.unsubscribe?.(readStr(ptr, len)); },
+        publish: (topic_ptr: number, topic_len: number, data_ptr: number, data_len: number): number =>
             ws.publish?.(readStr(topic_ptr, topic_len), readBytes(data_ptr, data_len).slice()) ?? 0,
-        ws_is_subscribed: (ptr: number, len: number): number =>
+        is_subscribed: (ptr: number, len: number): number =>
             ws.isSubscribed?.(readStr(ptr, len)) ? 1 : 0,
     };
 }

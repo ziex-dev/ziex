@@ -146,13 +146,13 @@ export function createKVImports(
 ): WebAssembly.ModuleImports {
     const write = options.writes === "background" ? background : wrapImport;
     return {
-        kv_get: wrapImport((ns_ptr, ns_len, key_ptr, key_len, out_ptr) => {
+        get: wrapImport((ns_ptr, ns_len, key_ptr, key_len, out_ptr) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) return -1;
             return get(b, readStr(getMemory, key_ptr, key_len), out_ptr, getMemory, allocRef);
         }),
 
-        kv_put: write((ns_ptr, ns_len, key_ptr, key_len, val_ptr, val_len, ttl_seconds) => {
+        put: write((ns_ptr, ns_len, key_ptr, key_len, val_ptr, val_len, ttl_seconds) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) return miss;
             return put(
@@ -163,13 +163,13 @@ export function createKVImports(
             );
         }),
 
-        kv_delete: write((ns_ptr, ns_len, key_ptr, key_len) => {
+        delete: write((ns_ptr, ns_len, key_ptr, key_len) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) return miss;
             return del(b, readStr(getMemory, key_ptr, key_len));
         }),
 
-        kv_list: wrapImport((ns_ptr, ns_len, pfx_ptr, pfx_len, out_ptr) => {
+        list: wrapImport((ns_ptr, ns_len, pfx_ptr, pfx_len, out_ptr) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) {
                 new DataView(getMemory().buffer).setUint32(out_ptr, 0, true);

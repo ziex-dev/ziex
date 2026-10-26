@@ -26,7 +26,7 @@ pub fn open(allocator_unused: ?std.mem.Allocator, io: ?std.Io, filename: []const
     _ = io;
     _ = options;
     const binding_name = filename;
-    if (ext.db_open(binding_name.ptr, binding_name.len) < 0) return error.DatabaseOpenFailed;
+    if (ext.open(binding_name.ptr, binding_name.len) < 0) return error.DatabaseOpenFailed;
 
     const allocator = std.heap.wasm_allocator;
     const self = try allocator.create(Wasm);
@@ -89,12 +89,12 @@ fn close(ud: ?*anyopaque, _: bool) !void {
 
 fn all(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) ![]const Db.Row {
     const statement_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-    return selectRows(allocator, ext.db_all, statement_ctx.binding_name, statement_ctx.sql, bindings);
+    return selectRows(allocator, ext.all, statement_ctx.binding_name, statement_ctx.sql, bindings);
 }
 
 fn get(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) !?Db.Row {
     const statement_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-    const rows = try selectRows(allocator, ext.db_get, statement_ctx.binding_name, statement_ctx.sql, bindings);
+    const rows = try selectRows(allocator, ext.get, statement_ctx.binding_name, statement_ctx.sql, bindings);
     if (rows.len == 0) {
         allocator.free(rows);
         return null;
@@ -205,7 +205,7 @@ fn mapWire(err: anyerror) anyerror {
 }
 
 fn runQuery(binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) !Db.RunResult {
-    const result = callHost(ext.db_run, binding_name, sql, bindings) catch |err| switch (err) {
+    const result = callHost(ext.run, binding_name, sql, bindings) catch |err| switch (err) {
         error.DatabaseQueryFailed => return error.DatabaseRunFailed,
         else => |e| return e,
     };
@@ -279,7 +279,7 @@ fn selectRows(
 }
 
 fn selectValues(allocator: std.mem.Allocator, binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) ![]const []const Db.Value {
-    const payload = try callHost(ext.db_values, binding_name, sql, bindings) orelse return &.{};
+    const payload = try callHost(ext.values, binding_name, sql, bindings) orelse return &.{};
     defer payload.free();
 
     var arena_state = std.heap.ArenaAllocator.init(std.heap.wasm_allocator);
@@ -313,22 +313,12 @@ fn selectValues(allocator: std.mem.Allocator, binding_name: []const u8, sql: []c
 }
 
 const ext = struct {
-    pub extern "__zx_db" fn db_open(
+    pub extern "__zx_db" fn open(
         ns_ptr: [*]const u8,
         ns_len: usize,
     ) i32;
 
-    pub extern "__zx_db" fn db_run(
-        ns_ptr: [*]const u8,
-        ns_len: usize,
-        sql_ptr: [*]const u8,
-        sql_len: usize,
-        bindings_ptr: [*]const u8,
-        bindings_len: usize,
-        out_ptr: *[*]u8,
-    ) i32;
-
-    pub extern "__zx_db" fn db_get(
+    pub extern "__zx_db" fn run(
         ns_ptr: [*]const u8,
         ns_len: usize,
         sql_ptr: [*]const u8,
@@ -338,7 +328,7 @@ const ext = struct {
         out_ptr: *[*]u8,
     ) i32;
 
-    pub extern "__zx_db" fn db_all(
+    pub extern "__zx_db" fn get(
         ns_ptr: [*]const u8,
         ns_len: usize,
         sql_ptr: [*]const u8,
@@ -348,7 +338,17 @@ const ext = struct {
         out_ptr: *[*]u8,
     ) i32;
 
-    pub extern "__zx_db" fn db_values(
+    pub extern "__zx_db" fn all(
+        ns_ptr: [*]const u8,
+        ns_len: usize,
+        sql_ptr: [*]const u8,
+        sql_len: usize,
+        bindings_ptr: [*]const u8,
+        bindings_len: usize,
+        out_ptr: *[*]u8,
+    ) i32;
+
+    pub extern "__zx_db" fn values(
         ns_ptr: [*]const u8,
         ns_len: usize,
         sql_ptr: [*]const u8,
