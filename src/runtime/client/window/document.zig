@@ -297,10 +297,10 @@ pub const CommentMarker = struct {
     }
 };
 
-/// Find comment markers for a component ID
+/// Find comment markers for the `occurrence`-th (0-based, document order) island with a component ID.
 /// Start marker format: <!--$id [val1, val2]--> (positional array) or <!--$id {"prop":"value"}--> (JSON object) or <!--$id-->
 /// End marker format: <!--/$id-->
-pub fn findCommentMarker(self: Document, id: []const u8) error{ MarkerNotFound, NotInBrowser }!CommentMarker {
+pub fn findCommentMarker(self: Document, id: []const u8, occurrence: usize) error{ MarkerNotFound, NotInBrowser }!CommentMarker {
     const allocator = self.allocator;
 
     // Build the patterns we're looking for
@@ -319,6 +319,9 @@ pub fn findCommentMarker(self: Document, id: []const u8) error{ MarkerNotFound, 
     var start_comment: ?js.Object = null;
     var end_comment: ?js.Object = null;
     var props_zon: ?[]const u8 = null;
+    // Islands sharing an id never nest, so the n-th start pairs with the n-th end.
+    var starts_seen: usize = 0;
+    var ends_seen: usize = 0;
 
     // Iterate through all comment nodes
     while (true) {
@@ -328,7 +331,12 @@ pub fn findCommentMarker(self: Document, id: []const u8) error{ MarkerNotFound, 
         const text = node.getAlloc(js.String, allocator, "textContent") catch continue;
 
         // Check for start marker: $id or $id {...} or $id [...]
-        if (std.mem.startsWith(u8, text, start_prefix)) {
+        const is_start = std.mem.startsWith(u8, text, start_prefix) and
+            (text.len == start_prefix.len or text[start_prefix.len] == ' ');
+        if (is_start and starts_seen < occurrence) {
+            starts_seen += 1;
+            allocator.free(text);
+        } else if (is_start and start_comment == null) {
             start_comment = node;
             // Extract JSON payload after $id (if present)
             // Format: $id {"prop":"value"} or $id [val1, val2] -> extract JSON
@@ -349,7 +357,10 @@ pub fn findCommentMarker(self: Document, id: []const u8) error{ MarkerNotFound, 
                 }
             }
             allocator.free(text);
-        } else if (std.mem.eql(u8, text, end_marker)) {
+        } else if (std.mem.eql(u8, text, end_marker) and ends_seen < occurrence) {
+            ends_seen += 1;
+            allocator.free(text);
+        } else if (std.mem.eql(u8, text, end_marker) and start_comment != null) {
             allocator.free(text);
             end_comment = node;
             break; // Found both, stop searching

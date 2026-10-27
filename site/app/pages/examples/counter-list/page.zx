@@ -1,0 +1,18 @@
+pub fn Page(ctx: zx.PageContext) zx.Component {
+    const starts = [_]i32{ 0, 10, 20 };
+    return (
+        <main @allocator={ctx.arena} class="example-page">
+            <header class="example-header">
+                <h1>Counter list</h1>
+                <p>The same island rendered in a loop: each copy hydrates with its own state.</p>
+            </header>
+            {for (starts) |start| (
+                <Counter @client initial={start} />
+            )}
+        </main>
+    );
+}
+
+pub const Counter = @import("../counter/client_counter.zx").Counter;
+
+const zx = @import("zx");

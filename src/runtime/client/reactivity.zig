@@ -225,9 +225,10 @@ pub fn rerender() void {
 pub fn scheduleRender(component_id: []const u8) void {
     if (!is_wasm) return;
     if (Client.global_client) |client| {
+        const instance = Client.parseInstanceKey(component_id);
         for (client.components) |cmp| {
-            if (std.mem.eql(u8, cmp.id, component_id)) {
-                client.render(cmp) catch {};
+            if (std.mem.eql(u8, cmp.id, instance.id)) {
+                client.renderInstance(cmp, instance.occurrence) catch {};
                 return;
             }
         }

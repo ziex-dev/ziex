@@ -202,20 +202,50 @@ pub fn renderAll(self: *Client) void {
     defer console.deinit();
 
     for (self.components) |component| {
-        self.render(component) catch {};
+        // An island rendered in a loop repeats its call-site id; hydrate every copy.
+        var occurrence: usize = 0;
+        while (true) : (occurrence += 1) {
+            self.renderInstance(component, occurrence) catch |err| switch (err) {
+                error.ContainerNotFound => break,
+                else => {},
+            };
+        }
     }
 }
 
 pub fn render(self: *Client, cmp: ComponentMeta) !void {
+    return self.renderInstance(cmp, 0);
+}
+
+/// Key for the `occurrence`-th island with `cmp_id`: the bare id for the first, so
+/// single-instance islands keep their keys, then `id#1`, `id#2`, ... It scopes
+/// state, pending flags and the vtree to one instance.
+fn instanceKey(self: *Client, cmp_id: []const u8, occurrence: usize) ![]const u8 {
+    if (occurrence == 0) return cmp_id;
+    var buf: [128]u8 = undefined;
+    const key = try std.fmt.bufPrint(&buf, "{s}#{d}", .{ cmp_id, occurrence });
+    if (self.vtrees.getKey(key)) |existing| return existing;
+    return try self.allocator.dupe(u8, key);
+}
+
+/// Splits an instance key from `instanceKey` back into id and occurrence.
+pub fn parseInstanceKey(key: []const u8) struct { id: []const u8, occurrence: usize } {
+    const hash = std.mem.lastIndexOfScalar(u8, key, '#') orelse return .{ .id = key, .occurrence = 0 };
+    const occurrence = std.fmt.parseInt(usize, key[hash + 1 ..], 10) catch return .{ .id = key, .occurrence = 0 };
+    return .{ .id = key[0..hash], .occurrence = occurrence };
+}
+
+pub fn renderInstance(self: *Client, cmp: ComponentMeta, occurrence: usize) !void {
     const allocator = self.allocator;
     const document = Document.init(allocator);
 
     // Boundary: <!--$id--> or <!--$id|props-->
-    const marker = document.findCommentMarker(cmp.id) catch return error.ContainerNotFound;
+    const marker = document.findCommentMarker(cmp.id, occurrence) catch return error.ContainerNotFound;
+    const key = try self.instanceKey(cmp.id, occurrence);
 
-    current_render_id = cmp.id;
-    reactivity.active_component_id = cmp.id;
-    core_vdom.current_component_owner = cmp.id;
+    current_render_id = key;
+    reactivity.active_component_id = key;
+    core_vdom.current_component_owner = key;
     const Component = cmp.import(allocator, cmp.name, marker.props_zon);
     reactivity.active_component_id = null;
 
@@ -226,13 +256,13 @@ pub fn render(self: *Client, cmp: ComponentMeta) !void {
         dom_cmd.deactivate(prev_cmds);
     }
 
-    const existing_vtree = self.vtrees.getPtr(cmp.id);
+    const existing_vtree = self.vtrees.getPtr(key);
 
     // Hydration: first render replaces SSR content.
     if (existing_vtree == null) {
         const new_vtree = VDOMTree.init(allocator, Component);
-        try self.vtrees.put(cmp.id, new_vtree);
-        const vtree_ptr = self.vtrees.getPtr(cmp.id).?;
+        try self.vtrees.put(key, new_vtree);
+        const vtree_ptr = self.vtrees.getPtr(key).?;
 
         const root_id = try vtree_mod.createPlatformNodes(allocator, vtree_ptr.vtree, self, .{ .marker = marker });
         if (root_id) |id| {
@@ -249,8 +279,8 @@ pub fn render(self: *Client, cmp: ComponentMeta) !void {
             const new_vtree = VDOMTree.init(allocator, Component);
             defer old_vtree.deinit(allocator);
 
-            try self.vtrees.put(cmp.id, new_vtree);
-            const vtree_ptr = self.vtrees.getPtr(cmp.id).?;
+            try self.vtrees.put(key, new_vtree);
+            const vtree_ptr = self.vtrees.getPtr(key).?;
 
             const root_id = try vtree_mod.createPlatformNodes(allocator, vtree_ptr.vtree, self, .{ .marker = marker });
             if (root_id) |id| {
