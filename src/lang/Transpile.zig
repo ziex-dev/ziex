@@ -500,6 +500,15 @@ fn transpileReturn(self: *Transpile, node: ts.Node) !void {
     }
 
     if (zx_block_node) |zx_node| {
+        // `if (c) return (<a />);` and `x catch return (<a />)` leave no statement
+        // slot for the builder declaration, so return a labeled block expression.
+        if (!isStatement(node)) {
+            try self.writeM("return", node.startByte());
+            try self.write(" ");
+            try self.transpileBlock(zx_node);
+            return;
+        }
+
         // Find the element inside the zx_block
         const zx_child_count = zx_node.childCount();
         var j: u32 = 0;
@@ -554,6 +563,11 @@ fn transpileReturn(self: *Transpile, node: ts.Node) !void {
             }
         }
     }
+}
+
+fn isStatement(node: ts.Node) bool {
+    const parent = node.parent() orelse return false;
+    return std.mem.eql(u8, parent.kind(), "expression_statement");
 }
 
 /// Find zx_block inside return expression (may be wrapped in parenthesized_expression)

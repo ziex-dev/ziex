@@ -1,0 +1,19 @@
+pub fn Page(allocator: zx.Allocator) zx.Component {
+    if (pick(false)) return (<p @allocator={allocator}>Early</p>);
+    const label = name(true) catch return (<p @allocator={allocator}>Failed</p>);
+    return (
+        <main @allocator={allocator}>
+            <p>{label}</p>
+        </main>
+    );
+}
+
+fn pick(v: bool) bool {
+    return v;
+}
+
+fn name(ok: bool) ![]const u8 {
+    return if (ok) "Loaded" else error.Missing;
+}
+
+const zx = @import("zx");
