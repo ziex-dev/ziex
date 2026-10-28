@@ -7,7 +7,7 @@ echo "🧹 Cleaning all ZX Neovim files..."
 
 # Remove parser
 echo "  ✓ Removing parser..."
-rm -f ~/.local/share/nvim/site/parser/zx.so
+rm -f ~/.local/share/nvim/site/parser/{zx,mdzx,mdzx_inline}.so
 
 # Remove queries (if symlinked)
 echo "  ✓ Removing query symlinks..."

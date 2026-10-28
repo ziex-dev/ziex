@@ -1,6 +1,6 @@
 [package]
 name = "tree-sitter-zx"
-description = "ZX is a framework for building web applications with Zig."
+description = "ZX grammar for Ziex."
 version = "0.1.0-dev"
 authors = ["Nurul Huda (Apon) <me@nurulhudaapon.com>"]
 license = "MIT"

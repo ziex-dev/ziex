@@ -170,6 +170,11 @@ done
 ZED_EXTENSION_TOML="$PROJECT_ROOT/ide/zed/extension.toml"
 if [ -f "$ZED_EXTENSION_TOML" ]; then
     sed -i.bak -E "/^[[:space:]]*version[[:space:]]*=/s/$VERSION_PATTERN/$NEW_VERSION/" "$ZED_EXTENSION_TOML"
+    # Zed needs a commit SHA, so pin grammars to the last commit that touched them.
+    GRAMMAR_REV=$(git -C "$PROJECT_ROOT" log -1 --format=%H -- pkg/tree-sitter-zx pkg/tree-sitter-mdzx)
+    if [ -n "$GRAMMAR_REV" ]; then
+        sed -i.bak -E "s/^rev = \"[0-9a-f]+\"/rev = \"$GRAMMAR_REV\"/" "$ZED_EXTENSION_TOML"
+    fi
     rm -f "$ZED_EXTENSION_TOML.bak"
     echo "Updated ide/zed/extension.toml"
 fi

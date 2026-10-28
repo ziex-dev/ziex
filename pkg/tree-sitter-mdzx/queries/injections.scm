@@ -4,6 +4,10 @@
 ((inline) @injection.content
   (#set! injection.language "mdzx_inline"))
 
+; Frontmatter is raw Zig
+((frontmatter_body) @injection.content
+  (#set! injection.language "zig"))
+
 ; Inject language for fenced code blocks based on language info string
 ((fenced_code_block
   (info_string

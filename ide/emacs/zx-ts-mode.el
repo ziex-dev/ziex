@@ -343,7 +343,7 @@ takes effect without reloading."
 (with-eval-after-load 'eglot
   (when (boundp 'eglot-server-programs)
     (add-to-list 'eglot-server-programs
-                 '(zx-ts-mode . zx-ts-mode-eglot-contact))))
+                 '((zx-ts-mode mdzx-ts-mode) . zx-ts-mode-eglot-contact))))
 
 ;;; Mode
 
@@ -398,6 +398,68 @@ takes effect without reloading."
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.zx\\'" . zx-ts-mode))
+
+;;; MDZX
+
+(defvar mdzx-ts-mode-grammar-source
+  '(mdzx "https://github.com/ziex-dev/ziex" "main" "pkg/tree-sitter-mdzx/src")
+  "Recipe for `treesit-language-source-alist' that builds the MDZX grammar.")
+
+;;;###autoload
+(defun mdzx-ts-mode-install-grammar ()
+  "Build and install the MDZX tree-sitter grammar."
+  (interactive)
+  (let ((treesit-language-source-alist (list mdzx-ts-mode-grammar-source)))
+    (treesit-install-language-grammar 'mdzx)))
+
+(defvar mdzx-ts-mode--font-lock-settings
+  (treesit-font-lock-rules
+   :language 'mdzx
+   :feature 'comment
+   '((comment) @font-lock-comment-face)
+
+   :language 'mdzx
+   :feature 'heading
+   '((atx_heading) @font-lock-function-name-face)
+
+   :language 'mdzx
+   :feature 'tag
+   '((zx_tag_name) @zx-ts-mode-tag-face
+     (zx_attribute_name) @zx-ts-mode-attribute-face
+     (zx_builtin_name) @zx-ts-mode-builtin-attribute-face
+     (zx_string_literal) @font-lock-string-face)
+
+   :language 'mdzx
+   :feature 'code
+   '((code_fence_content) @font-lock-constant-face
+     (fenced_code_block_delimiter) @font-lock-delimiter-face
+     (info_string) @font-lock-type-face)
+
+   :language 'mdzx
+   :feature 'markup
+   '((frontmatter_delimiter) @font-lock-delimiter-face
+     (block_quote_marker) @font-lock-delimiter-face
+     (thematic_break) @font-lock-delimiter-face
+     [(list_marker_minus) (list_marker_plus) (list_marker_star)
+      (list_marker_dot) (list_marker_parenthesis)] @font-lock-delimiter-face
+     (link_destination) @font-lock-string-face))
+  "Tree-sitter font-lock settings for `mdzx-ts-mode'.")
+
+;;;###autoload
+(define-derived-mode mdzx-ts-mode text-mode "MDZX"
+  "Major mode for editing MDZX (Markdown with ZX) files, powered by tree-sitter.
+
+\\{mdzx-ts-mode-map}"
+  (if (not (treesit-ready-p 'mdzx))
+      (message "MDZX tree-sitter grammar is missing; run M-x mdzx-ts-mode-install-grammar")
+    (treesit-parser-create 'mdzx)
+    (setq-local treesit-font-lock-settings mdzx-ts-mode--font-lock-settings)
+    (setq-local treesit-font-lock-feature-list
+                '((comment heading) (tag code) (markup)))
+    (treesit-major-mode-setup)))
+
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.mdzx\\'" . mdzx-ts-mode))
 
 (provide 'zx-ts-mode)
 

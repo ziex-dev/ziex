@@ -1,20 +1,6 @@
 ; MDZX Outline
 ; Aligned with tree-sitter-markdown naming conventions
 
-; Frontmatter declarations
-(frontmatter
-  (zig_declaration
-    (pub_const_declaration
-      "pub" @context
-      "const" @context
-      name: (identifier) @name))) @item
-
-(frontmatter
-  (zig_declaration
-    (const_declaration
-      "const" @context
-      name: (identifier) @name))) @item
-
 ; Markdown headings - primary outline structure
 (atx_heading
   (atx_h1_marker) @context

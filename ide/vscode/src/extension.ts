@@ -32,12 +32,16 @@ export async function activate(context: ExtensionContext) {
   // open, resolving the project from that file. Failed attempts are retried
   // on the next `.zx` file, which may belong to a Ziex subproject.
   const onDocument = (doc: TextDocument) => {
-    if (doc.languageId === "zx" && doc.uri.scheme === "file") {
+    if (isZiexDoc(doc) && doc.uri.scheme === "file") {
       void ensureClient(context, doc.uri.fsPath);
     }
   };
   context.subscriptions.push(workspace.onDidOpenTextDocument(onDocument));
   workspace.textDocuments.forEach(onDocument);
+}
+
+function isZiexDoc(doc: TextDocument): boolean {
+  return doc.languageId === "zx" || doc.languageId === "mdzx";
 }
 
 function ensureClient(context: ExtensionContext, file: string): Promise<void> {
@@ -78,6 +82,7 @@ async function startClient(context: ExtensionContext, file: string): Promise<voi
   const clientOptions: LanguageClientOptions = {
     documentSelector: [
       { scheme: "file", language: "zx" },
+      { scheme: "file", language: "mdzx" },
     ],
     traceOutputChannel: outputChannel,
     outputChannel,
@@ -86,7 +91,7 @@ async function startClient(context: ExtensionContext, file: string): Promise<voi
   };
 
   client = new LanguageClient(
-    "zx-language-server",
+    "zxls",
     "Ziex Language Server",
     serverOptions,
     clientOptions,
@@ -183,7 +188,7 @@ async function findZxProjectDir(zig: string, file: string): Promise<string | und
   const active = window.activeTextEditor?.document;
   if (active?.uri.scheme === "file") startPaths.push(active.uri.fsPath);
   for (const doc of workspace.textDocuments) {
-    if (doc.uri.scheme === "file" && doc.languageId === "zx") {
+    if (doc.uri.scheme === "file" && isZiexDoc(doc)) {
       startPaths.push(doc.uri.fsPath);
     }
   }

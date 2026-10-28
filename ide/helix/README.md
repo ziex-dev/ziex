@@ -7,13 +7,26 @@ Add the following entries to your Helix `~/.config/helix/languages.toml`:
 
 ```toml
 [[language]]
-name = "ziex"
-language-id = "zx"
+name = "zx"
 scope = "source.zx"
 roots = ["build.zig", ".git"]
 file-types = ["zx"]
 grammar = "zx"
 language-servers = ["zxls"]
+
+[[language]]
+name = "mdzx"
+scope = "text.mdzx"
+roots = ["build.zig", ".git"]
+file-types = ["mdzx"]
+grammar = "mdzx"
+language-servers = ["zxls"]
+
+[[language]]
+name = "mdzx_inline"
+scope = "text.mdzx_inline"
+file-types = []
+grammar = "mdzx_inline"
 
 [language-server.zxls]
 command = "zx"
@@ -22,6 +35,14 @@ args = ["lsp"]
 [[grammar]]
 name = "zx"
 source = { git = "https://github.com/ziex-dev/ziex", rev = "main", subpath = "pkg/tree-sitter-zx" }
+
+[[grammar]]
+name = "mdzx"
+source = { git = "https://github.com/ziex-dev/ziex", rev = "main", subpath = "pkg/tree-sitter-mdzx" }
+
+[[grammar]]
+name = "mdzx_inline"
+source = { git = "https://github.com/ziex-dev/ziex", rev = "main", subpath = "pkg/tree-sitter-mdzx/tree-sitter-mdzx-inline" }
 ```
 
 ---
@@ -39,10 +60,11 @@ hx --grammar build
 
 ## 3. Copy Queries
 
-Clone this repo, then copy the queries for zx:
+Clone this repo, then copy the queries:
 
 ```sh
-cp -r ide/helix/queries/ziex/ ~/.config/helix/runtime/queries/ziex/
+mkdir -p ~/.config/helix/runtime/queries
+cp -r ide/helix/queries/zx ide/helix/queries/mdzx ide/helix/queries/mdzx_inline ~/.config/helix/runtime/queries/
 ```
 
 ---

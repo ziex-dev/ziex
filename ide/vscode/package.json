@@ -25,9 +25,8 @@
   },
   "activationEvents": [
     "onLanguage:zx",
-    "onLanguage:zig",
-    "onCommand:ziex.pasteInMultilineString",
-    "onCommand:ziex.copyFromMultilineString"
+    "onLanguage:mdzx",
+    "onLanguage:zig"
   ],
   "main": "./out/extension",
   "contributes": {
@@ -37,6 +36,9 @@
         "**/zig-cache": true
       },
       "[zx]": {
+        "editor.defaultFormatter": "ziex.ziex"
+      },
+      "[mdzx]": {
         "editor.defaultFormatter": "ziex.ziex"
       }
     },
@@ -138,7 +140,8 @@
     "commands": [
       {
         "command": "ziex.toggleMultilineStringLiteral",
-        "title": "ZX: Toggle multiline string literal"
+        "title": "Toggle Multiline String Literal",
+        "category": "Ziex"
       }
     ],
     "keybindings": [
@@ -170,11 +173,24 @@
       {
         "id": "zx",
         "extensions": [
-          ".zx",
+          ".zx"
+        ],
+        "aliases": [
+          "Ziex (ZX)"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "dark": "images/icon.svg",
+          "light": "images/icon.svg"
+        }
+      },
+      {
+        "id": "mdzx",
+        "extensions": [
           ".mdzx"
         ],
         "aliases": [
-          "ZX"
+          "Ziex (MDZX)"
         ],
         "configuration": "./language-configuration.json",
         "icon": {
@@ -195,11 +211,22 @@
         }
       },
       {
+        "language": "mdzx",
+        "scopeName": "source.mdzx",
+        "path": "./syntaxes/mdzx.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.tag.zx": "zx-tags",
+          "meta.tag.attributes.zx": "zx",
+          "meta.embedded.expression.zx": "zx"
+        }
+      },
+      {
         "scopeName": "source.zx.injection",
         "path": "./syntaxes/zx-injection.tmLanguage.json",
         "injectTo": [
           "source.zig",
-          "source.zx"
+          "source.zx",
+          "source.mdzx"
         ]
       }
     ]

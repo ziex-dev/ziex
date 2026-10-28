@@ -1,7 +1,7 @@
 {
   "name": "tree-sitter-zx",
   "version": "0.1.0-dev",
-  "description": "ZX is a framework for building web applications with Zig.",
+  "description": "ZX grammar for Ziex.",
   "repository": "https://github.com/ziex-dev/ziex",
   "license": "MIT",
   "author": {

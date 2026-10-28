@@ -57,6 +57,25 @@ copy_files() {
 copy_files "$ZED_DIR" "Zed"
 copy_files "$NEOVIM_DIR" "Neovim"
 
+# MDZX: highlights and injections only; the other mdzx queries are Zed-only.
+MDZX_DIR="$PROJECT_ROOT/pkg/tree-sitter-mdzx"
+copy_mdzx() {
+    local dest_root="$1"
+    mkdir -p "$dest_root/mdzx" "$dest_root/mdzx_inline"
+    for q in highlights injections; do
+        cp "$MDZX_DIR/queries/$q.scm" "$dest_root/mdzx/$q.scm"
+        cp "$MDZX_DIR/tree-sitter-mdzx-inline/queries/$q.scm" "$dest_root/mdzx_inline/$q.scm"
+    done
+    echo "Copied mdzx queries to $dest_root"
+}
+copy_mdzx "$PROJECT_ROOT/ide/neovim/queries"
+copy_mdzx "$PROJECT_ROOT/ide/helix/queries"
+# Zed has no mdzx_inline language, so its injections.scm is maintained by hand.
+for q in highlights debugger outline textobjects; do
+    cp "$MDZX_DIR/queries/$q.scm" "$PROJECT_ROOT/ide/zed/languages/mdzx/$q.scm"
+done
+echo ""
+
 # Copy highlights.scm to the docs site
 echo "Copying highlights.scm to the docs site..."
 rm -f "$SITE_PAGES_DIR/highlights.scm"

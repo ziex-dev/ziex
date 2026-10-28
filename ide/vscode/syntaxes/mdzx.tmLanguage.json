@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MDZX",
+  "scopeName": "source.mdzx",
+  "patterns": [
+    {
+      "include": "source.zx"
+    }
+  ]
+}

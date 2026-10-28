@@ -7,10 +7,10 @@
       "title": "MDZX",
       "scope": "text.mdzx",
       "path": ".",
-      "file-types": ["mdzx", "md"],
+      "file-types": ["mdzx"],
       "highlights": "queries/highlights.scm",
       "injections": "queries/injections.scm",
-      "injection-regex": "^(mdzx|md)$",
+      "injection-regex": "^mdzx$",
       "class-name": "TreeSitterMdzx"
     },
     {

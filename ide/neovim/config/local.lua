@@ -1,18 +1,13 @@
 -- ~/.config/nvim/lua/plugins/zx.lua
+local dir = vim.fn.expand("~/Projects/ziex-dev/ziex")
 return {
-    dir = "/Users/nurulhudaapon/Projects/nurulhudaapon/zx",
+    dir = dir,
     name = "zx",
-    dependencies = {
-        "nvim-treesitter/nvim-treesitter",
-        "neovim/nvim-lspconfig",
-        "nvim-tree/nvim-web-devicons",  -- for file icons
-    },
-    -- Load on startup instead of lazy-loading on filetype
-    -- This ensures LSP and icons are ready immediately
+    dependencies = { "nvim-tree/nvim-web-devicons" },
     lazy = false,
-    priority = 50,  -- Load after lspconfig but early
     config = function()
-        vim.opt.runtimepath:prepend("/Users/nurulhudaapon/Projects/nurulhudaapon/zx/ide/neovim")
+        vim.opt.runtimepath:prepend(dir .. "/ide/neovim")
         vim.cmd("runtime! plugin/zx.lua")
+        require("zx").setup()
     end,
 }

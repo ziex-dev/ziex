@@ -1,6 +1,6 @@
 id = "ziex"
 name = "Ziex"
-description = "ZX support."
+description = "Ziex (ZX/MDZX) support."
 version = "0.1.0-dev"
 schema_version = 1
 authors = ["Nurul Huda (Apon) <me@nurulhudaapon.com>"]
@@ -8,14 +8,14 @@ repository = "https://github.com/ziex-dev/ziex"
 
 [language_servers.zxls]
 name = "zxls"
-language = "ZX"
+languages = ["ZX", "MDZX"]
 
 [grammars.zx]
 repository = "https://github.com/ziex-dev/ziex"
-rev = "b5208a8c7bdbaae130ff617d9c0f9f1df01e85de"
+rev = "736458a4b68236f1c3d51ba72ab5b525b2b6d2aa"
 path = "pkg/tree-sitter-zx"
 
 [grammars.mdzx]
 repository = "https://github.com/ziex-dev/ziex"
-rev = "b5208a8c7bdbaae130ff617d9c0f9f1df01e85de"
+rev = "736458a4b68236f1c3d51ba72ab5b525b2b6d2aa"
 path = "pkg/tree-sitter-mdzx"

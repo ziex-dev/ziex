@@ -3,13 +3,15 @@
 
 set -e
 
+PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
 echo "🧪 ZX Neovim Plugin - Full Test Suite"
 echo "======================================"
 echo ""
 
 # Clean everything
 echo "Step 1: Cleaning..."
-rm -f ~/.local/share/nvim/site/parser/zx.so
+rm -f ~/.local/share/nvim/site/parser/{zx,mdzx,mdzx_inline}.so
 rm -rf ~/.local/share/nvim/site/queries/zx
 rm -rf ~/.local/state/nvim/parser-cache
 rm -rf ~/.cache/nvim/luac
@@ -47,7 +49,7 @@ fi
 # Check if grammar exists
 echo ""
 echo "Step 4: Checking grammar..."
-GRAMMAR_DIR="$(cd "$(dirname "$0")/../../../pkg/tree-sitter-zx" && pwd)"
+GRAMMAR_DIR="$(cd "$PLUGIN_DIR/../../pkg/tree-sitter-zx" && pwd)"
 if [ -f "$GRAMMAR_DIR/src/parser.c" ]; then
     echo "  ✓ Grammar found: $GRAMMAR_DIR"
 else
@@ -72,7 +74,7 @@ fi
 echo ""
 echo "Step 6: Testing Neovim integration..."
 nvim --headless \
-  -c "set runtimepath+=$HOME/Projects/nurulhudaapon/zx/ide/neovim" \
+  -c "set runtimepath+=$PLUGIN_DIR" \
   -c "lua vim.filetype.add({ extension = { zx = 'zx' } })" \
   -c "e /tmp/test.zx" \
   -c "lua print('Filetype: ' .. vim.bo.filetype)" \

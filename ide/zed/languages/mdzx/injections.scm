@@ -15,3 +15,7 @@
 ; Comments use comment injection
 ((comment) @injection.content
   (#set! injection.language "comment"))
+
+; Frontmatter is raw Zig
+((frontmatter_body) @injection.content
+  (#set! injection.language "zig"))

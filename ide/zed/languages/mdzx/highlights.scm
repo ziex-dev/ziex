@@ -146,52 +146,6 @@
 ; Thematic Break
 (thematic_break) @punctuation.special
 
-; ==========================================
-; Markdown Inline Elements
-; ==========================================
-
-; Code Span (inline code)
-(code_span
-  (code_span_delimiter) @markup.raw.delimiter
-  (code_span_content) @markup.raw)
-
-; Strong Emphasis (**bold** or __bold__)
-(strong_emphasis
-  (strong_emphasis_content) @markup.bold)
-(strong_emphasis
-  ["**" "__"] @punctuation.special)
-
-; Emphasis (*italic* or _italic_)
-(emphasis
-  (emphasis_content) @markup.italic)
-(emphasis
-  ["*" "_"] @punctuation.special)
-
-; Strikethrough (~~text~~)
-(strikethrough
-  (strikethrough_content) @markup.strikethrough)
-(strikethrough
-  "~~" @punctuation.special)
-
-; Inline Links [text](url "title")
-(inline_link
-  (link_text) @markup.link
-  (link_destination) @markup.link.url)
-(inline_link
-  (link_title) @markup.link.title)
-
-; Images ![alt](url)
-(image
-  (link_text) @markup.link
-  (link_destination) @markup.link.url)
-
-; Autolinks <url>
-(autolink
-  (uri) @markup.link.url)
-
-; Backslash Escape
-(backslash_escape) @string.escape
-
 ; Link Reference Definition
 (link_reference_definition
   (link_label) @markup.link.label

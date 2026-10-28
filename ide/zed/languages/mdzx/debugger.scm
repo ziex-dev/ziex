@@ -1,12 +1,5 @@
 ; MDZX Debugger
 
-; Variables in frontmatter declarations
-(pub_const_declaration
-  name: (identifier) @debug-variable)
-
-(const_declaration
-  name: (identifier) @debug-variable)
-
 ; Expressions
 (assignment_expression right: (identifier) @debug-variable)
 (initializer_list (identifier) @debug-variable)

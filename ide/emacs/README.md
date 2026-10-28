@@ -4,6 +4,8 @@
 highlighting, indentation, imenu and structural navigation for both the Zig and
 the markup halves of a ZX file, plus LSP support through `zx lsp`.
 
+`mdzx-ts-mode` covers `.mdzx` files with highlighting and the same LSP support.
+
 ## Requirements
 
 - Emacs 29.1 or newer, built with tree-sitter support (`M-: (treesit-available-p)`
@@ -56,6 +58,8 @@ Build and install the ZX grammar once:
 M-x zx-ts-mode-install-grammar
 ```
 
+For `.mdzx` files, also run `M-x mdzx-ts-mode-install-grammar`.
+
 This clones `ziex-dev/ziex` and compiles `pkg/tree-sitter-zx`. The recipe lives
 in `zx-ts-mode-grammar-source` if you would rather build from a local checkout:
 
@@ -66,12 +70,13 @@ in `zx-ts-mode-grammar-source` if you would rather build from a local checkout:
 
 ## LSP
 
-`zx-ts-mode` registers itself with Eglot. It runs `zx lsp`, or
-`zig build zx -Dziex-lsp=true -- lsp` from the nearest `build.zig` when the
+`zx-ts-mode` and `mdzx-ts-mode` register themselves with Eglot. They run
+`zx lsp`, or `zig build zx -Dziex-lsp=true -- lsp` from the nearest `build.zig` when the
 `zx` CLI is not installed. Set `zx-ts-mode-lsp-command` to force a command.
 
 ```elisp
 (add-hook 'zx-ts-mode-hook #'eglot-ensure)
+(add-hook 'mdzx-ts-mode-hook #'eglot-ensure)
 ```
 
 ZLS options go in the `zls` section of `eglot-workspace-configuration` (use

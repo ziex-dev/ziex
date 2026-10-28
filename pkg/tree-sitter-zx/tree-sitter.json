@@ -3,7 +3,7 @@
   "grammars": [
     {
       "name": "zx",
-      "camelcase": "ZX",
+      "camelcase": "Zx",
       "title": "ZX",
       "scope": "source.zx",
       "file-types": [
@@ -16,7 +16,7 @@
   "metadata": {
     "version": "0.1.0-dev",
     "license": "MIT",
-    "description": "ZX is a framework for building web applications with Zig.",
+    "description": "ZX grammar for Ziex.",
     "authors": [
       {
         "name": "Nurul Huda (Apon)",

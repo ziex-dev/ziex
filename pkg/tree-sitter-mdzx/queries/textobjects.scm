@@ -10,9 +10,9 @@
   (_)* @block.inside
   (zx_end_tag)) @block.around
 
-; Zig declarations in frontmatter
-(pub_const_declaration) @function.around
-(const_declaration) @function.around
+; Frontmatter body (raw Zig)
+(frontmatter
+  (frontmatter_body) @function.inside) @function.around
 
 ; Markdown block elements
 (atx_heading) @block.around
@@ -21,13 +21,6 @@
 (list) @block.around
 (list_item) @block.around
 (paragraph) @block.around
-
-; Inline text objects
-(strong_emphasis) @text.strong
-(emphasis) @text.emphasis
-(code_span) @text.code
-(inline_link) @text.link
-(image) @text.link
 
 ; Comments
 (comment)+ @comment.around
