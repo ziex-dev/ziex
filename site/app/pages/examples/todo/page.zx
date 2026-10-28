@@ -74,7 +74,7 @@ fn TodoItem(ctx: *zx.ComponentCtx(struct {
 }
 
 const initial_todos = [_]Todo{
-    .{ .id = 1, .text = "Build a fast web app with ZX", .completed = true },
+    .{ .id = 1, .text = "Build a fast web app with Ziex", .completed = true },
     .{ .id = 2, .text = "Implement server-side rendering", .completed = true },
     .{ .id = 3, .text = "Implement client-side rendering", .completed = false },
 };

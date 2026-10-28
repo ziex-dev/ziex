@@ -99,12 +99,12 @@ case "$target" in
 'windows'*)
     archive_ext="zip"
     command -v unzip >/dev/null ||
-        error 'unzip is required to install zx'
+        error 'unzip is required to install Ziex'
     ;;
 *)
     archive_ext="tar.gz"
     command -v tar >/dev/null ||
-        error 'tar is required to install zx'
+        error 'tar is required to install Ziex'
     ;;
 esac
 
@@ -212,7 +212,7 @@ tildify() {
     fi
 }
 
-success "ZX was installed successfully to $Bold_Green$(tildify "$exe")"
+success "Ziex was installed successfully to $Bold_Green$(tildify "$exe")"
 
 if command -v zx >/dev/null; then
     info_bold "Run 'zx --help' to get started"

@@ -24,9 +24,9 @@ read from your editor's `zls` settings section (Helix sends them as
 `initializationOptions`). Changes apply without a restart. Each editor guide
 shows where to put them.
 
-ZX changes a few ZLS defaults to cut inlay hint noise in page code:
+Ziex changes a few ZLS defaults to cut inlay hint noise in page code:
 
-| Option | ZX default | ZLS default |
+| Option | Ziex default | ZLS default |
 | --- | --- | --- |
 | `inlay_hints_show_builtin` | `false` | `true` |
 | `inlay_hints_show_struct_literal_field_type` | `false` | `true` |

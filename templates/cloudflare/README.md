@@ -24,7 +24,7 @@ Start dev server (http://localhost:8787):
 npm run dev
 ```
 
-Every [ZX CLI](https://ziex.dev/reference#cli) command is available as `npx zig build zx -- <command>`.
+Every [Ziex CLI](https://ziex.dev/reference#cli) command is available as `npx zig build zx -- <command>`.
 
 ## Deploying
 

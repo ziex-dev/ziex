@@ -3,7 +3,7 @@ pub fn Page(ctx: zx.PageContext, app: Context, state: UserState) zx.Component {
 
     return (
         <div @allocator={allocator}>
-            <h2>About ZX {app.port}</h2>
+            <h2>About Ziex {app.port}</h2>
             <h2>About State {state.count}</h2>
         </div>
     );

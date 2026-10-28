@@ -38,7 +38,7 @@ git clone https://github.com/ziex-dev/template-starter my-app
 cd my-app && zig build dev
 ```
 
-You will need [compatible](#versions) Zig version when using zx CLI or you can use the `Node` template from `npm init ziex`
+You will need [compatible](#versions) Zig version when using the Ziex CLI (`zx`), or you can use the `Node` template from `npm init ziex`
 
 Read [Getting Started →](https://ziex.dev/learn) for more details.
 

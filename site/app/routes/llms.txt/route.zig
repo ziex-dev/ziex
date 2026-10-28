@@ -22,10 +22,10 @@ pub fn GET(ctx: zx.RouteContext) !void {
         \\
     );
     try w.print(
-        \\- [Learn]({s}/learn): Quick start covering core ZX concepts
+        \\- [Learn]({s}/learn): Quick start covering core Ziex concepts
         \\- [Reference]({s}/reference): Language and API reference
         \\- [Examples]({s}/examples): Interactive feature demos
-        \\- [Playground]({s}/playground): Try ZX in the browser
+        \\- [Playground]({s}/playground): Try Ziex in the browser
         \\- [GitHub]({s}): Source repository
         \\
         \\## Examples

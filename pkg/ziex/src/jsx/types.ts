@@ -103,7 +103,7 @@ export type ComponentMetadata = {
    *
    * The ID format is: `zx-{32 hex characters}-{counter}` (e.g., `zx-dcde04c415da9d1b15ca2690d8b497ae-0`)
    *
-   * The ZX runtime renders components with comment markers in the format:
+   * The Ziex runtime renders components with comment markers in the format:
    * `<!--$id name props-->...<!--/$id-->`
    *
    * @example

@@ -141,7 +141,7 @@ fn LearnHeader(allocator: zx.Allocator) zx.Component {
         <section class="section learn-header docs-page-header" @allocator={allocator}>
             <p class="section-category">Learn</p>
             <h1>Quick Start</h1>
-            <p class="lead">An introduction to the core concepts you'll use daily when building with ZX.</p>
+            <p class="lead">An introduction to the core concepts you'll use daily when building with Ziex.</p>
         </section>
     );
 }
@@ -151,7 +151,7 @@ fn YouWillLearn(allocator: zx.Allocator) zx.Component {
         <div class="callout learn-callout" @allocator={allocator}>
             <p class="callout-title"><strong>You will learn</strong></p>
             <ul>
-                <li>How to install ZX and set up your environment</li>
+                <li>How to install Ziex and set up your environment</li>
                 <li>How to create and nest components</li>
                 <li>How to write markup and use fragments</li>
                 <li>How to display data with expressions</li>
@@ -189,7 +189,7 @@ fn Installation(allocator: zx.Allocator) !zx.Component {
     return (
         <section id="installation" class="section" @allocator={allocator}>
             <h2>Installation</h2>
-            <p>Install the ZX CLI to get started:</p>
+            <p>Install the Ziex CLI to get started:</p>
 
             <InstallCLI />
 
@@ -222,7 +222,7 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
             <ul>
                 <li><strong>CLI</strong> - scaffold a project with <code>zx init</code></li>
                 <li><strong>Template</strong> - clone the starter repo and run <code>zig build dev</code></li>
-                <li><strong>Manual</strong> - add ZX to an existing Zig project with <code>build.zig</code></li>
+                <li><strong>Manual</strong> - add Ziex to an existing Zig project with <code>build.zig</code></li>
                 <li><strong>Node.js</strong> - use <code>npm init ziex</code> or <code>bun create ziex</code> to download a template</li>
             </ul>
             <div>
@@ -237,7 +237,7 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
                     <label for="tab-nodejs" class="simple-tab-label">Node.js</label>
                 </div>
                 <div class="simple-tab-content" id="content-cli">
-                    <p>Create a new ZX project using the CLI:</p>
+                    <p>Create a new Ziex project using the CLI:</p>
                     <div class="install-box install-box-simple">
                         <div class="install-box-content">
                             <div class="install-code" style="min-height: 28px; margin-top: 5px;">
@@ -249,7 +249,7 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
                         </div>
                     </div>
 
-                    <p style="margin-top: 1.5rem;">Start the ZX app in development mode with hot reloading:</p>
+                    <p style="margin-top: 1.5rem;">Start the Ziex app in development mode with hot reloading:</p>
                     <div class="install-box install-box-simple">
                         <div class="install-box-content">
                             <div class="install-code install-code-multiline">
@@ -298,7 +298,7 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
                         </div>
                     </div>
 
-                    <p style="margin-top: 1.5rem;">Add ZX as a dependency:</p>
+                    <p style="margin-top: 1.5rem;">Add Ziex as a dependency:</p>
                     <div class="install-box install-box-simple">
                         <div class="install-box-content">
                             <div class="install-code">
@@ -329,7 +329,7 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
                         </div>
                     </div>
 
-                    <p style="margin-top: 1.5rem;">Start the ZX app in development mode with hot reloading:</p>
+                    <p style="margin-top: 1.5rem;">Start the Ziex app in development mode with hot reloading:</p>
                     <div class="install-box install-box-simple">
                         <div class="install-box-content">
                             <div class="install-code install-code-multiline">
@@ -390,7 +390,7 @@ fn EditorSetup(allocator: zx.Allocator) zx.Component {
     return (
         <section id="editor-setup" class="section" @allocator={allocator}>
             <h2>Editor Setup</h2>
-            <p>Set up your editor for the best ZX development experience.</p>
+            <p>Set up your editor for the best Ziex development experience.</p>
             <div>
                 <div class="simple-tab-header">
                     <input type="radio" id="tab-editor-vscode" name="editor-setup" class="simple-tab-radio" checked="true" aria-label="VS Code / Cursor" />
@@ -405,7 +405,7 @@ fn EditorSetup(allocator: zx.Allocator) zx.Component {
                     <label for="tab-editor-emacs" class="simple-tab-label">Emacs</label>
                 </div>
                 <div class="simple-tab-content" id="content-editor-vscode">
-                    <p>Install the official ZX extension for the best development experience.</p>
+                    <p>Install the official Ziex extension for the best development experience.</p>
                     <p>Install from:</p>
                     <ul>
                         <li><a href="https://marketplace.visualstudio.com/items?itemName=ziex.ziex" target="_blank" rel="noopener noreferrer">VS Code Marketplace</a></li>
@@ -442,7 +442,7 @@ fn EditorSetup(allocator: zx.Allocator) zx.Component {
             <p>All editors run the same language server, <code>zx lsp</code>. See the <a href=`{zx.info.repository}/tree/main/ide#language-server` target="_blank" rel="noopener noreferrer">language server guide</a> for how it starts and how to configure it.</p>
 
             <h3 id="devtools">Browser DevTools</h3>
-            <p>Install the <a href="https://chromewebstore.google.com/detail/ziex-devtools/efnedneccooengjfmahlnmicgkalnopj" target="_blank" rel="noopener noreferrer">Ziex DevTools</a> Chrome extension to inspect and debug ZX applications from Chrome DevTools.</p>
+            <p>Install the <a href="https://chromewebstore.google.com/detail/ziex-devtools/efnedneccooengjfmahlnmicgkalnopj" target="_blank" rel="noopener noreferrer">Ziex DevTools</a> Chrome extension to inspect and debug Ziex applications from Chrome DevTools.</p>
 
             <script src=`/assets/docs.js?v={zx.info.version}` defer="true"></script>
         </section>
@@ -459,7 +459,7 @@ fn CreatingComponents(allocator: zx.Allocator, props: CreatingComponentsProps) z
     return (
         <section id="creating-components" class="section" @allocator={allocator}>
             <h2>Creating and nesting components</h2>
-            <p>ZX apps are made out of <em>components</em>. A component is a function that returns a <code>zx.Component</code> type. Components can be as small as a button or as large as an entire page.</p>
+            <p>Ziex apps are made out of <em>components</em>. A component is a function that returns a <code>zx.Component</code> type. Components can be as small as a button or as large as an entire page.</p>
             <p>ZX components are Zig functions that return markup. Notice how <code>{"<Greeting />"}</code> starts with a capital letter - that's how ZX distinguishes between custom components and HTML elements:</p>
             <ExampleBlock id="greeting" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="hello_world.zx" />
             <div class="callout note">
@@ -706,7 +706,7 @@ fn PagesAndLayouts(allocator: zx.Allocator, props: PagesAndLayoutsProps) zx.Comp
     return (
         <section id="pages-layouts" class="section" @allocator={allocator}>
             <h2>Pages and Layouts</h2>
-            <p>ZX uses file-based routing. Create <code>page.zx</code> files in the <code>app/pages/</code> directory:</p>
+            <p>Ziex uses file-based routing. Create <code>page.zx</code> files in the <code>app/pages/</code> directory:</p>
             <ExampleBlock id="page-example" zx_code={props.zx_page} zig_code={props.zig_page} html_code={props.html_page} filename="page.zx" />
             <p>The file path determines the URL: <code>app/pages/about/page.zx</code> → <code>/about</code></p>
 
@@ -748,7 +748,7 @@ fn APIRoutes(allocator: zx.Allocator, props: APIRoutesProps) zx.Component {
     return (
         <section id="api-routes" class="section" @allocator={allocator}>
             <h2>API Routes</h2>
-            <p>ZX makes it easy to create APIs by adding <code>route.zig</code> files to your <code>app/pages/</code> directory. These files handle HTTP methods like GET, POST, and more.</p>
+            <p>Ziex makes it easy to create APIs by adding <code>route.zig</code> files to your <code>app/pages/</code> directory. These files handle HTTP methods like GET, POST, and more.</p>
             <p>Create a <code>route.zig</code> file to handle API requests:</p>
             <CodeBlock code={props.zig_code} filename="routes/api/route.zig" />
             <p>API routes have access to <code>zx.RouteContext</code>, which provides the request, response, and even WebSocket support. Learn more in the <a href="/reference#api-routes">API documentation</a>.</p>
@@ -767,7 +767,7 @@ fn KVStorage(allocator: zx.Allocator, props: KVStorageProps) zx.Component {
     return (
         <section id="kv" class="section" @allocator={allocator}>
             <h2>Key-Value Storage</h2>
-            <p>ZX includes a key-value store for persisting small pieces of data across requests and restarts. Access it through <code>zx.kv</code>.</p>
+            <p>Ziex includes a key-value store for persisting small pieces of data across requests and restarts. Access it through <code>zx.kv</code>.</p>
 
             <h3>Enabling</h3>
             <p>KV is disabled by default. Enable it in <code>build.zig</code> by passing <code>features</code> to your <code>ziex.init</code> call:</p>
@@ -806,7 +806,7 @@ fn Database(allocator: zx.Allocator, props: DatabaseProps) zx.Component {
     return (
         <section id="database" class="section" @allocator={allocator}>
             <h2>Database</h2>
-            <p>ZX ships with a SQL database layer accessed through <code>zx.db</code>.</p>
+            <p>Ziex ships with a SQL database layer accessed through <code>zx.db</code>.</p>
 
             <h3>Enabling</h3>
             <p>The embedded SQLite database is disabled by default. Enable it in <code>build.zig</code> by passing <code>features</code> to your <code>ziex.init</code> call:</p>
@@ -828,7 +828,7 @@ fn Database(allocator: zx.Allocator, props: DatabaseProps) zx.Component {
             <p>If the callback returns an error, the transaction rolls back. Use <code>zx.db.transactionWith</code> to pick an explicit mode (<code>.deferred</code>, <code>.immediate</code>, or <code>.exclusive</code>).</p>
 
             <div class="callout note">
-                <strong>Backends:</strong>{" "}ZX uses SQLite on native platforms and Cloudflare D1 on Workers. The same <code>zx.db</code>{" "}API works across both.
+                <strong>Backends:</strong>{" "}Ziex uses SQLite on native platforms and Cloudflare D1 on Workers. The same <code>zx.db</code>{" "}API works across both.
             </div>
         </section>
     );
@@ -838,7 +838,7 @@ fn Deployment(allocator: zx.Allocator) zx.Component {
     return (
         <section id="deployment" class="section" @allocator={allocator}>
             <h2>Deployment</h2>
-            <p>ZX apps can be deployed in three ways: as a <strong>standalone</strong> binary on your own server, as a <strong>static</strong> site on a CDN, or to an <strong>edge</strong> runtime like Cloudflare Workers or Vercel.</p>
+            <p>Ziex apps can be deployed in three ways: as a <strong>standalone</strong> binary on your own server, as a <strong>static</strong> site on a CDN, or to an <strong>edge</strong> runtime like Cloudflare Workers or Vercel.</p>
 
             <h3 id="deployment-standalone">Standalone</h3>
             <p>Compile your app to a single, self-contained binary with zero runtime dependencies. Build for production, then bundle the binary with its static assets:</p>
@@ -921,15 +921,15 @@ fn NextSteps(allocator: zx.Allocator) zx.Component {
     return (
         <section id="next-steps" class="section" @allocator={allocator}>
             <h2>Next Steps</h2>
-            <p>You now know the basics of ZX! Here's what to explore next:</p>
+            <p>You now know the basics of Ziex! Here's what to explore next:</p>
             <div class="next-steps-grid">
                 <a href="/reference" class="next-step-card">
                     <h3>Documentation</h3>
-                    <p>Deep dive into all ZX features with detailed examples.</p>
+                    <p>Deep dive into all Ziex features with detailed examples.</p>
                 </a>
                 <a href="/reference#cli" class="next-step-card">
                     <h3>CLI Reference</h3>
-                    <p>Learn about the ZX command-line tools.</p>
+                    <p>Learn about the Ziex command-line tools.</p>
                 </a>
                 <a href="/examples" class="next-step-card">
                     <h3>Examples</h3>

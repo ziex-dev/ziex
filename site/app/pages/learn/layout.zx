@@ -21,7 +21,7 @@ const categories = [_]SidebarProps.Category{
             .{
                 .title = "Installation",
                 .items = &[_]SidebarProps.Link{
-                    .{ .href = "/learn#installation", .text = "Install ZX CLI" },
+                    .{ .href = "/learn#installation", .text = "Install Ziex CLI" },
                     .{ .href = "/learn#create-project", .text = "Create a Project" },
                 },
             },
@@ -35,7 +35,7 @@ const categories = [_]SidebarProps.Category{
         },
     },
     .{
-        .title = "LEARN ZX",
+        .title = "LEARN ZIEX",
         .sections = &[_]SidebarProps.Section{
             .{
                 .title = "Describing the UI",

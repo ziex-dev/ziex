@@ -442,7 +442,7 @@ pub const net = struct {
 
     pub fn banner(port_num: u16, comptime suffix: []const u8) void {
         if (comptime suffix.len == 0) {
-            std.debug.print("{s}ZX{s} {s}- v{s}{s} | http://localhost:{d}\n", .{
+            std.debug.print("{s}Ziex{s} {s}- v{s}{s} | http://localhost:{d}\n", .{
                 colors.bold,
                 colors.reset,
                 colors.dim,
@@ -451,7 +451,7 @@ pub const net = struct {
                 port_num,
             });
         } else {
-            std.debug.print("{s}ZX{s} {s}- v{s}{s} | http://localhost:{d} ({s})\n", .{
+            std.debug.print("{s}Ziex{s} {s}- v{s}{s} | http://localhost:{d} ({s})\n", .{
                 colors.bold,
                 colors.reset,
                 colors.dim,

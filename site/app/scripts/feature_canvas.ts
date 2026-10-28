@@ -1082,7 +1082,7 @@ function drawTooling(ctx: Ctx, t: number, data: FeatureCanvasData) {
   const row = (i: number) => ty + 44 + i * 18;
   const banner = (y: number) =>
     segs(ctx, 14, y, [
-      ["ZX", WHITE, "700"],
+      ["Ziex", WHITE, "700"],
       [` - v${tl.version}`, FAINT],
       [` | ${tl.url}`, TEXT],
     ]);

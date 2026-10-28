@@ -30,7 +30,7 @@ test.describe('Examples Overview', () => {
 
   test('overview page renders QuickExample content', async ({ page }) => {
     await page.goto('/examples/overview');
-    await expect(page.getByText(/Hello,\s*ZX\s*Dev!/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Hello,\s*Ziex\s*Dev!/i)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('John')).toBeVisible();
     await expect(page.getByText('Jane')).toBeVisible();
   });

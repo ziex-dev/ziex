@@ -38,7 +38,7 @@ Format code:
 zig build zx -- fmt .
 ```
 
-Every [ZX CLI](https://ziex.dev/reference#cli) command is available as `zig build zx -- <command>`.
+Every [Ziex CLI](https://ziex.dev/reference#cli) command is available as `zig build zx -- <command>`.
 
 ## Deploying
 

@@ -237,7 +237,7 @@ pub fn Backend(comptime H: type) type {
             }
         }
 
-        /// Print the server info to the console: ZX - v{version} | http://localhost:{port}
+        /// Print the server info to the console: Ziex - v{version} | http://localhost:{port}
         pub fn info(self: *Self) void {
             const display_port = self.outer_port orelse self.port;
             Pipeline.net.banner(display_port, "");

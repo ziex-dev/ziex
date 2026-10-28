@@ -1,6 +1,6 @@
 pub fn QuickExample(allocator: zx.Allocator) zx.Component {
     const is_loading = true;
-    const chars = "Hello, ZX Dev!";
+    const chars = "Hello, Ziex Dev!";
     var i: usize = 0;
     return (
         <div @allocator={allocator} class="example-test-list">

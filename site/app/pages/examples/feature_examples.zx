@@ -1055,7 +1055,7 @@ pub fn Learn__DbTyped(ctx: zx.PageContext) !zx.Component {
         \\)
     , .empty);
 
-    _ = try zx.db.run("INSERT INTO blog_posts (title) VALUES (?1)", .{"ZX Guide"});
+    _ = try zx.db.run("INSERT INTO blog_posts (title) VALUES (?1)", .{"Ziex Guide"});
 
     const posts = try zx.db.rows(ctx.arena, Post, "SELECT id, title FROM blog_posts", .{});
 

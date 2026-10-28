@@ -31,4 +31,4 @@ Put ZLS options under `lsp.zxls.settings`:
 }
 ```
 
-See the [editor guide](../README.md) for the ZX defaults.
+See the [editor guide](../README.md) for the Ziex defaults.

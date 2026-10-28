@@ -64,4 +64,4 @@ vim.lsp.config("zxls", {
 vim.lsp.enable("zxls")
 ```
 
-See the [editor guide](../README.md) for the ZX defaults.
+See the [editor guide](../README.md) for the Ziex defaults.

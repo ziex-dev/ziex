@@ -82,7 +82,7 @@ fn printPadding(width: usize, content_len: usize) void {
 
 /// Print a CLI error box (convenience function)
 pub fn printCliError(comptime issue_url: []const u8, err_name: []const u8) void {
-    const title = "Error: An unexpected problem occurred while running ZX CLI.";
+    const title = "Error: An unexpected problem occurred while running Ziex CLI.";
 
     // Build the lines with runtime values
     var report_buf: [256]u8 = undefined;

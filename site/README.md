@@ -6,7 +6,7 @@
 
 ## Getting Started
 
-### 1. Install ZX CLI
+### 1. Install Ziex CLI
 
 #### Linux/macOS
 ```bash
@@ -71,12 +71,12 @@ zig build zx -- bundle
 This will create a `bundle/` directory with the binary and static assets needed to run your app. You can deploy the contents of `bundle/` to any VPS.
 
 
-### [ZX CLI](https://ziex.dev/reference#cli) Commands
+### [Ziex CLI](https://ziex.dev/reference#cli) Commands
 ```bash
 zig build zx -- [command] [options]
 ```
 
-All ZX CLI commands are available under `zig build zx -- [command]`. For example, to run auto formatter:
+All Ziex CLI commands are available under `zig build zx -- [command]`. For example, to run auto formatter:
 ```bash
 zig build zx -- fmt .
 ```

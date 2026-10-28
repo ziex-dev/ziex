@@ -9,7 +9,7 @@ pub const Entry = struct {
     }
 };
 
-/// The default ZX project structure template
+/// The default Ziex project structure template
 pub const default_project: Entry = .{
     .name = "my-app",
     .description = "Project root",

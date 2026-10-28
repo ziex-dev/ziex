@@ -2,7 +2,7 @@ pub fn Introduction(allocator: zx.Allocator) zx.Component {
     return (
         <section id="overview" class="section" @allocator={allocator}>
             <h2>Overview</h2>
-            <p>This reference documents the ZX templating syntax and APIs. For a hands-on introduction, see the <a href="/learn">Learn</a> guide.</p>
+            <p>This reference documents the ZX templating syntax and the Ziex APIs. For a hands-on introduction, see the <a href="/learn">Learn</a> guide.</p>
         </section>
     );
 }

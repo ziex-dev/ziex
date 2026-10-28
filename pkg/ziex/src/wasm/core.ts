@@ -139,7 +139,7 @@ export function invokeWasmExport<F extends (...args: any[]) => any>(
 }
 
 /**
- * Core ZX Bridge - works in both browser and edge runtimes.
+ * Core Ziex Bridge - works in both browser and edge runtimes.
  * Contains fetch, timers, and logging. No DOM or browser-WebSocket references.
  *
  * Extend this class in browser environments to add DOM and WebSocket support.

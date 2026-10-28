@@ -5,7 +5,7 @@ set -e
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "🧪 ZX Neovim Plugin - Full Test Suite"
+echo "🧪 Ziex Neovim Plugin - Full Test Suite"
 echo "======================================"
 echo ""
 

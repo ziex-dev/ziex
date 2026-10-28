@@ -1,7 +1,7 @@
 const zig = require('tree-sitter-zig/grammar');
 
 /**
- * @file ZX is a framework for building web applications with Zig.
+ * @file ZX, the markup-in-Zig language of the Ziex web framework.
  * @author Nurul Huda (Apon) <me@nurulhudaapon.com>
  * @license MIT
  */

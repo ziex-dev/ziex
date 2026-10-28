@@ -3,7 +3,7 @@
 
 set -e
 
-echo "🧹 Cleaning all ZX Neovim files..."
+echo "🧹 Cleaning all Ziex Neovim files..."
 
 # Remove parser
 echo "  ✓ Removing parser..."

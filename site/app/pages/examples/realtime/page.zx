@@ -25,7 +25,7 @@ fn JoinScreen(allocator: zx.Allocator) zx.Component {
         <div @allocator={allocator}>
             <header class="demo-header">
                 <h1>Realtime chat</h1>
-                <p>Choose a name and join a small room powered by ZX WebSockets.</p>
+                <p>Choose a name and join a small room powered by Ziex WebSockets.</p>
             </header>
             <form class="demo-row demo-row-mobile-stack">
                 <input type="text" class="demo-input" name="username" placeholder="Enter your name" required />

@@ -96,4 +96,4 @@ command = "zig"
 args = ["build", "zx", "-Dziex-lsp=true", "--release=fast", "--", "lsp"]
 ```
 
-See the [editor guide](../README.md) for the ZX defaults.
+See the [editor guide](../README.md) for the Ziex defaults.

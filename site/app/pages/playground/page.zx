@@ -225,7 +225,7 @@ pub fn ActionButtons(ctx: *zx.ComponentCtx(struct {})) zx.Component {
     return (
         <div @allocator={ctx.allocator} class="pg-nav-actions" style="display: none;">
             <a href="/learn" class="pg-nav-btn">Docs</a>
-            <button onclick={handleRunClick} class="pg-nav-btn pg-nav-btn--primary" id="pg-run-zx-btn">▶ Run ZX</button>
+            <button onclick={handleRunClick} class="pg-nav-btn pg-nav-btn--primary" id="pg-run-zx-btn">▶ Run</button>
         </div>
     );
 }

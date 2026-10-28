@@ -190,7 +190,7 @@ pub fn build(b: *std.Build) !void {
         pg_step.dependOn(&install_pg.step);
     }
 
-    // --- ZX App Executable --- //
+    // --- Ziex App Executable --- //
     const app_exe = b.addExecutable(.{
         .name = "ziex_dev",
         .root_module = b.createModule(.{
@@ -218,7 +218,7 @@ pub fn build(b: *std.Build) !void {
     site_opts.addOption(bool, "use_dusty", server_backend == .dusty);
     app_exe.root_module.addOptions("site_opts", site_opts);
 
-    // --- ZX setup: wires dependencies and adds `zx`/`dev` build steps --- //
+    // --- Ziex setup: wires dependencies and adds `zx`/`dev` build steps --- //
     var zx = try ziex.init(b, app_exe, .{
         .app = .{
             // .path = b.path("app"),

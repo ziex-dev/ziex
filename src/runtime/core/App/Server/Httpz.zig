@@ -500,7 +500,7 @@ pub fn Backend(comptime H: type) type {
         }
 
         /// Print the server info to the console
-        /// ZX - v{version} | http://localhost:{port}
+        /// Ziex - v{version} | http://localhost:{port}
         pub fn info(self: *Self) void {
             const display_port: u16 = self.outer_port orelse serverPort(&self.inner.config).?;
             Pipeline.net.banner(display_port, "");
@@ -516,7 +516,7 @@ pub fn Backend(comptime H: type) type {
         fn infoWithCrossedOutPort(_: *Self, port: u16) void {
             const c = Pipeline.colors;
             std.debug.print(
-                "{s}\r{s}ZX{s} {s}- v{s}{s} {s} | {s}http://localhost:{d}{s}\n",
+                "{s}\r{s}Ziex{s} {s}- v{s}{s} {s} | {s}http://localhost:{d}{s}\n",
                 .{
                     c.move_up,
                     c.bold,

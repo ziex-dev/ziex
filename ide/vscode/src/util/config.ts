@@ -35,7 +35,7 @@ const RESERVED = new Set(["modules", "import_extensions"]);
 /**
  * Answers the server's `workspace/configuration` request for the `zls`
  * section from `ziex.lsp.*`, falling back to `zig.zls.*`. Only values the user
- * set explicitly are sent, so unset options keep the server's ZX defaults.
+ * set explicitly are sent, so unset options keep the server's Ziex defaults.
  */
 export function configurationMiddleware(getZig: () => string | undefined): Middleware {
   return {

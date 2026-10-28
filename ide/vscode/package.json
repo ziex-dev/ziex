@@ -79,7 +79,7 @@
         "ziex.lsp.inlayHintsShowStructLiteralFieldType": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Show inlay hints for fields in struct and union literals. Off by default for ZX. Falls back to `zig.zls.inlayHintsShowStructLiteralFieldType` when not set."
+          "markdownDescription": "Show inlay hints for fields in struct and union literals. Off by default in Ziex. Falls back to `zig.zls.inlayHintsShowStructLiteralFieldType` when not set."
         },
         "ziex.lsp.inlayHintsShowParameterName": {
           "type": "boolean",
@@ -89,7 +89,7 @@
         "ziex.lsp.inlayHintsShowBuiltin": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Show inlay hints for builtin functions. Off by default for ZX. Falls back to `zig.zls.inlayHintsShowBuiltin` when not set."
+          "markdownDescription": "Show inlay hints for builtin functions. Off by default in Ziex. Falls back to `zig.zls.inlayHintsShowBuiltin` when not set."
         },
         "ziex.lsp.inlayHintsExcludeSingleArgument": {
           "type": "boolean",
@@ -99,12 +99,12 @@
         "ziex.lsp.inlayHintsHideRedundantParamNames": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Hide parameter name hints when the argument is the same identifier (`foo: foo`). On by default for ZX. Falls back to `zig.zls.inlayHintsHideRedundantParamNames` when not set."
+          "markdownDescription": "Hide parameter name hints when the argument is the same identifier (`foo: foo`). On by default in Ziex. Falls back to `zig.zls.inlayHintsHideRedundantParamNames` when not set."
         },
         "ziex.lsp.inlayHintsHideRedundantParamNamesLastToken": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Hide parameter name hints when the argument ends with the same identifier (`foo: bar.foo`, `foo: &foo`). On by default for ZX. Falls back to `zig.zls.inlayHintsHideRedundantParamNamesLastToken` when not set."
+          "markdownDescription": "Hide parameter name hints when the argument ends with the same identifier (`foo: bar.foo`, `foo: &foo`). On by default in Ziex. Falls back to `zig.zls.inlayHintsHideRedundantParamNamesLastToken` when not set."
         },
         "ziex.lsp.builtinPath": {
           "type": [

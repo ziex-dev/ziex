@@ -29,5 +29,5 @@ Configure it under **Settings › Extensions › Ziex**:
 ```
 
 Unset `ziex.lsp.*` options fall back to your Zig extension settings
-(`zig.zls.*`, `zig.libPath`). See the [editor guide](https://github.com/ziex-dev/ziex/blob/main/ide/README.md) for the ZX
+(`zig.zls.*`, `zig.libPath`). See the [editor guide](https://github.com/ziex-dev/ziex/blob/main/ide/README.md) for the Ziex
 defaults.

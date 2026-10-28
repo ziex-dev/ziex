@@ -57,7 +57,7 @@ import { DELEGATED_EVENTS } from "./generated/events";
 import { HIGH_FREQ_EVENT_BITS } from "./generated/event_bits";
 
 /**
- * Browser ZX Bridge - extends ZxBridgeCore with DOM, WebSocket, and form-action support.
+ * Browser Ziex Bridge - extends ZxBridgeCore with DOM, WebSocket, and form-action support.
  * Import this from environments that have access to browser globals.
  * For edge runtimes, import ZxBridgeCore from ./core instead.
  */
@@ -523,7 +523,7 @@ function registerDevReinit(options: InitOptions): void {
     };
 }
 
-/** Initialize WASM with the ZX Bridge */
+/** Initialize WASM with the Ziex Bridge */
 export async function init(options: InitOptions = {}): Promise<{ source: WebAssembly.WebAssemblyInstantiatedSource; bridge: ZxBridge }> {
     const normalizedOptions = normalizeOptions(options);
     if (activeRuntime) {

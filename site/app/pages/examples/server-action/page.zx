@@ -109,7 +109,7 @@ fn serverStateUpdateHandler(e: *zx.server.Event.Stateful) void {
     var person = e.state(Person);
 
     const updated_person = Person{
-        .first_name = "ZX",
+        .first_name = "Ziex",
         .last_name = "FW",
         .age = person.get().age + 1,
     };

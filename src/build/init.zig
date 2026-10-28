@@ -124,7 +124,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         opts.steps = cli_steps;
     }
 
-    // --- ZX Options --- //
+    // --- Ziex Options --- //
     const config = buildConfig(b);
     const cli_command: []const u8 = if (config.command) |c| @tagName(c) else "--";
     const is_dev_build = config.command == .dev;
@@ -225,7 +225,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         b.getInstallStep().dependOn(&install_pkg.step);
     }
 
-    // --- ZX Injections --- //
+    // --- Ziex Injections --- //
     const injections = try b.allocator.create(Injections);
     injections.* = .{};
     for (opts.element_injections) |inj| {
@@ -293,7 +293,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     transpile_cmd.addArg(b.fmt("bin/{s}", .{exe.out_filename}));
     exe.step.dependOn(&transpile_cmd.step);
 
-    // --- ZX Site Main Executable --- //
+    // --- Ziex Site Main Executable --- //
     var user_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
     var import_it = exe.root_module.import_table.iterator();
     while (import_it.next()) |entry| {
@@ -343,7 +343,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     if (incremental) exe.incremental = true;
     b.installArtifact(exe);
 
-    // --- ZX WASM Main Executable --- //
+    // --- Ziex WASM Main Executable --- //
     const clients: ?*Clients = if (build_client_wasm) try b.allocator.create(Clients) else null;
     const manifest_path: LazyPath = if (build_client_wasm) blk: {
         const wasm_exe = b.addExecutable(.{
@@ -504,11 +504,11 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         b.getInstallStep().dependOn(&prerender_cmd.step);
     }
 
-    // --- Steps: ZX (Root of ZX CLI) --- //
+    // --- Steps: zx (Root of the Ziex CLI) --- //
     {
         const zx_step = b.step(
             "zx",
-            b.fmt("ZX CLI - \x1b[2m{s}\x1b[0m", .{"zig build zx -- <args>"}),
+            b.fmt("Ziex CLI - \x1b[2m{s}\x1b[0m", .{"zig build zx -- <args>"}),
         );
         const zx_cmd = cliRun(b, zx_cli, opts);
         zx_step.dependOn(&zx_cmd.step);

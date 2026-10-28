@@ -24,7 +24,7 @@ Start dev server (http://localhost:3000):
 npx vercel dev
 ```
 
-Every [ZX CLI](https://ziex.dev/reference#cli) command is available as `npx zx <command>`.
+Every [Ziex CLI](https://ziex.dev/reference#cli) command is available as `npx zx <command>`.
 
 ## Deploying
 

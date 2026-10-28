@@ -10,7 +10,7 @@ test.describe('Markdown (MDZX) Example', () => {
     await expect(page.getByRole('heading', { name: 'H1 Header', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Formatting' })).toBeVisible();
     await expect(page.getByText('/examples/md')).toBeVisible();
-    await expect(page.getByText(/Hello,\s*ZX\s*Dev!/i)).toBeVisible();
+    await expect(page.getByText(/Hello,\s*Ziex\s*Dev!/i)).toBeVisible();
     // Greeting.mdzx props component (avoid loose "Ziex" which matches the brand link)
     await expect(page.getByRole('heading', { name: 'Hello' })).toBeVisible();
     await expect(page.getByText('greeting.mdzx')).toBeVisible();

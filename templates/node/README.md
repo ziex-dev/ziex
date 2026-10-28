@@ -10,7 +10,7 @@
 
 ## Developing
 
-No global Zig or ZX install needed; works with any Node package manager (npm, pnpm, yarn, bun).
+No global Zig or Ziex install needed; works with any Node package manager (npm, pnpm, yarn, bun).
 
 ```bash
 npm install
@@ -40,7 +40,7 @@ Format code:
 npm run fmt -- .
 ```
 
-Every [ZX CLI](https://ziex.dev/reference#cli) command is available as `npx zx <command>`.
+Every [Ziex CLI](https://ziex.dev/reference#cli) command is available as `npx zx <command>`.
 
 Built with
 

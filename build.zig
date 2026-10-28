@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) !void {
     lang_mod.addImport("tree_sitter_zx", tree_sitter_zx_dep.module("tree_sitter_zx"));
     lang_mod.addImport("tree_sitter_mdzx", tree_sitter_mdzx_dep.module("tree_sitter_mdzx"));
 
-    // --- Main ZX Module --- //
+    // --- Main `zx` Module --- //
     const mod = b.addModule("zx", .{ .root_source_file = b.path("src/root.zig"), .target = target, .optimize = optimize });
 
     // Imports (zx)
@@ -73,7 +73,7 @@ pub fn build(b: *std.Build) !void {
         mod.addOptions("zx_info", options);
     }
 
-    // --- ZX CLI (Transpiler, Exporter, Dev Server) --- //
+    // --- Ziex CLI (Transpiler, Exporter, Dev Server) --- //
     // Vendored from https://codeberg.org/ziglang/zig/pulls/31620 until it is merged.
     const std_cli_mod = b.createModule(.{
         .root_source_file = b.path("vendor/std/cli.zig"),

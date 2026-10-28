@@ -17,7 +17,7 @@ param(
 # filter out 32 bit + ARM
 if (-not ((Get-CimInstance Win32_ComputerSystem)).SystemType -match "x64-based") {
   Write-Output "Install Failed:"
-  Write-Output "ZX for Windows is currently only available for x86 64-bit Windows.`n"
+  Write-Output "Ziex for Windows is currently only available for x86 64-bit Windows.`n"
   return 1
 }
 
@@ -27,7 +27,7 @@ $MinBuildName = "Windows 10 1809 / Windows Server 2019"
 
 $WinVer = [System.Environment]::OSVersion.Version
 if ($WinVer.Major -lt 10 -or ($WinVer.Major -eq 10 -and $WinVer.Build -lt $MinBuild)) {
-  Write-Warning "ZX requires at ${MinBuildName} or newer.`n`nThe install will still continue but it may not work.`n"
+  Write-Warning "Ziex requires at ${MinBuildName} or newer.`n`nThe install will still continue but it may not work.`n"
   return 1
 }
 
@@ -89,7 +89,7 @@ function Get-Env {
 
 # The installation of zx is it's own function so that in the unlikely case the $IsBaseline check fails, we can do a recursive call.
 # There are also lots of sanity checks out of fear of anti-virus software or other weird Windows things happening.
-function Install-ZX {
+function Install-Ziex {
   param(
     [string]$Version,
     [bool]$ForceBaseline = $False
@@ -122,7 +122,7 @@ function Install-ZX {
   } catch [System.UnauthorizedAccessException] {
     $openProcesses = Get-Process -Name zx | Where-Object { $_.Path -eq "${ZxBin}\zx.exe" }
     if ($openProcesses.Count -gt 0) {
-      Write-Output "Install Failed - An older installation exists and is open. Please close open ZX processes and try again."
+      Write-Output "Install Failed - An older installation exists and is open. Please close open Ziex processes and try again."
       return 1
     }
     Write-Output "Install Failed - An unknown error occurred while trying to remove the existing installation"
@@ -144,10 +144,10 @@ function Install-ZX {
   $ZipPath = "${ZxBin}\$Target.zip"
 
   $DisplayVersion = $(
-    if ($Version -eq "latest") { "ZX" }
-    elseif ($Version -eq "canary") { "ZX Canary" }
-    elseif ($Version -match "^zx-v\d+\.\d+\.\d+$") { "ZX $($Version.Substring(4))" }
-    else { "ZX tag='${Version}'" }
+    if ($Version -eq "latest") { "Ziex" }
+    elseif ($Version -eq "canary") { "Ziex Canary" }
+    elseif ($Version -match "^zx-v\d+\.\d+\.\d+$") { "Ziex $($Version.Substring(4))" }
+    else { "Ziex tag='${Version}'" }
   )
 
   $null = mkdir -Force $ZxBin
@@ -214,7 +214,7 @@ function Install-ZX {
     Write-Output "Install Failed - zx.exe is not compatible with your CPU. This should have been detected before downloading.`n"
     Write-Output "Attempting to download zx.exe (baseline) instead.`n"
 
-    Install-ZX -Version $Version -ForceBaseline $True
+    Install-Ziex -Version $Version -ForceBaseline $True
     return 1
   }
   # '-1073741515' was spotted in the wild, but not clearly documented as a status code:
@@ -224,7 +224,7 @@ function Install-ZX {
   { 
     Write-Output "Install Failed - You are missing a DLL required to run zx.exe"
     Write-Output "This can be solved by installing the Visual C++ Redistributable from Microsoft:`nSee https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist`nDirect Download -> https://aka.ms/vs/17/release/vc_redist.x64.exe`n`n"
-    Write-Output "The error above should be unreachable as ZX does not depend on this library. Please open a issue.`n`n"
+    Write-Output "The error above should be unreachable as Ziex does not depend on this library. Please open a issue.`n`n"
     Write-Output "The command '${ZxBin}\zx.exe --revision' exited with code ${LASTEXITCODE}`n"
     return 1
   }
@@ -264,7 +264,7 @@ function Install-ZX {
   $C_RESET = [char]27 + "[0m"
   $C_GREEN = [char]27 + "[1;32m"
 
-  Write-Output "${C_GREEN}ZX ${DisplayVersion} was installed successfully!${C_RESET}"
+  Write-Output "${C_GREEN}Ziex ${DisplayVersion} was installed successfully!${C_RESET}"
   Write-Output "The binary is located at ${ZxBin}\zx.exe`n"
 
   $hasExistingOther = $false;
@@ -281,7 +281,7 @@ function Install-ZX {
     try {
       $RegistryKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ZX"  
       $rootKey = New-Item -Path $RegistryKey -Force
-      New-ItemProperty -Path $RegistryKey -Name "DisplayName" -Value "ZX" -PropertyType String -Force | Out-Null
+      New-ItemProperty -Path $RegistryKey -Name "DisplayName" -Value "Ziex" -PropertyType String -Force | Out-Null
       New-ItemProperty -Path $RegistryKey -Name "InstallLocation" -Value "${ZxRoot}" -PropertyType String -Force | Out-Null
       New-ItemProperty -Path $RegistryKey -Name "DisplayIcon" -Value $ZxBin\zx.exe -PropertyType String -Force | Out-Null
       New-ItemProperty -Path $RegistryKey -Name "UninstallString" -Value "powershell -c `"& `'$ZxRoot\uninstall.ps1`' -PauseOnError`" -ExecutionPolicy Bypass" -PropertyType String -Force | Out-Null
@@ -311,4 +311,4 @@ function Install-ZX {
   $LASTEXITCODE = 0;
 }
 
-Install-ZX -Version $Version -ForceBaseline $ForceBaseline
+Install-Ziex -Version $Version -ForceBaseline $ForceBaseline

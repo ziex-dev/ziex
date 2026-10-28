@@ -88,7 +88,7 @@ ZLS options go in the `zls` section of `eglot-workspace-configuration` (use
 ```
 
 Turn on `eglot-inlay-hints-mode` to see inlay hints. See the
-[editor guide](../README.md) for the ZX defaults.
+[editor guide](../README.md) for the Ziex defaults.
 
 ## Customization
 

@@ -1,4 +1,4 @@
-/// ZXON - ZX Object Notation (Ziex Exchange Object Notation)
+/// ZXON - Ziex Object Notation
 ///
 /// A compact positional serialization format for Zig types. Structs are encoded
 /// as ordered value arrays `[field1, field2, ...]` - field names are known at

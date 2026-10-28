@@ -130,7 +130,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
             <section class="section docs-page-header">
                 <p class="section-category">Reference</p>
                 <h1>API Reference</h1>
-                <p class="lead">Syntax, APIs, and behavior details for ZX templates, routing, and tooling.</p>
+                <p class="lead">Syntax, APIs, and behavior details for ZX templates and Ziex's routing and tooling.</p>
             </section>
             // <Introduction />
             <section id="expressions" class="section">
@@ -224,7 +224,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
             </section>
             <section id="routing" class="section">
                 <h2>Routing</h2>
-                <p>ZX provides a file-based routing system that maps URL paths to page components. Routes can be nested, and layouts can be applied hierarchically to wrap pages with common UI elements.</p>
+                <p>Ziex provides a file-based routing system that maps URL paths to page components. Routes can be nested, and layouts can be applied hierarchically to wrap pages with common UI elements.</p>
                 <h3 id="pages">Pages</h3>
                 <p>Pages are the main content components for each route. A page function must:</p>
                 <ul>
@@ -302,7 +302,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                 <p>State is stored per-component-instance and survives re-renders. On the server (SSR), <code>ctx.state()</code> always returns the initial value.</p>
 
                 <h4 id="client-events">Event handlers</h4>
-                <p>ZX provides three ways to attach event handlers to client components:</p>
+                <p>Ziex provides three ways to attach event handlers to client components:</p>
                 <p><strong>1. Simple handler</strong> - for reading the event without touching state:</p>
                 <CodeBlock code={csr_simple_handler_example} />
                 <p>The handler receives a <code>zx.client.Event</code> value. Useful methods:</p>
@@ -332,7 +332,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                 <ul>
                     <li><code>fn(zx.server.Action) void</code>{" "}or <code>fn(*zx.server.Action) void</code>{" "}- parse fields with <code>data(T)</code>; also exposes <code>request</code>, <code>response</code>, and <code>arena</code></li>
                     <li><code>fn(*zx.server.Action.Stateful) void</code>{" "}with <code>ctx.bind()</code>{" "}- update bound component state on the server</li>
-                    <li>You can also pass a struct directly as the handler parameter (e.g. <code>fn(data: FormData) void</code>) and ZX will coerce the form fields into that type</li>
+                    <li>You can also pass a struct directly as the handler parameter (e.g. <code>fn(data: FormData) void</code>) and Ziex will coerce the form fields into that type</li>
                 </ul>
                 <p>Supported <code>data(T)</code>{" "}field types include <code>[]const u8</code>, integers, floats, bools, optionals, <code>[]const []const u8</code>{" "}for multi-value fields, and on the server <code>zx.File</code>{" "}/ <code>?zx.File</code>{" "}for multipart uploads.</p>
 
@@ -363,7 +363,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
             </section>
             <section id="dynamic-routes" class="section">
                 <h2>Dynamic Routes</h2>
-                <p>ZX supports dynamic route segments using bracket notation in folder names.</p>
+                <p>Ziex supports dynamic route segments using bracket notation in folder names.</p>
                 <h3>Creating Dynamic Routes</h3>
                 <p>Create a folder with brackets around the parameter name:</p>
                 <ul>
@@ -441,7 +441,7 @@ fn APIAndWebSockets(allocator: zx.Allocator, props: APIAndWebSocketsProps) zx.Co
     return (
         <section id="api-and-websockets" class="section" @allocator={allocator}>
             <h2>API and WebSockets</h2>
-            <p>ZX allows you to create server-side APIs and WebSocket handlers by adding a <code>route.zig</code> file to any route directory. This is similar to <code>page.zx</code> but for handling raw HTTP requests and real-time communication.</p>
+            <p>Ziex allows you to create server-side APIs and WebSocket handlers by adding a <code>route.zig</code> file to any route directory. This is similar to <code>page.zx</code> but for handling raw HTTP requests and real-time communication.</p>
 
             <h3 id="api-routes">API Routes</h3>
             <p>To create an API route, define a <code>route.zig</code> file and export functions for the HTTP methods you want to handle (<code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code>, etc.).</p>
@@ -458,7 +458,7 @@ fn APIAndWebSockets(allocator: zx.Allocator, props: APIAndWebSocketsProps) zx.Co
             </ul>
 
             <h3 id="websockets">WebSockets</h3>
-            <p>ZX has first-class support for WebSockets. You can upgrade an API request to a WebSocket connection and handle real-time messages with simple lifecycle hooks.</p>
+            <p>Ziex has first-class support for WebSockets. You can upgrade an API request to a WebSocket connection and handle real-time messages with simple lifecycle hooks.</p>
             <CodeBlock code={props.ws_code} filename="routes/ws/route.zig" />
 
             <h4 id="websocket-lifecycle">Lifecycle Handlers</h4>
@@ -497,7 +497,7 @@ fn CachingSection(allocator: zx.Allocator) zx.Component {
     return (
         <section id="caching" class="section" @allocator={allocator}>
             <h2>Caching <span class="badge">Alpha</span></h2>
-            <p>ZX provides built-in caching for components, pages, and layouts to improve performance. Cached content is persisted on disk and served directly without re-rendering.</p>
+            <p>Ziex provides built-in caching for components, pages, and layouts to improve performance. Cached content is persisted on disk and served directly without re-rendering.</p>
 
             <h3 id="caching-enabling">Enabling</h3>
             <p>Caching is disabled by default. Enable it in <code>build.zig</code> by passing <code>features</code> to your <code>ziex.init</code> call:</p>
@@ -600,10 +600,10 @@ fn CLISection(allocator: zx.Allocator) zx.Component {
     return (
         <section id="cli" class="section" @allocator={allocator}>
             <h2>Command Line Interface</h2>
-            <p>ZX comes with a built-in CLI tool to help you create, develop, and deploy your projects.</p>
+            <p>Ziex comes with a built-in CLI tool to help you create, develop, and deploy your projects.</p>
 
             <h3 id="cli-installation">Installation</h3>
-            <p>Install the ZX CLI using one of the following methods:</p>
+            <p>Install the Ziex CLI using one of the following methods:</p>
             <InstallCLI />
 
             {for (cli_commands) |cmd| (

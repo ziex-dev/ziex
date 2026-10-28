@@ -72,7 +72,7 @@ pub fn Sidebar(allocator: zx.Allocator, props: SidebarProps) zx.Component {
                             )}
                         </nav>
                         <div class="top-bar-actions">
-                            <a href="/r/discord" target="_blank" rel="noopener noreferrer" class="top-bar-icon" aria-label="Discord" title="ZX Discord">
+                            <a href="/r/discord" target="_blank" rel="noopener noreferrer" class="top-bar-icon" aria-label="Discord" title="Ziex Discord">
                                 <DiscordIcon allocator={allocator} />
                             </a>
                             <a href={zx.info.repository} target="_blank" rel="noopener noreferrer" class="top-bar-icon" aria-label="GitHub" title="v{zx.info.version}">
