@@ -3,8 +3,8 @@ import { Suspending } from "./jspi";
 export type WsState = {
     upgraded: boolean;
     server: WebSocket | null;
-    // Written before `server` exists (e.g. in `socket_open`).
-    pendingWrites: Uint8Array[];
+    // Written before `server` exists (e.g. in `socket_open`). Strings are text frames.
+    pendingWrites: (string | Uint8Array)[];
     messageQueue: Uint8Array[];
     // `null` means closed.
     recvResolve: ((bytes: Uint8Array | null) => void) | null;
@@ -58,8 +58,8 @@ export function buildWsImports(
 
     return {
         upgrade: (): void => { ws.upgraded = true; },
-        write: (ptr: number, len: number): void => {
-            const data = readBytes(ptr, len).slice();
+        write: (ptr: number, len: number, binary: number): void => {
+            const data = binary ? readBytes(ptr, len).slice() : readStr(ptr, len);
             if (ws.server) ws.server.send(data);
             else ws.pendingWrites.push(data);
         },
@@ -100,6 +100,6 @@ export function attachWebSocket(ws: WsState): { client: WebSocket } {
     const pending = ws.pendingWrites;
     ws.pendingWrites = [];
     const { client, server } = acceptWebSocketPair(ws);
-    for (const data of pending) server.send(data as BufferSource);
+    for (const data of pending) server.send(data as string | BufferSource);
     return { client };
 }

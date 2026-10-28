@@ -197,7 +197,7 @@ test "dev > leaks" {
     defer writePage(page_path, original, &.{}) catch {};
 
     const anchor = "Build full-stack web apps with Zig.";
-    const body_start = "    const query = ctx.request.queries;\n";
+    const body_start = "    const query = ctx.request.query;\n";
     const leak = body_start ++ "    _ = zx.allocator.alloc(u8, 16) catch {};\n";
     try std.testing.expect(std.mem.indexOf(u8, original, body_start) != null);
     try writePage(page_path, original, &.{ .{ body_start, leak }, .{ anchor, "zx-dev-leak-0" } });

@@ -17,7 +17,7 @@ pub fn handleRequest(ctx: zx.PageContext) RequestInfo {
     // Load from KV synchronously
     syncFromKv(ctx, &users);
 
-    const qs = ctx.request.queries;
+    const qs = ctx.request.query;
 
     const is_reset = qs.get("reset") != null;
     const is_delete = qs.get("delete") != null;
@@ -45,7 +45,7 @@ pub fn handleRequest(ctx: zx.PageContext) RequestInfo {
     if (is_delete or is_add or is_reset) {
         // Save back to KV before redirecting
         syncToKv(ctx, &users);
-        ctx.response.setHeader("Location", "/examples/form");
+        ctx.response.headers.set("Location", "/examples/form");
         ctx.response.setStatus(.found);
     }
 

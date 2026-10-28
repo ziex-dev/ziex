@@ -1,7 +1,7 @@
 pub fn Page(ctx: zx.PageContext) zx.Component {
     var chat_username = ctx.request.cookies.get("username") orelse "";
-    const set_username = ctx.request.queries.get("username") orelse "";
-    const leave_username = ctx.request.queries.get("leave") orelse "";
+    const set_username = ctx.request.query.get("username") orelse "";
+    const leave_username = ctx.request.query.get("leave") orelse "";
     if (set_username.len > 0) {
         ctx.response.cookies.set("username", set_username, .{});
         chat_username = set_username;
@@ -131,7 +131,7 @@ fn sendMessage(e: zx.client.Event) void {
 
     if (ws) |*w| {
         if (w.isConnected()) {
-            w.send(text) catch {};
+            w.send(.{ .text = text }) catch {};
             input.ref.set("value", zx.client.js.string("")) catch {};
         }
     }

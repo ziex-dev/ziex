@@ -7,11 +7,11 @@ pub fn GET(ctx: zx.RouteContext) !void {
 
 pub fn Socket(ctx: zx.SocketContext) !void {
     // Echo back the received message
-    try ctx.socket.write(
-        try ctx.fmt("You said: {s}", .{ctx.message}),
-    );
+    try ctx.socket.send(.{
+        .text = try ctx.fmt("You said: {s}", .{ctx.message.bytes()}),
+    });
 }
 
 pub fn SocketOpen(ctx: zx.SocketOpenContext) !void {
-    try ctx.socket.write("Welcome to the WebSocket!");
+    try ctx.socket.send(.{ .text = "Welcome to the WebSocket!" });
 }

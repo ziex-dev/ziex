@@ -79,7 +79,6 @@ pub const SocketOpenContext = routing.SocketOpenContext;
 pub const SocketOpenCtx = routing.SocketOpenCtx;
 pub const SocketCloseContext = routing.SocketCloseContext;
 pub const SocketCloseCtx = routing.SocketCloseCtx;
-pub const SocketMessageType = routing.SocketMessageType;
 pub const ComponentCtx = ctxs.ComponentCtx;
 pub const ComponentContext = ComponentCtx(void);
 pub const StateContext = event.StateContext;
@@ -103,7 +102,6 @@ pub var cache: Cache = .failing;
 
 // --- Net --- //
 pub const Http = @import("runtime/core/Http.zig");
-pub const Headers = @import("runtime/core/Http/Headers.zig");
 pub const Fetch = @import("runtime/core/Fetch.zig");
 pub const WebSocket = @import("runtime/core/WebSocket.zig");
 pub const Io = Fetch.Io;

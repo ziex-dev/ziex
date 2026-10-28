@@ -285,8 +285,8 @@ pub fn Backend(comptime H: type) type {
                             if (handlers.socket) |socket_fn| {
                                 var msg_arena: std.heap.ArenaAllocator = .init(ctx.server.allocator);
                                 defer msg_arena.deinit();
-                                const msg_type: Pipeline.SocketMessageType = if (msg.type == .binary) .binary else .text;
-                                socket_fn(sock, msg.data, msg_type, upgrade_data, ctx.server.allocator, msg_arena.allocator(), ctx.server.io) catch {};
+                                const message: zx.WebSocket.Message = if (msg.type == .binary) .{ .binary = msg.data } else .{ .text = msg.data };
+                                socket_fn(sock, message, upgrade_data, ctx.server.allocator, msg_arena.allocator(), ctx.server.io) catch {};
                             }
                         },
                         else => {},
@@ -312,7 +312,7 @@ const Ws = struct {
 
     const vtable = blk: {
         var vt = zx.Http.failing_vtable;
-        vt.wsWrite = &write;
+        vt.wsSend = &send;
         vt.wsClose = &close;
         vt.wsSubscribe = &subscribe;
         vt.wsUnsubscribe = &unsubscribe;
@@ -326,8 +326,11 @@ const Ws = struct {
         return @ptrCast(@alignCast(userdata.?));
     }
 
-    fn write(userdata: ?*anyopaque, data: []const u8) anyerror!void {
-        try of(userdata).ws.send(.text, data);
+    fn send(userdata: ?*anyopaque, message: zx.WebSocket.Message) anyerror!void {
+        switch (message) {
+            .text => |data| try of(userdata).ws.send(.text, data),
+            .binary => |data| try of(userdata).ws.send(.binary, data),
+        }
     }
 
     fn close(userdata: ?*anyopaque) void {

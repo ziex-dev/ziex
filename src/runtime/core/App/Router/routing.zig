@@ -2,6 +2,7 @@ const std = @import("std");
 const Request = @import("../../Http/Request.zig");
 const Response = @import("../../Http/Response.zig");
 const Http = @import("../../Http.zig");
+const WebSocket = @import("../../WebSocket.zig");
 
 pub const PageData = struct {
     const Store = struct {
@@ -38,7 +39,7 @@ pub const PageData = struct {
 pub const BaseContext = struct {
     const Self = @This();
 
-    /// The incoming request, use this to access request body, headers, queries, etc.
+    /// The incoming request, use this to access request body, headers, query, etc.
     request: Request,
     /// The outgoing response, use this to populate response body, status, headers, etc.
     response: Response,
@@ -72,7 +73,7 @@ pub const LayoutContext = BaseContext;
 pub const NotFoundContext = BaseContext;
 
 pub const ErrorContext = struct {
-    /// The incoming request, use this to access request body, headers, queries, etc.
+    /// The incoming request, use this to access request body, headers, query, etc.
     request: Request,
     /// The outgoing response, use this to populate response body, status, headers, etc.
     response: Response,
@@ -124,12 +125,18 @@ pub const Socket = struct {
         }
     }
 
-    pub fn write(self: Socket, data: []const u8) !void {
+    /// Sends a text or binary message to the client.
+    ///
+    /// Example:
+    /// ```zig
+    /// try ctx.socket.send(.{ .text = "Hello!" });
+    /// ```
+    pub fn send(self: Socket, message: WebSocket.Message) !void {
         if (!self._internal.attached) return;
-        try self._internal.http.wsWrite(data);
+        try self._internal.http.wsSend(message);
     }
 
-    pub fn read(self: Socket) ?[]const u8 {
+    pub fn read(self: Socket) ?WebSocket.Message {
         if (!self._internal.attached) return null;
         return self._internal.http.wsRead();
     }
@@ -192,18 +199,6 @@ pub const Socket = struct {
         return self._internal.http.wsIsSubscribed(topic);
     }
 
-    /// Configure whether publish() sends to self.
-    ///
-    /// Example:
-    /// ```zig
-    /// ctx.socket.setPublishToSelf(true);
-    /// // Now publish() will include the sender
-    /// ```
-    pub fn setPublishToSelf(self: Socket, value: bool) void {
-        if (!self._internal.attached) return;
-        self._internal.http.wsSetPublishToSelf(value);
-    }
-
     /// Configure socket options.
     ///
     /// Example:
@@ -211,7 +206,8 @@ pub const Socket = struct {
     /// ctx.socket.configure(.{ .publish_to_self = true });
     /// ```
     pub fn configure(self: Socket, options: SocketOptions) void {
-        self.setPublishToSelf(options.publish_to_self);
+        if (!self._internal.attached) return;
+        self._internal.http.wsSetPublishToSelf(options.publish_to_self);
     }
 };
 
@@ -252,11 +248,6 @@ pub const RouteContext = struct {
     }
 };
 
-pub const SocketMessageType = enum {
-    text,
-    binary,
-};
-
 /// Context for WebSocket message handlers
 pub const SocketContext = SocketCtx(void);
 
@@ -265,10 +256,8 @@ pub fn SocketCtx(comptime DataType: type) type {
     return struct {
         /// The WebSocket connection for sending messages
         socket: Socket,
-        /// The client message data
-        message: []const u8,
-        /// The message type
-        message_type: SocketMessageType,
+        /// The client message
+        message: WebSocket.Message,
         /// Custom data passed from upgrade handler
         data: DataType,
         /// Global allocator

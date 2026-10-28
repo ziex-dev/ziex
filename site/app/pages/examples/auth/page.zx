@@ -1,7 +1,7 @@
 pub fn Page(ctx: zx.PageContext, _: void, state: AuthState) zx.Component {
     const allocator = ctx.arena;
     const auth = state;
-    const msg = ctx.request.queries.get("msg");
+    const msg = ctx.request.query.get("msg");
 
     // Handle login/logout POST actions
     handleAction(ctx);
@@ -54,7 +54,7 @@ fn handleAction(ctx: zx.PageContext) void {
     }
 
     // Redirect back to GET to avoid form resubmission
-    ctx.response.setHeader("Location", "/examples/auth");
+    ctx.response.headers.set("Location", "/examples/auth");
     ctx.response.setStatus(.found);
 }
 

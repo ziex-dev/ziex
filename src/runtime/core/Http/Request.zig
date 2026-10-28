@@ -57,13 +57,13 @@ cookies: Cookies = .{ .header_value = "" },
 /// URL search parameters accessor.
 ///
 /// MDN: [URLSearchParams](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams)
-queries: URLSearchParams = .{},
+query: UrlSearchParams = .{},
 
 /// URL parameters accessor from route matching.
 params: Params = .{},
 
 /// HTTP protocol version (HTTP/1.0 or HTTP/1.1).
-protocol: Version = .@"HTTP/1.1",
+version: Version = .@"HTTP/1.1",
 
 /// Arena allocator for request-scoped allocations.
 arena: std.mem.Allocator,
@@ -99,19 +99,19 @@ pub fn multiFormData(self: *const Request) MultiFormDataModule {
 /// The URLSearchParams interface defines utility methods to work with the query string of a URL.
 ///
 /// MDN: [URLSearchParams](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams)
-pub const URLSearchParams = struct {
+pub const UrlSearchParams = struct {
     _internal: Http.Facade = .{},
 
     /// Returns the first value associated with the given search parameter.
     /// MDN: [URLSearchParams.get](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/get)
-    pub fn get(self: *const URLSearchParams, name: []const u8) ?[]const u8 {
+    pub fn get(self: *const UrlSearchParams, name: []const u8) ?[]const u8 {
         return self._internal.http.reqQueryGet(name);
     }
 
     /// Returns a boolean indicating if the given parameter exists.
     ///
     /// MDN: [URLSearchParams.has](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/has)
-    pub fn has(self: *const URLSearchParams, name: []const u8) bool {
+    pub fn has(self: *const UrlSearchParams, name: []const u8) bool {
         return self._internal.http.reqQueryHas(name);
     }
 };
@@ -172,7 +172,7 @@ pub const Init = struct {
     pathname: []const u8 = "/",
     referrer: []const u8 = "",
     search: []const u8 = "",
-    protocol: Version = .@"HTTP/1.1",
+    version: Version = .@"HTTP/1.1",
     arena: std.mem.Allocator,
     cookie_header: []const u8 = "",
     http: Http = .{},
@@ -186,12 +186,12 @@ pub fn init(opts: Init) Request {
         .pathname = opts.pathname,
         .referrer = opts.referrer,
         .search = opts.search,
-        .protocol = opts.protocol,
+        .version = opts.version,
         .arena = opts.arena,
         ._internal = .{ .http = opts.http },
         .headers = .{ ._internal = .{ .http = opts.http } },
         .cookies = .{ .header_value = opts.cookie_header },
-        .queries = .{ ._internal = .{ .http = opts.http } },
+        .query = .{ ._internal = .{ .http = opts.http } },
         .params = .{ ._internal = .{ .http = opts.http } },
     };
 }

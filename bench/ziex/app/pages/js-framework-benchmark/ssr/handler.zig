@@ -33,18 +33,18 @@ fn createRows(count: usize, clear_first: bool) void {
 }
 
 fn redirect(ctx: zx.PageContext) void {
-    ctx.response.setHeader("Location", "/js-framework-benchmark/ssr");
+    ctx.response.headers.set("Location", "/js-framework-benchmark/ssr");
     ctx.response.setStatus(.found);
 }
 
 pub fn handleRequest(ctx: zx.PageContext) BenchState {
     const io = zx.io();
     // Add CORS headers to allow requests from the benchmark server
-    ctx.response.setHeader("Access-Control-Allow-Origin", "*");
-    ctx.response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    ctx.response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    ctx.response.headers.set("Access-Control-Allow-Origin", "*");
+    ctx.response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    ctx.response.headers.set("Access-Control-Allow-Headers", "Content-Type");
 
-    const qs = ctx.request.queries;
+    const qs = ctx.request.query;
 
     const action = qs.get("action");
     if (action) |a| {

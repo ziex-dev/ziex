@@ -30,7 +30,7 @@ test "req > init default" {
     try std.testing.expectEqualStrings("", req.search);
     try std.testing.expectEqualStrings("", req.referrer);
     try std.testing.expectEqual(Request.Method.GET, req.method);
-    try std.testing.expectEqual(Request.Version.@"HTTP/1.1", req.protocol);
+    try std.testing.expectEqual(Request.Version.@"HTTP/1.1", req.version);
 }
 
 test "req > text no backend" {
@@ -80,25 +80,25 @@ test "req > headers.has no backend" {
     try std.testing.expect(!req.headers.has("Content-Type"));
 }
 
-// --- URLSearchParams --- //
+// --- UrlSearchParams --- //
 
-test "req > queries.get no backend" {
+test "req > query.get no backend" {
     var buffer: [1024]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
     const req = Request.init(.{ .arena = fba.allocator() });
-    try std.testing.expect(req.queries.get("q") == null);
+    try std.testing.expect(req.query.get("q") == null);
 }
 
-test "req > queries.has no backend" {
+test "req > query.has no backend" {
     var buffer: [1024]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
     const req = Request.init(.{ .arena = fba.allocator() });
-    try std.testing.expect(!req.queries.has("q"));
+    try std.testing.expect(!req.query.has("q"));
 }
 
-test "conn > queries.get percent-decodes values" {
+test "conn > query.get percent-decodes values" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -108,11 +108,11 @@ test "conn > queries.get percent-decodes values" {
     conn.search = "?msg=hello%20world&q=a+b&flag";
 
     const req = conn.request(.GET, "/", "/?msg=hello%20world&q=a+b&flag");
-    try std.testing.expectEqualStrings("hello world", req.queries.get("msg").?);
-    try std.testing.expectEqualStrings("a b", req.queries.get("q").?);
-    try std.testing.expectEqualStrings("", req.queries.get("flag").?);
-    try std.testing.expect(req.queries.has("msg"));
-    try std.testing.expect(!req.queries.has("missing"));
+    try std.testing.expectEqualStrings("hello world", req.query.get("msg").?);
+    try std.testing.expectEqualStrings("a b", req.query.get("q").?);
+    try std.testing.expectEqualStrings("", req.query.get("flag").?);
+    try std.testing.expect(req.query.has("msg"));
+    try std.testing.expect(!req.query.has("missing"));
 }
 
 // --- Init --- //
@@ -127,7 +127,7 @@ test "req > init custom" {
         .pathname = "/api/users",
         .search = "?page=1",
         .referrer = "https://example.com",
-        .protocol = .@"HTTP/1.0",
+        .version = .@"HTTP/1.0",
         .cookie_header = "session=xyz",
         .arena = fba.allocator(),
     });
@@ -137,14 +137,14 @@ test "req > init custom" {
     try std.testing.expectEqualStrings("/api/users", req.pathname);
     try std.testing.expectEqualStrings("?page=1", req.search);
     try std.testing.expectEqualStrings("https://example.com", req.referrer);
-    try std.testing.expectEqual(Request.Version.@"HTTP/1.0", req.protocol);
+    try std.testing.expectEqual(Request.Version.@"HTTP/1.0", req.version);
     try std.testing.expectEqualStrings("xyz", req.cookies.get("session").?);
 }
 
 // --- Type Re-exports --- //
 
 test "res > status" {
-    try std.testing.expect(Response.HttpStatus == std.http.Status);
+    try std.testing.expect(zx.Http.Status == std.http.Status);
 }
 
 test "res > content type" {
@@ -159,7 +159,7 @@ test "res > cookie options" {
 
 test "res > headers" {
     const headers = Response.Headers{};
-    // Response.Headers has get, set, add methods
+    // Response.Headers has get, set, append methods
     try std.testing.expect(headers.get("X-Test") == null);
 }
 
@@ -191,7 +191,7 @@ test "res > redirect no backend" {
     const res = Response.init(.{ .arena = fba.allocator() });
 
     res.redirect("/new", null);
-    res.redirect("/permanent", 301);
+    res.redirect("/permanent", .moved_permanently);
 }
 
 // --- Headers --- //
@@ -211,94 +211,7 @@ test "res > headers.set no backend" {
     const res = Response{ .arena = fba.allocator() };
     // These should not crash (no-op without backend)
     res.headers.set("X-Test", "value");
-    res.headers.add("X-Test", "value2");
-}
-
-const Headers = @import("zx").Headers;
-
-// --- Type Re-exports --- //
-
-test "headers > header" {
-    try std.testing.expect(Headers.Header == std.http.Header);
-}
-
-test "headers > iterator" {
-    try std.testing.expect(Headers.HeaderIterator == std.http.HeaderIterator);
-}
-
-// --- HeaderIterator Usage --- //
-
-test "headers > iterator parse" {
-    const raw = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nX-Custom: value\r\n\r\n";
-    var iter = Headers.HeaderIterator.init(raw);
-
-    const h1 = iter.next().?;
-    try std.testing.expectEqualStrings("Content-Type", h1.name);
-    try std.testing.expectEqualStrings("text/html", h1.value);
-
-    const h2 = iter.next().?;
-    try std.testing.expectEqualStrings("X-Custom", h2.name);
-    try std.testing.expectEqualStrings("value", h2.value);
-
-    try std.testing.expect(iter.next() == null);
-}
-
-// --- Headers Instance (without backend) --- //
-
-test "headers > read-only" {
-    const headers = Headers{};
-    try std.testing.expect(headers.isReadOnly());
-}
-
-test "headers > writable" {
-    const headers = Headers{ .read_only = false };
-    try std.testing.expect(!headers.isReadOnly());
-}
-
-test "headers > get no backend" {
-    const headers = Headers{};
-    try std.testing.expect(headers.get("Content-Type") == null);
-}
-
-test "headers > has no backend" {
-    const headers = Headers{};
-    try std.testing.expect(!headers.has("Content-Type"));
-}
-
-test "headers > entries no backend" {
-    const headers = Headers{};
-    try std.testing.expect(headers.entries() == null);
-}
-
-test "headers > write no backend" {
-    var headers = Headers{ .read_only = false };
-    // These should not crash
-    headers.append("X-Test", "value");
-    headers.set("X-Test", "value");
-    headers.delete("X-Test");
-}
-
-test "headers > write read-only" {
-    var headers = Headers{}; // read_only = true by default
-    // These should not crash and should be no-ops
-    headers.append("X-Test", "value");
-    headers.set("X-Test", "value");
-}
-
-// --- Init --- //
-
-test "headers > builder default" {
-    const headers = (Headers.Builder{}).build();
-    try std.testing.expect(headers.read_only);
-    try std.testing.expect(headers.userdata == null);
-    try std.testing.expect(headers.vtable == null);
-}
-
-test "headers > builder custom" {
-    const headers = (Headers.Builder{
-        .read_only = false,
-    }).build();
-    try std.testing.expect(!headers.read_only);
+    res.headers.append("X-Test", "value2");
 }
 
 // --- Cookies (accessed via Request) --- //

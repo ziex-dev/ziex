@@ -7,7 +7,7 @@ pub fn Proxy(ctx: *zx.ProxyContext) !void {
     });
 
     if (isProtectedRoute(ctx.request.pathname) and session == null)
-        return ctx.response.redirect("/examples/auth?msg=You must be logged in to access /examples/auth/protected route", 302);
+        return ctx.response.redirect("/examples/auth?msg=You must be logged in to access /examples/auth/protected route", .found);
 
     ctx.next();
 }

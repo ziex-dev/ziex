@@ -44,7 +44,7 @@ pub fn GET(ctx: zx.RouteContext) !void {
     , .{ home, home });
 
     ctx.response.setContentType(.@"text/plain");
-    ctx.response.setHeader("Content-Type", "text/plain; charset=utf-8");
+    ctx.response.headers.set("Content-Type", "text/plain; charset=utf-8");
     ctx.response.text(aw.written());
 }
 

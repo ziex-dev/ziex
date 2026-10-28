@@ -217,8 +217,7 @@ pub const ServerApp = struct {
     /// Called for each message received from the client
     pub const SocketHandler = *const fn (
         socket: zx.Socket,
-        message: []const u8,
-        message_type: zx.SocketMessageType,
+        message: zx.WebSocket.Message,
         upgrade_data: ?[]const u8,
         allocator: std.mem.Allocator,
         arena: std.mem.Allocator,
@@ -370,7 +369,7 @@ pub const ServerApp = struct {
         const DataType = @TypeOf(@as(CtxType, undefined).data);
 
         return struct {
-            fn wrapper(socket: zx.Socket, message: []const u8, message_type: zx.SocketMessageType, upgrade_data: ?[]const u8, allocator: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) anyerror!void {
+            fn wrapper(socket: zx.Socket, message: zx.WebSocket.Message, upgrade_data: ?[]const u8, allocator: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) anyerror!void {
                 _ = arena;
                 const data: DataType = if (upgrade_data) |bytes|
                     std.mem.bytesToValue(DataType, bytes[0..@sizeOf(DataType)])
@@ -383,7 +382,6 @@ pub const ServerApp = struct {
                 const ctx = CtxType{
                     .socket = socket,
                     .message = message,
-                    .message_type = message_type,
                     .data = data,
                     .allocator = allocator,
                     .arena = arena_instance.allocator(),

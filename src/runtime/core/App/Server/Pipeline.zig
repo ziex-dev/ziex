@@ -20,7 +20,6 @@ pub const Component = zx.Component;
 pub const HeaderEntry = Conn.HeaderEntry;
 pub const PubSub = @import("PubSub.zig");
 pub const Socket = zx.Socket;
-pub const SocketMessageType = zx.SocketMessageType;
 pub const RouteHandlers = server_meta.ServerApp.RouteHandlers;
 pub const Meta = server_meta.ServerApp;
 

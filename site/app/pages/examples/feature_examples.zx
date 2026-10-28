@@ -328,13 +328,11 @@ pub fn GET(ctx: zx.RouteContext) !void {
 }
 
 pub fn Socket(ctx: zx.SocketContext) !void {
-    try ctx.socket.write(
-        try ctx.fmt("{s}", .{ctx.message}),
-    );
+    try ctx.socket.send(ctx.message);
 }
 
 pub fn SocketOpen(ctx: zx.SocketOpenContext) !void {
-    try ctx.socket.write("Opened!");
+    try ctx.socket.send(.{ .text = "Opened!" });
 }
 
 // --- Client-side Rendering ---
@@ -838,7 +836,7 @@ pub fn RefInline__GET(ctx: zx.RouteContext) !void {
 // --- Reference Inline: socket ctx ---
 pub fn RefInline__Socket(ctx: zx.SocketContext) !void {
     _ = ctx.socket; // WebSocket interface
-    _ = ctx.message; // Received message data
+    _ = ctx.message; // Received message (.text or .binary)
     _ = ctx.data; // Custom data from upgrade
     _ = ctx.arena; // Message-scoped allocator
 }
@@ -1220,10 +1218,9 @@ pub fn RenderTest(ctx: zx.PageContext) !zx.Component {
     };
     const socket_ctx = zx.SocketContext{
         .socket = .{},
-        .message = "Hello",
+        .message = .{ .text = "Hello" },
         .data = {},
         .allocator = allocator,
-        .message_type = .text,
         .arena = allocator,
         .io = ctx.io,
     };

@@ -54,16 +54,24 @@ pub const CloseEvent = struct {
     was_clean: bool,
 };
 
+/// A WebSocket message, sent or received, on the client or the server.
+pub const Message = union(enum) {
+    text: []const u8,
+    binary: []const u8,
+
+    /// The payload, whatever the message type.
+    pub fn bytes(self: Message) []const u8 {
+        return switch (self) {
+            inline else => |data| data,
+        };
+    }
+};
+
 /// Message event data passed to onmessage handler.
 /// https://developer.mozilla.org/en-US/docs/Web/API/MessageEvent
 pub const MessageEvent = struct {
     /// The data sent by the message emitter.
-    data: Data,
-
-    pub const Data = union(enum) {
-        text: []const u8,
-        binary: []const u8,
-    };
+    data: Message,
 
     /// Get data as text (for text messages)
     pub fn text(self: MessageEvent) ?[]const u8 {
@@ -225,8 +233,12 @@ _user_data: ?*anyopaque = null,
 /// Requested protocols during initialization.
 _requested_protocols: ?[]const []const u8 = null,
 
-/// Backend-specific context (platform implementation data).
-userdata: ?*anyopaque = null,
+_internal: Internal = .{},
+
+pub const Internal = struct {
+    /// Backend-specific context (platform implementation data).
+    userdata: ?*anyopaque = null,
+};
 
 /// Creates a new WebSocket connection to the specified URL.
 ///
@@ -278,18 +290,16 @@ pub fn connect(self: *WebSocket) Error!void {
     }
 }
 
-/// Transmits data to the server over the WebSocket connection.
+/// Transmits a text or binary message to the server over the WebSocket connection.
 ///
 /// https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/send
 ///
-/// **Parameters:**
-/// - `data`: The data to send. For text messages, use a string.
-///
 /// **Example:**
 /// ```zig
-/// try ws.send("Hello, Server!");
+/// try ws.send(.{ .text = "Hello, Server!" });
+/// try ws.send(.{ .binary = &[_]u8{ 0x01, 0x02, 0x03 } });
 /// ```
-pub fn send(self: *WebSocket, data: []const u8) Error!void {
+pub fn send(self: *WebSocket, message: Message) Error!void {
     if (self.ready_state != .open) {
         return if (self.ready_state == .connecting)
             error.NotConnected
@@ -297,35 +307,11 @@ pub fn send(self: *WebSocket, data: []const u8) Error!void {
             error.ConnectionClosed;
     }
 
-    if (is_wasm) {
-        return client_impl.send(self, data);
-    } else {
-        return server_impl.send(self, data);
-    }
-}
-
-/// Transmits binary data to the server over the WebSocket connection.
-///
-/// **Parameters:**
-/// - `data`: The binary data to send.
-///
-/// **Example:**
-/// ```zig
-/// try ws.sendBinary(&[_]u8{ 0x01, 0x02, 0x03 });
-/// ```
-pub fn sendBinary(self: *WebSocket, data: []const u8) Error!void {
-    if (self.ready_state != .open) {
-        return if (self.ready_state == .connecting)
-            error.NotConnected
-        else
-            error.ConnectionClosed;
-    }
-
-    if (is_wasm) {
-        return client_impl.sendBinary(self, data);
-    } else {
-        return server_impl.sendBinary(self, data);
-    }
+    const impl = if (is_wasm) client_impl else server_impl;
+    return switch (message) {
+        .text => |data| impl.send(self, data),
+        .binary => |data| impl.sendBinary(self, data),
+    };
 }
 
 /// Closes the WebSocket connection.

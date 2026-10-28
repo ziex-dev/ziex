@@ -10,6 +10,7 @@ const Request = @import("Request.zig");
 const Response = @import("Response.zig");
 const common = @import("common.zig");
 const MultiFormData = @import("MultiFormData.zig");
+const WebSocket = @import("../WebSocket.zig");
 const wasm_ext = @import("../../server/wasm/extern.zig");
 
 const is_wasm = builtin.cpu.arch == .wasm32 or builtin.cpu.arch == .wasm64;
@@ -113,13 +114,13 @@ const vtable = Http.VTable{
     .resSetBody = &resSetBody,
     .resHeaderGet = &resHeaderGet,
     .resHeaderSet = &resHeaderSet,
-    .resHeaderAdd = &resHeaderAdd,
+    .resHeaderAppend = &resHeaderAppend,
     .resWriter = &resWriter,
-    .resWriteChunk = &resWriteChunk,
+    .resWrite = &resWrite,
     .resClearWriter = &resClearWriter,
     .resSetCookie = &resSetCookie,
     .wsUpgrade = &wsUpgrade,
-    .wsWrite = &wsWrite,
+    .wsSend = &wsSend,
     .wsRead = &wsRead,
     .wsClose = &wsClose,
     .wsSubscribe = &wsSubscribe,
@@ -240,7 +241,7 @@ fn resHeaderSet(userdata: ?*anyopaque, name: []const u8, value: []const u8) void
     headerSet(self_(userdata), name, value);
 }
 
-fn resHeaderAdd(userdata: ?*anyopaque, name: []const u8, value: []const u8) void {
+fn resHeaderAppend(userdata: ?*anyopaque, name: []const u8, value: []const u8) void {
     const self = self_(userdata);
     self.resp_headers.append(self.allocator, .{ .name = name, .value = value }) catch {};
 }
@@ -251,7 +252,7 @@ fn resWriter(userdata: ?*anyopaque) ?*std.Io.Writer {
     return &self.deferred_aw.writer;
 }
 
-fn resWriteChunk(userdata: ?*anyopaque, data: []const u8) anyerror!void {
+fn resWrite(userdata: ?*anyopaque, data: []const u8) anyerror!void {
     const self = self_(userdata);
     if (self.out) |w| {
         try w.writeAll(data);
@@ -310,12 +311,12 @@ fn wsUpgrade(userdata: ?*anyopaque, data: ?[]const u8) anyerror!void {
     }
 }
 
-fn wsWrite(_: ?*anyopaque, data: []const u8) anyerror!void {
+fn wsSend(_: ?*anyopaque, message: WebSocket.Message) anyerror!void {
     if (comptime !is_wasm) return error.WebSocketNotConnected;
-    wasm_ext.ws.write(data);
+    wasm_ext.ws.write(message.bytes(), message == .binary);
 }
 
-fn wsRead(_: ?*anyopaque) ?[]const u8 {
+fn wsRead(_: ?*anyopaque) ?WebSocket.Message {
     return null;
 }
 

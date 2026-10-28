@@ -7,12 +7,12 @@ pub fn Socket(ctx: zx.SocketContext) !void {
 
     while (count < 10) : (count += 1) {
         std.Io.sleep(zx.io(), .fromMilliseconds(1000), .awake) catch {};
-        try ctx.socket.write(
-            try ctx.fmt("You said: {s}, count {d}", .{
-                ctx.message,
+        try ctx.socket.send(.{
+            .text = try ctx.fmt("You said: {s}, count {d}", .{
+                ctx.message.bytes(),
                 count,
             }),
-        );
+        });
     }
 }
 

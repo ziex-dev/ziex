@@ -6,5 +6,5 @@ pub fn POST(ctx: zx.RouteContext) !void {
 }
 
 pub fn GET(ctx: zx.RouteContext) !void {
-    ctx.response.text(ctx.request.queries.get("q") orelse "");
+    ctx.response.text(ctx.request.query.get("q") orelse "");
 }

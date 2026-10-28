@@ -118,12 +118,12 @@ pub const CookieOptions = struct {
 /// Includes useful methods:
 /// - `phrase()`: Returns the status message (e.g., "OK", "Not Found")
 /// - `class()`: Returns the status class (.informational, .success, .redirect, .client_error, .server_error)
-pub const HttpStatus = std.http.Status;
+pub const Status = std.http.Status;
 
 /// Returns the status message (phrase) for an HTTP status code.
 /// Uses the standard library's Status.phrase() method.
 pub fn statusCodeToText(code: u16) []const u8 {
-    const status: HttpStatus = @enumFromInt(code);
+    const status: Status = @enumFromInt(code);
     return status.phrase() orelse "Unknown";
 }
 

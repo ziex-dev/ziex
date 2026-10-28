@@ -6,7 +6,7 @@ var remaining_clients = std.atomic.Value(u32).init(CLIENTS_TO_WAIT_FOR);
 
 pub fn GET(ctx: zx.RouteContext) !void {
     const current = remaining_clients.load(.monotonic);
-    const name = ctx.request.queries.get("name") orelse
+    const name = ctx.request.query.get("name") orelse
         std.fmt.allocPrint(ctx.arena, "Client #{d}", .{CLIENTS_TO_WAIT_FOR - current}) catch "Client";
 
     try ctx.socket.upgrade(SocketData{
@@ -21,7 +21,7 @@ pub fn SocketOpen(ctx: zx.SocketOpenCtx(SocketData)) !void {
     const prev = remaining_clients.fetchSub(1, .monotonic);
     const current = prev -| 1;
     std.debug.print("{s} connected ({d} remain)\n", .{ ctx.data.name, current });
-    ctx.socket.write("connected") catch {};
+    ctx.socket.send(.{ .text = "connected" }) catch {};
 
     if (current == 0) {
         std.debug.print("All clients connected\n", .{});
@@ -32,8 +32,8 @@ pub fn SocketOpen(ctx: zx.SocketOpenCtx(SocketData)) !void {
 
 pub fn Socket(ctx: zx.SocketCtx(SocketData)) !void {
     var buf: [4096]u8 = undefined;
-    const out = std.fmt.bufPrint(&buf, "{s}: {s}", .{ ctx.data.name, ctx.message }) catch {
-        const allocated = try ctx.fmt("{s}: {s}", .{ ctx.data.name, ctx.message });
+    const out = std.fmt.bufPrint(&buf, "{s}: {s}", .{ ctx.data.name, ctx.message.bytes() }) catch {
+        const allocated = try ctx.fmt("{s}: {s}", .{ ctx.data.name, ctx.message.bytes() });
         _ = ctx.socket.publish(ROOM_TOPIC, allocated);
         return;
     };

@@ -11,18 +11,18 @@ pub fn GET(ctx: zx.RouteContext) !void {
 
 /// Called for each message received from the client
 pub fn Socket(ctx: zx.SocketCtx(SocketData)) !void {
-    try ctx.socket.write(try ctx.fmt(
+    try ctx.socket.send(.{ .text = try ctx.fmt(
         "Echo: {s} (user_id: {d}, type: {s})",
-        .{ ctx.message, ctx.data.user_id, @tagName(ctx.message_type) },
-    ));
+        .{ ctx.message.bytes(), ctx.data.user_id, @tagName(ctx.message) },
+    ) });
 }
 
 /// Optional: Called once when the WebSocket connection opens
 pub fn SocketOpen(ctx: zx.SocketOpenCtx(SocketData)) !void {
-    try ctx.socket.write(try ctx.fmt(
+    try ctx.socket.send(.{ .text = try ctx.fmt(
         "Welcome! user_id: {d}",
         .{ctx.data.user_id},
-    ));
+    ) });
 }
 
 /// Optional: Called once when the WebSocket connection closes

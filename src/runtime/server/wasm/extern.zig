@@ -7,7 +7,7 @@ const is_wasm = builtin.cpu.arch.isWasm();
 // (same pattern as `__zx_http.commit` / `__zx_net.fetch`).
 const ws_ext = struct {
     extern "__zx_ws" fn upgrade() void;
-    extern "__zx_ws" fn write(ptr: [*]const u8, len: usize) void;
+    extern "__zx_ws" fn write(ptr: [*]const u8, len: usize, binary: bool) void;
     extern "__zx_ws" fn close(code: u16, reason_ptr: [*]const u8, reason_len: usize) void;
     extern "__zx_ws" fn recv(buf_ptr: [*]u8, buf_max: usize) i32;
     extern "__zx_ws" fn subscribe(topic_ptr: [*]const u8, topic_len: usize) void;
@@ -35,8 +35,8 @@ pub const ws = struct {
         if (is_wasm) ws_ext.upgrade();
     }
 
-    pub fn write(data: []const u8) void {
-        if (is_wasm) ws_ext.write(data.ptr, data.len);
+    pub fn write(data: []const u8, binary: bool) void {
+        if (is_wasm) ws_ext.write(data.ptr, data.len, binary);
     }
 
     pub fn close(code: u16, reason: []const u8) void {

@@ -10,13 +10,14 @@ pub const Host = @import("Http/Host.zig");
 
 pub const Request = @import("Http/Request.zig");
 pub const Response = @import("Http/Response.zig");
-pub const Headers = @import("Http/Headers.zig");
 pub const FormData = @import("Http/FormData.zig");
 pub const MultiFormData = @import("Http/MultiFormData.zig");
 pub const File = @import("Http/File.zig");
 
+pub const Status = common.Status;
 pub const CookieOptions = common.CookieOptions;
 pub const MultiFormValue = MultiFormData.Value;
+const WebSocketMessage = @import("WebSocket.zig").Message;
 
 userdata: ?*anyopaque = null,
 vtable: *const VTable = &failing_vtable,
@@ -48,17 +49,17 @@ pub const VTable = struct {
 
     resHeaderGet: *const fn (userdata: ?*anyopaque, name: []const u8) ?[]const u8,
     resHeaderSet: *const fn (userdata: ?*anyopaque, name: []const u8, value: []const u8) void,
-    resHeaderAdd: *const fn (userdata: ?*anyopaque, name: []const u8, value: []const u8) void,
+    resHeaderAppend: *const fn (userdata: ?*anyopaque, name: []const u8, value: []const u8) void,
 
     resWriter: *const fn (userdata: ?*anyopaque) ?*std.Io.Writer,
-    resWriteChunk: *const fn (userdata: ?*anyopaque, data: []const u8) anyerror!void,
+    resWrite: *const fn (userdata: ?*anyopaque, data: []const u8) anyerror!void,
     resClearWriter: *const fn (userdata: ?*anyopaque) void,
 
     resSetCookie: *const fn (userdata: ?*anyopaque, name: []const u8, value: []const u8, opts: CookieOptions) anyerror!void,
 
     wsUpgrade: *const fn (userdata: ?*anyopaque, data: ?[]const u8) anyerror!void,
-    wsWrite: *const fn (userdata: ?*anyopaque, data: []const u8) anyerror!void,
-    wsRead: *const fn (userdata: ?*anyopaque) ?[]const u8,
+    wsSend: *const fn (userdata: ?*anyopaque, message: WebSocketMessage) anyerror!void,
+    wsRead: *const fn (userdata: ?*anyopaque) ?WebSocketMessage,
     wsClose: *const fn (userdata: ?*anyopaque) void,
     wsSubscribe: *const fn (userdata: ?*anyopaque, topic: []const u8) void,
     wsUnsubscribe: *const fn (userdata: ?*anyopaque, topic: []const u8) void,
@@ -113,14 +114,14 @@ pub fn resHeaderGet(self: Http, name: []const u8) ?[]const u8 {
 pub fn resHeaderSet(self: Http, name: []const u8, value: []const u8) void {
     self.vtable.resHeaderSet(self.userdata, name, value);
 }
-pub fn resHeaderAdd(self: Http, name: []const u8, value: []const u8) void {
-    self.vtable.resHeaderAdd(self.userdata, name, value);
+pub fn resHeaderAppend(self: Http, name: []const u8, value: []const u8) void {
+    self.vtable.resHeaderAppend(self.userdata, name, value);
 }
 pub fn resWriter(self: Http) ?*std.Io.Writer {
     return self.vtable.resWriter(self.userdata);
 }
-pub fn resWriteChunk(self: Http, data: []const u8) anyerror!void {
-    return self.vtable.resWriteChunk(self.userdata, data);
+pub fn resWrite(self: Http, data: []const u8) anyerror!void {
+    return self.vtable.resWrite(self.userdata, data);
 }
 pub fn resClearWriter(self: Http) void {
     self.vtable.resClearWriter(self.userdata);
@@ -132,10 +133,10 @@ pub fn resSetCookie(self: Http, name: []const u8, value: []const u8, opts: Cooki
 pub fn wsUpgrade(self: Http, data: ?[]const u8) anyerror!void {
     return self.vtable.wsUpgrade(self.userdata, data);
 }
-pub fn wsWrite(self: Http, data: []const u8) anyerror!void {
-    return self.vtable.wsWrite(self.userdata, data);
+pub fn wsSend(self: Http, message: WebSocketMessage) anyerror!void {
+    return self.vtable.wsSend(self.userdata, message);
 }
-pub fn wsRead(self: Http) ?[]const u8 {
+pub fn wsRead(self: Http) ?WebSocketMessage {
     return self.vtable.wsRead(self.userdata);
 }
 pub fn wsClose(self: Http) void {
@@ -178,16 +179,16 @@ fn failHeaderSet(_: ?*anyopaque, _: []const u8, _: []const u8) void {}
 fn failWriter(_: ?*anyopaque) ?*std.Io.Writer {
     return null;
 }
-fn failWriteChunk(_: ?*anyopaque, _: []const u8) anyerror!void {}
+fn failWrite(_: ?*anyopaque, _: []const u8) anyerror!void {}
 fn failClearWriter(_: ?*anyopaque) void {}
 fn failSetCookie(_: ?*anyopaque, _: []const u8, _: []const u8, _: CookieOptions) anyerror!void {}
 fn failWsUpgrade(_: ?*anyopaque, _: ?[]const u8) anyerror!void {
     return error.WebSocketNotConnected;
 }
-fn failWsWrite(_: ?*anyopaque, _: []const u8) anyerror!void {
+fn failWsSend(_: ?*anyopaque, _: WebSocketMessage) anyerror!void {
     return error.WebSocketNotConnected;
 }
-fn failWsRead(_: ?*anyopaque) ?[]const u8 {
+fn failWsRead(_: ?*anyopaque) ?WebSocketMessage {
     return null;
 }
 fn failWsClose(_: ?*anyopaque) void {}
@@ -216,13 +217,13 @@ pub const failing_vtable = VTable{
     .resSetBody = &failSetBody,
     .resHeaderGet = &failNamedStr,
     .resHeaderSet = &failHeaderSet,
-    .resHeaderAdd = &failHeaderSet,
+    .resHeaderAppend = &failHeaderSet,
     .resWriter = &failWriter,
-    .resWriteChunk = &failWriteChunk,
+    .resWrite = &failWrite,
     .resClearWriter = &failClearWriter,
     .resSetCookie = &failSetCookie,
     .wsUpgrade = &failWsUpgrade,
-    .wsWrite = &failWsWrite,
+    .wsSend = &failWsSend,
     .wsRead = &failWsRead,
     .wsClose = &failWsClose,
     .wsSubscribe = &failWsSubscribe,

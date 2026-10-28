@@ -264,7 +264,7 @@ fn runWebSocket(ctx: *const Ctx, handlers: core_handler.ServerApp.RouteHandlers,
 
     while (ext.ws.recv(recv_buf)) |n| {
         if (handlers.socket) |socket_fn| {
-            socket_fn(socket, recv_buf[0..n], .text, upgrade_data, allocator, allocator, ctx.io) catch {};
+            socket_fn(socket, .{ .text = recv_buf[0..n] }, upgrade_data, allocator, allocator, ctx.io) catch {};
         }
     }
 

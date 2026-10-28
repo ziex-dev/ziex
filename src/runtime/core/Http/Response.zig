@@ -7,7 +7,6 @@ const Http = @import("../Http.zig");
 pub const Cookies = common.Cookies;
 pub const CookieOptions = common.CookieOptions;
 pub const ContentType = common.ContentType;
-pub const HttpStatus = common.HttpStatus;
 
 /// The Headers object associated with the response.
 ///
@@ -15,7 +14,7 @@ pub const HttpStatus = common.HttpStatus;
 headers: Headers = .{},
 
 /// Cookie accessor for setting/deleting cookies.
-cookies: ResponseCookies = .{},
+cookies: CookieJar = .{},
 
 /// Arena allocator for response-scoped allocations.
 arena: std.mem.Allocator,
@@ -23,8 +22,8 @@ arena: std.mem.Allocator,
 /// Internal backend transport carrier. All response writes delegate here.
 _internal: Http.Facade = .{},
 
-/// Sets the HTTP status code using an HttpStatus enum.
-pub fn setStatus(self: *const Response, stat: HttpStatus) void {
+/// Sets the HTTP status code.
+pub fn setStatus(self: *const Response, stat: Http.Status) void {
     self._internal.http.resSetStatus(@backingInt(stat));
 }
 
@@ -51,16 +50,9 @@ pub fn json(self: *const Response, value: anytype, options: std.json.Stringify.O
     self.text(try self.arena.dupe(u8, aw.written()));
 }
 
-/// Sets a header on the response.
-///
-/// MDN: [Response.headers](https://developer.mozilla.org/en-US/docs/Web/API/Response/headers)
-pub fn setHeader(self: *const Response, name: []const u8, value: []const u8) void {
-    self._internal.http.resHeaderSet(name, value);
-}
-
 /// Sets the Content-Type header.
 pub fn setContentType(self: *const Response, content_type: ContentType) void {
-    self.setHeader("Content-Type", content_type.toString());
+    self.headers.set("Content-Type", content_type.toString());
 }
 
 /// Creates a redirect response by setting the Location header and status code.
@@ -70,10 +62,9 @@ pub fn setContentType(self: *const Response, content_type: ContentType) void {
 /// - `redirect_status`: Optional status code (default: 302 Found).
 ///
 /// MDN: [Response.redirect()](https://developer.mozilla.org/en-US/docs/Web/API/Response/redirect_static)
-pub fn redirect(self: *const Response, location: []const u8, redirect_status: ?u16) void {
-    const code = redirect_status orelse 302;
-    self.setStatus(@fromBackingInt(@intCast(code)));
-    self.setHeader("Location", location);
+pub fn redirect(self: *const Response, location: []const u8, redirect_status: ?Http.Status) void {
+    self.setStatus(redirect_status orelse .found);
+    self.headers.set("Location", location);
 }
 
 /// Gets the response writer for streaming content.
@@ -82,8 +73,8 @@ pub fn writer(self: *const Response) ?*std.Io.Writer {
 }
 
 /// Writes a chunk for chunked transfer encoding.
-pub fn chunk(self: *const Response, data: []const u8) !void {
-    try self._internal.http.resWriteChunk(data);
+pub fn write(self: *const Response, data: []const u8) !void {
+    try self._internal.http.resWrite(data);
 }
 
 /// Clears the response writer/buffer.
@@ -116,25 +107,25 @@ pub const Headers = struct {
     /// or adds the header if it does not already exist.
     ///
     /// MDN: [Headers.append](https://developer.mozilla.org/en-US/docs/Web/API/Headers/append)
-    pub fn add(self: *const Headers, name: []const u8, value: []const u8) void {
-        self._internal.http.resHeaderAdd(name, value);
+    pub fn append(self: *const Headers, name: []const u8, value: []const u8) void {
+        self._internal.http.resHeaderAppend(name, value);
     }
 };
 
-/// The ResponseCookies interface provides utility methods to work with cookies on the response.
-pub const ResponseCookies = struct {
+/// Sets and deletes cookies on the response.
+pub const CookieJar = struct {
     _internal: Http.Facade = .{},
 
     /// Sets a cookie on the response.
     ///
     /// MDN: [Cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies)
-    pub fn set(self: *const ResponseCookies, name: []const u8, value: []const u8, options: ?CookieOptions) void {
+    pub fn set(self: *const CookieJar, name: []const u8, value: []const u8, options: ?CookieOptions) void {
         const opts = options orelse CookieOptions{};
         self._internal.http.resSetCookie(name, value, opts) catch {};
     }
 
     /// Deletes a cookie by setting it with an expired max-age.
-    pub fn delete(self: *const ResponseCookies, name: []const u8, options: ?CookieOptions) void {
+    pub fn delete(self: *const CookieJar, name: []const u8, options: ?CookieOptions) void {
         var opts = options orelse CookieOptions{};
         opts.max_age = 0;
         self.set(name, "", opts);

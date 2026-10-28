@@ -28,23 +28,23 @@ pub fn SocketOpen(ctx: zx.SocketOpenCtx(SocketData)) !void {
     const msg_count = messages.items.len;
     const start_idx = if (msg_count > MAX_MESSAGES) msg_count - MAX_MESSAGES else 0;
     for (messages.items[start_idx..]) |msg| {
-        try ctx.socket.write(try ctx.fmt(
+        try ctx.socket.send(.{ .text = try ctx.fmt(
             "{s}: {s}",
             .{ msg.username, msg.text },
-        ));
+        ) });
     }
 }
 
 pub fn Socket(ctx: zx.SocketCtx(SocketData)) !void {
     const formatted = try ctx.fmt(
         "{s}: {s}",
-        .{ ctx.data.username(), ctx.message },
+        .{ ctx.data.username(), ctx.message.bytes() },
     );
 
     _ = ctx.socket.publish(CHAT_TOPIC, formatted);
 
     const gpa = std.heap.page_allocator;
-    const text = gpa.dupe(u8, ctx.message) catch return;
+    const text = gpa.dupe(u8, ctx.message.bytes()) catch return;
     const username = gpa.dupe(u8, ctx.data.username()) catch {
         gpa.free(text);
         return;

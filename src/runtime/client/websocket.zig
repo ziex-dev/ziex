@@ -64,7 +64,7 @@ pub fn connect(ws: *WebSocket) WebSocket.Error!void {
     };
 
     // Store ws_id in backend context (truncate to usize for 32-bit WASM)
-    ws.userdata = @ptrFromInt(@as(usize, @truncate(ws_id)));
+    ws._internal.userdata = @ptrFromInt(@as(usize, @truncate(ws_id)));
 
     // Serialize protocols if any
     var protocols_buf: [1024]u8 = undefined;
@@ -118,11 +118,11 @@ pub fn deinit(ws: *WebSocket) void {
         ws_slots[idx].ws = null;
     }
 
-    ws.userdata = null;
+    ws._internal.userdata = null;
 }
 
 fn getWsId(ws: *WebSocket) ?u64 {
-    if (ws.userdata) |ptr| {
+    if (ws._internal.userdata) |ptr| {
         return @intFromPtr(ptr);
     }
     return null;

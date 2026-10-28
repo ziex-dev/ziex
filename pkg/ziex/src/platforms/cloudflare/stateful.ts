@@ -30,7 +30,7 @@ function newConnection(connections: Map<WebSocket, ConnState>): ConnState {
             }
             // Publishing from `socket_open`: deliver on attach.
             if (!conn.server && conn.topics.has(topic)) {
-                conn.pendingWrites.push(data.slice());
+                conn.pendingWrites.push(text);
                 count++;
             }
             return count;
@@ -48,7 +48,7 @@ function attachConnection(conn: ConnState): WebSocket {
     queueMicrotask(() => {
         for (const data of pending) {
             try {
-                server.send(textDecoder.decode(data));
+                server.send(data as string | BufferSource);
             } catch {
                 /* closed */
             }

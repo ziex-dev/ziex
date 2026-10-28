@@ -11,7 +11,7 @@ pub fn GET(ctx: zx.RouteContext) !void {
 
     ctx.response.text(aw.written());
     ctx.response.setContentType(.@"image/svg+xml");
-    ctx.response.headers.add("Cache-Control", "public, max-age=86400");
+    ctx.response.headers.append("Cache-Control", "public, max-age=86400");
 }
 
 fn resolveLabel(ctx: zx.RouteContext) !?[]const u8 {
@@ -22,7 +22,7 @@ fn resolveLabel(ctx: zx.RouteContext) !?[]const u8 {
     }
     const name = pathname[prefix.len .. pathname.len - ".svg".len];
 
-    if (std.mem.eql(u8, name, "banner")) return ctx.request.queries.get("label");
+    if (std.mem.eql(u8, name, "banner")) return ctx.request.query.get("label");
     if (std.mem.startsWith(u8, name, "banner-")) {
         return banner.presetLabel(name["banner-".len..]) orelse error.NotFound;
     }

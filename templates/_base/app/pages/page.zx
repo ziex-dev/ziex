@@ -15,7 +15,7 @@ const features = [_]Feature{
 const Feature = struct { title: []const u8, blurb: []const u8, href: []const u8 = "" };
 
 pub fn Page(ctx: zx.PageContext) !zx.Component {
-    const query = ctx.request.queries;
+    const query = ctx.request.query;
 
     if (query.get("reset")) |_|
         count = 0

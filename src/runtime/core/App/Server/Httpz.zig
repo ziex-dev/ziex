@@ -115,14 +115,14 @@ pub const HttpzCtx = struct {
         .resSetBody = &resSetBody,
         .resHeaderGet = &resHeaderGet,
         .resHeaderSet = &resHeaderSet,
-        .resHeaderAdd = &resHeaderAdd,
+        .resHeaderAppend = &resHeaderAppend,
         .resWriter = &resWriter,
-        .resWriteChunk = &resWriteChunk,
+        .resWrite = &resWrite,
         .resClearWriter = &resClearWriter,
         .resSetCookie = &resSetCookie,
         // WebSocket ops are not available on the plain request/response backend.
         .wsUpgrade = Http.failing_vtable.wsUpgrade,
-        .wsWrite = Http.failing_vtable.wsWrite,
+        .wsSend = Http.failing_vtable.wsSend,
         .wsRead = Http.failing_vtable.wsRead,
         .wsClose = Http.failing_vtable.wsClose,
         .wsSubscribe = Http.failing_vtable.wsSubscribe,
@@ -222,7 +222,7 @@ pub const HttpzCtx = struct {
         ctx(userdata).res.header(name, value);
     }
 
-    fn resHeaderAdd(userdata: ?*anyopaque, name: []const u8, value: []const u8) void {
+    fn resHeaderAppend(userdata: ?*anyopaque, name: []const u8, value: []const u8) void {
         ctx(userdata).res.headers.add(name, value);
     }
 
@@ -230,7 +230,7 @@ pub const HttpzCtx = struct {
         return ctx(userdata).res.writer();
     }
 
-    fn resWriteChunk(userdata: ?*anyopaque, data: []const u8) anyerror!void {
+    fn resWrite(userdata: ?*anyopaque, data: []const u8) anyerror!void {
         try ctx(userdata).res.chunk(data);
     }
 
@@ -269,7 +269,7 @@ pub fn createRequest(ctx: *HttpzCtx) Request {
         .pathname = inner.url.path,
         .referrer = inner.headers.get("referer") orelse "",
         .search = inner.url.query,
-        .protocol = conv.protocol(inner.protocol),
+        .version = conv.protocol(inner.protocol),
         .arena = inner.arena,
         .cookie_header = inner.headers.get("cookie") orelse "",
         .http = ctx.http(),
@@ -727,7 +727,7 @@ pub const websocket = struct {
         errdefer ctx.deinit(allocator);
 
         ctx.ws_ptr = w;
-        w.userdata = ctx;
+        w._internal.userdata = ctx;
 
         // Perform handshake
         ctx.client.handshake(url_parts.path, .{}) catch {
@@ -757,7 +757,7 @@ pub const websocket = struct {
 
     /// Send text data
     pub fn send(w: *WebSocket, data: []const u8) WebSocket.Error!void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w.userdata orelse return error.NotConnected));
+        const ctx: *BackendContext = @ptrCast(@alignCast(w._internal.userdata orelse return error.NotConnected));
 
         // writeText takes a mutable slice, so we need to copy
         const buf = w._allocator.alloc(u8, data.len) catch return error.SendFailed;
@@ -769,7 +769,7 @@ pub const websocket = struct {
 
     /// Send binary data
     pub fn sendBinary(w: *WebSocket, data: []const u8) WebSocket.Error!void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w.userdata orelse return error.NotConnected));
+        const ctx: *BackendContext = @ptrCast(@alignCast(w._internal.userdata orelse return error.NotConnected));
 
         // writeBin takes a mutable slice, so we need to copy
         const buf = w._allocator.alloc(u8, data.len) catch return error.SendFailed;
@@ -781,7 +781,7 @@ pub const websocket = struct {
 
     /// Close the connection
     pub fn close(w: *WebSocket, options: CloseOptions) void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w.userdata orelse return));
+        const ctx: *BackendContext = @ptrCast(@alignCast(w._internal.userdata orelse return));
 
         w.ready_state = .closing;
         const code = options.code orelse 1000;
@@ -801,10 +801,10 @@ pub const websocket = struct {
 
     /// Clean up resources
     pub fn deinit(w: *WebSocket) void {
-        if (w.userdata) |ptr| {
+        if (w._internal.userdata) |ptr| {
             const ctx: *BackendContext = @ptrCast(@alignCast(ptr));
             ctx.deinit(w._allocator);
-            w.userdata = null;
+            w._internal.userdata = null;
         }
     }
 };
@@ -1283,16 +1283,16 @@ fn Handler(comptime Ctx: type) type {
 
             /// Called when a text or binary message is received from the client
             pub fn clientMessage(self: *WebsocketHandler, _: Allocator, data: []const u8, message_type: httpz.websocket.MessageTextType) !void {
-                const msg_type: zx.SocketMessageType = switch (message_type) {
-                    .text => .text,
-                    .binary => .binary,
+                const message: zx.WebSocket.Message = switch (message_type) {
+                    .text => .{ .text = data },
+                    .binary => .{ .binary = data },
                 };
 
                 if (self.socket_handler) |handler| {
                     var arena_instance = std.heap.ArenaAllocator.init(self.ws_allocator);
                     defer arena_instance.deinit();
                     const socket = self.createSocket();
-                    handler(socket, data, msg_type, self.upgrade_data, self.ws_allocator, arena_instance.allocator(), self.io) catch |err| {
+                    handler(socket, message, self.upgrade_data, self.ws_allocator, arena_instance.allocator(), self.io) catch |err| {
                         log.err("Socket handler error: {}", .{err});
                     };
                 } else {
@@ -1328,7 +1328,7 @@ fn Handler(comptime Ctx: type) type {
 
             const socket_vtable = blk: {
                 var vt = zx.Http.failing_vtable;
-                vt.wsWrite = &socketWrite;
+                vt.wsSend = &socketSend;
                 vt.wsClose = &socketClose;
                 vt.wsSubscribe = &socketSubscribe;
                 vt.wsUnsubscribe = &socketUnsubscribe;
@@ -1342,8 +1342,12 @@ fn Handler(comptime Ctx: type) type {
                 return @ptrCast(@alignCast(userdata.?));
             }
 
-            fn socketWrite(userdata: ?*anyopaque, data: []const u8) anyerror!void {
-                try handlerOf(userdata).conn.write(data);
+            fn socketSend(userdata: ?*anyopaque, message: zx.WebSocket.Message) anyerror!void {
+                const conn = handlerOf(userdata).conn;
+                switch (message) {
+                    .text => |data| try conn.writeText(data),
+                    .binary => |data| try conn.writeBin(data),
+                }
             }
 
             fn socketClose(userdata: ?*anyopaque) void {
