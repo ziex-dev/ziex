@@ -399,7 +399,7 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
 
                 if (program_path == null) {
                     program_path = util.resolveExePath(io, allocator, install_prefix, binpath) catch |err| {
-                        log.debug("Error finding ZX executable: {any}", .{err});
+                        log.debug("Error finding Ziex executable: {any}", .{err});
                         continue;
                     };
                 }

@@ -4,7 +4,7 @@ test "init" {
         .args = &.{"init"},
         .expected_exit_code = 0,
         .expected_stderr_strings = &.{
-            "Initializing ZX project!",
+            "Initializing Ziex project!",
             "main.zig",
             ".gitattributes",
             "client.zx",
@@ -42,7 +42,7 @@ test "init --force" {
         .args = &.{ "init", "--force" },
         .expected_exit_code = 0,
         .expected_stderr_strings = &.{
-            "Initializing ZX project!",
+            "Initializing Ziex project!",
             "main.zig",
             "page.zx",
         },
@@ -347,7 +347,7 @@ test "init -t docker" {
         .args = &.{ "init", "--template", "docker", "--existing" },
         .expected_exit_code = 0,
         .expected_stderr_strings = &.{
-            "Initializing ZX project!",
+            "Initializing Ziex project!",
             "docker",
             "Dockerfile",
             "compose.yml",
@@ -379,7 +379,7 @@ test "init -t <remote>" {
         .args = &.{ "init", "--template", "cloudflare", "remote-app", "--force" },
         .expected_exit_code = 0,
         .expected_stderr_strings = &.{
-            "Initializing ZX project!",
+            "Initializing Ziex project!",
             "github:ziex-dev/template-cloudflare",
         },
         .expected_files = &.{

@@ -60,7 +60,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
 
     // Non-builtin templates are fetched from `github:ziex-dev/template-<name>`.
     const template_name = std.meta.stringToEnum(TemplateFile.Name, t_val) orelse {
-        printer.header("{s} Initializing ZX project!", .{tui.Printer.emoji("○")});
+        printer.header("{s} Initializing Ziex project!", .{tui.Printer.emoji("○")});
         printer.info("[{s}] (github:{s}/template-{s})", .{ t_val, "ziex-dev", t_val });
 
         remote.fetch(io, ctx.allocator, app.environ_map, t_val, init_path) catch |err| switch (err) {
@@ -79,7 +79,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         return;
     };
 
-    printer.header("{s} Initializing ZX project!", .{tui.Printer.emoji("○")});
+    printer.header("{s} Initializing Ziex project!", .{tui.Printer.emoji("○")});
     printer.info("[{s}]", .{@tagName(template_name)});
 
     const bin_name = if (template_name == .docker)

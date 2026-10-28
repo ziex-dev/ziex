@@ -90,7 +90,7 @@ fn restart(ctx: CommandContext, args: anytype) !void {
 
     // Natively the app prints this itself
     const url = env.get("ZIEX_DEV_URL") orelse "http://localhost:3000";
-    try w.print("{s}ZX{s} {s}- v{s}{s} | {s}\n", .{ Colors.bold, Colors.reset, Colors.dim, zx_info.version, Colors.reset, url });
+    try w.print("{s}Ziex{s} {s}- v{s}{s} | {s}\n", .{ Colors.bold, Colors.reset, Colors.dim, zx_info.version, Colors.reset, url });
 }
 
 fn isSet(env: *std.process.Environ.Map, key: []const u8) bool {

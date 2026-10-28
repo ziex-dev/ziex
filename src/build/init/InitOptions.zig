@@ -40,14 +40,14 @@ pub const CliOptions = struct {
         pub const default: Steps = .{ .dev = "dev", .serve = "serve" };
     };
 
-    /// Path to the ZX CLI executable.
+    /// Path to the Ziex CLI executable.
     ///
-    /// - If `null`: Uses the ZX CLI from the ZX dependency source (recommended)
-    /// - If set to `"zx"`: Uses the ZX CLI from the system PATH
-    /// - Otherwise: Uses the specified path to a ZX CLI executable
+    /// - If `null`: Uses the Ziex CLI from the Ziex dependency source (recommended)
+    /// - If set to `"zx"`: Uses the Ziex CLI from the system PATH
+    /// - Otherwise: Uses the specified path to a Ziex CLI executable
     path: ?LazyPath = null,
 
-    /// Path to the Zig executable passed to the ZX CLI as `--zig-path`.
+    /// Path to the Zig executable passed to the Ziex CLI as `--zig-path`.
     ///
     /// - If `null`: Uses `b.graph.zig_exe`
     /// - Otherwise: Uses the specified path
@@ -58,14 +58,14 @@ pub const CliOptions = struct {
     /// If `null`, only the default "serve" step will be created.
     steps: ?Steps = .default,
 
-    /// Optimize mode for the ZX CLI executable.
+    /// Optimize mode for the Ziex CLI executable.
     optimize: ?std.builtin.Optimize = .fast,
 
-    /// Log level for the ZX CLI executable.
+    /// Log level for the Ziex CLI executable.
     log_level: ?std.log.Level = null,
 };
 
-/// Configuration for the ZX app directory.
+/// Configuration for the Ziex app directory.
 pub const AppOptions = struct {
     /// Native HTTP server settings (ignored on WASI / client builds).
     pub const Server = struct {
@@ -136,7 +136,7 @@ pub const AppOptions = struct {
         cache: ?CacheOptions = null,
     };
 
-    /// Path to the ZX app source directory.
+    /// Path to the Ziex app source directory.
     ///
     /// This directory should contain your `.zx` template files, layouts,
     /// and other app assets. Defaults to "app" if not specified in InitOptions.
@@ -219,15 +219,15 @@ const ExperimentalOptions = struct {};
 /// Override this to use a custom app source directory.
 app: ?AppOptions = null,
 
-/// ZX CLI configuration.
+/// Ziex CLI configuration.
 ///
-/// Controls which ZX CLI executable to use and which build steps to create.
-/// If `null`, uses default configuration with ZX CLI from dependency source.
+/// Controls which Ziex CLI executable to use and which build steps to create.
+/// If `null`, uses default configuration with Ziex CLI from dependency source.
 cli: CliOptions = .{},
 
 /// Experimental features configuration.
 ///
-/// Enable cutting-edge ZX features that may have breaking changes in the future.
+/// Enable cutting-edge Ziex features that may have breaking changes in the future.
 /// If `null`, all experimental features are disabled.
 experimental: ?ExperimentalOptions = null,
 

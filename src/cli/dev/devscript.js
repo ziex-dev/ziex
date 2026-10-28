@@ -17,7 +17,7 @@
     statusEl: null,
     currentDiagnostics: null,
     overlayDismissed: false,
-    isShellPage: document.title === "ZX Dev",
+    isShellPage: document.title === "Ziex Dev",
     lastAppliedHtml: null,
     isRefreshing: false,
     pendingMessage: null, // deferred message while tab is hidden
@@ -226,7 +226,7 @@
 
     if (document.title !== nextDoc.title) {
       document.title = nextDoc.title;
-      state.isShellPage = document.title === "ZX Dev";
+      state.isShellPage = document.title === "Ziex Dev";
     }
 
     state.lastAppliedHtml = html;

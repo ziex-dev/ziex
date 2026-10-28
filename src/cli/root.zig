@@ -12,7 +12,7 @@ pub const version: Command = .{
 
 pub const init: Command = .{
     .name = .init,
-    .help_short = "Initialize a new ZX project in the current directory",
+    .help_short = "Initialize a new Ziex project in the current directory",
     .named_args = &.{
         Argument.init(.template, []const u8, .{
             .default_value = "starter",
@@ -26,7 +26,7 @@ pub const init: Command = .{
         }),
         Argument.init(.existing, bool, .{
             .default_value = false,
-            .help = "Initialize ZX in an existing project",
+            .help = "Initialize Ziex in an existing project",
         }),
     },
     .positional_args = &.{
@@ -354,7 +354,7 @@ pub const bundle: Command = .{
 
 pub const update: Command = .{
     .name = .update,
-    .help_short = "Update the version of ZX dependency",
+    .help_short = "Update the version of the Ziex dependency",
     .named_args = &.{
         Argument.init(.version, []const u8, .{
             .default_value = "latest",
@@ -370,7 +370,7 @@ pub const update: Command = .{
 
 pub const upgrade: Command = .{
     .name = .upgrade,
-    .help_short = "Upgrade the version of ZX CLI",
+    .help_short = "Upgrade the version of the Ziex CLI",
     .named_args = &.{
         Argument.init(.version, []const u8, .{
             .default_value = "latest",

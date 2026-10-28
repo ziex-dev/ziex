@@ -38,17 +38,17 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     });
     switch (try build_proc.wait(io)) {
         .exited => |code| if (code != 0) {
-            try ctx.writer.print("Failed to build the ZX executable for serve (exit {d})!\n", .{code});
+            try ctx.writer.print("Failed to build the Ziex executable for serve (exit {d})!\n", .{code});
             return;
         },
         else => {
-            try ctx.writer.print("Failed to build the ZX executable for serve!\n", .{});
+            try ctx.writer.print("Failed to build the Ziex executable for serve!\n", .{});
             return;
         },
     }
 
     const exe_path = util.resolveExePath(io, ctx.allocator, install_prefix, args.@"bin-path") catch {
-        try ctx.writer.print("Run \x1b[34mzig build\x1b[0m to build the ZX executable first!\n", .{});
+        try ctx.writer.print("Run \x1b[34mzig build\x1b[0m to build the Ziex executable first!\n", .{});
         return;
     };
     defer ctx.allocator.free(exe_path);
