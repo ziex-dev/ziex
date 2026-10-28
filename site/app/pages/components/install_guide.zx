@@ -52,7 +52,7 @@ pub fn InstallCLI(allocator: zx.Allocator, props: struct { show_init: bool = fal
                         <div class="install-code">
                             <span class="install-prompt" aria-hidden="true">$ </span>
                             <span class="function">npm</span>
-                            <span class="operator"> init </span>
+                            <span class="operator"> create </span>
                             <span class="variable">ziex</span>
                             <span class="comment" aria-hidden="true" style="user-select: none; -webkit-user-select: none;"> # or </span>
                         </div>

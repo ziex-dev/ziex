@@ -224,7 +224,7 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
                 <li><strong>CLI</strong> - scaffold a project with <code>zx init</code></li>
                 <li><strong>Template</strong> - clone the starter repo and run <code>zig build dev</code></li>
                 <li><strong>Manual</strong> - add Ziex to an existing Zig project with <code>build.zig</code></li>
-                <li><strong>Node.js</strong> - use <code>npm init ziex</code> or <code>bun create ziex</code> to download a template</li>
+                <li><strong>Node.js</strong> - use <code>npm create ziex</code> or <code>bun create ziex</code> to download a template</li>
             </ul>
             <div>
                 <div class="simple-tab-header">
