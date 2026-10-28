@@ -15,8 +15,8 @@
             .lazy = true,
         },
         .zls = .{
-            .url = "git+https://github.com/ziex-dev/zls.git#69a43b5b9c20cf5e4d11d8e175009c6de1bf80c4",
-            .hash = "zls-0.17.1-dev-rmm5fjVCHAA4QkCJPbvDwmILiNT2DPUdXEp5mB4KpNgY",
+            .url = "git+https://github.com/ziex-dev/zls.git#a13ce6275c3124f6a8ba57cfe2e64d0ef249058a",
+            .hash = "zls-0.17.1-dev-rmm5fq5GHABMs_zD8vCvNLpSaR3f43LKVgC-w1mgVJ2x",
             .lazy = true,
         },
         .lsp_kit = .{
