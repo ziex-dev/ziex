@@ -1,7 +1,7 @@
 pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
     return (
         <div @allocator={ctx.arena}>
-            <Sidebar allocator={ctx.arena} categories={&categories} toc={&toc_links} tabs={&tabs} active_path="/learn" children={children} />
+            <Sidebar allocator={ctx.arena} categories={&categories} toc={toc_links} tabs={&tabs} active_path="/learn" children={children} />
             <script src=`/assets/docs.js?v={zx.info.version}` defer="true"></script>
         </div>
     );
@@ -12,15 +12,9 @@ const tabs = [_]SidebarProps.Tab{
     .{ .label = "Reference", .href = "/reference", .active = true },
 };
 
-const categories = [_]SidebarProps.Category{
-    // .{
-    //     .title = "REFERENCE",
-    //     .sections = &[_]SidebarProps.Section{
-    //         .{ .title = "Overview", .href = "/reference#overview" },
-    //     },
-    // },
+pub const categories = [_]SidebarProps.Category{
     .{
-        .title = "CORE",
+        .title = "ZX Language",
         .sections = &[_]SidebarProps.Section{
             .{
                 .title = "Expressions",
@@ -53,43 +47,15 @@ const categories = [_]SidebarProps.Category{
                 .title = "Components",
                 .href = "/reference#components",
                 .items = &[_]SidebarProps.Link{
+                    .{ .href = "/reference#component-signatures", .text = "Signatures" },
                     .{ .href = "/reference#component-context", .text = "ComponentContext" },
                     .{ .href = "/reference#component-ctx-props", .text = "ComponentCtx" },
+                    .{ .href = "/reference#defining-components", .text = "Defining Components" },
+                    .{ .href = "/reference#props-coercion", .text = "Props Coercion" },
                 },
             },
-            .{
-                .title = "Routing",
-                .href = "/reference#routing",
-                .items = &[_]SidebarProps.Link{
-                    .{ .href = "/reference#pages", .text = "Pages" },
-                    .{ .href = "/reference#layouts", .text = "Layouts" },
-                    .{ .href = "/reference#dynamic-routes", .text = "Dynamic Routes" },
-                },
-            },
-            .{
-                .title = "API & WebSockets",
-                .href = "/reference#api-and-websockets",
-                .items = &[_]SidebarProps.Link{
-                    .{ .href = "/reference#api-routes", .text = "API Routes" },
-                    .{ .href = "/reference#websockets", .text = "WebSockets" },
-                    .{ .href = "/reference#pub-sub", .text = "Pub/Sub" },
-                },
-            },
-        },
-    },
-    .{
-        .title = "ADVANCED",
-        .sections = &[_]SidebarProps.Section{
-            .{
-                .title = "Builtin Attributes",
-                .href = "/reference#builtin-attributes",
-                .items = &[_]SidebarProps.Link{
-                    .{ .href = "/reference#allocator", .text = "@allocator" },
-                    .{ .href = "/reference#escaping", .text = "@escaping" },
-                    .{ .href = "/reference#client", .text = "@client" },
-                    .{ .href = "/reference#form-actions", .text = "Form Actions" },
-                },
-            },
+            .{ .title = "Fragments", .href = "/reference#fragments" },
+            .{ .title = "Children Props", .href = "/reference#children-props" },
             .{
                 .title = "Attribute Syntax",
                 .href = "/reference#attribute-syntax",
@@ -99,9 +65,27 @@ const categories = [_]SidebarProps.Category{
                     .{ .href = "/reference#template-attributes", .text = "Template Strings" },
                 },
             },
-            .{ .title = "Importing", .href = "/reference#importing" },
-            .{ .title = "Fragments", .href = "/reference#fragments" },
-            .{ .title = "Children Props", .href = "/reference#children-props" },
+            .{
+                .title = "Builtin Attributes",
+                .href = "/reference#builtin-attributes",
+                .items = &[_]SidebarProps.Link{
+                    .{ .href = "/reference#allocator", .text = "@allocator" },
+                    .{ .href = "/reference#escaping", .text = "@escaping" },
+                    .{ .href = "/reference#client", .text = "@client" },
+                    .{ .href = "/reference#caching-components", .text = "@caching" },
+                },
+            },
+            .{
+                .title = "Client Components",
+                .href = "/reference#client",
+                .items = &[_]SidebarProps.Link{
+                    .{ .href = "/reference#client-rendering", .text = "Client Rendering" },
+                    .{ .href = "/reference#client-state", .text = "Managing State" },
+                    .{ .href = "/reference#client-events", .text = "Event Handlers" },
+                    .{ .href = "/reference#form-actions", .text = "Form Actions" },
+                    .{ .href = "/reference#server-events", .text = "Server Events", .tags = &.{experimental.label} },
+                },
+            },
             .{
                 .title = "Syntax",
                 .href = "/reference#syntax",
@@ -110,9 +94,57 @@ const categories = [_]SidebarProps.Category{
                     .{ .href = "/reference#comments", .text = "Comments" },
                 },
             },
+            .{ .title = "Importing", .href = "/reference#importing" },
+        },
+    },
+    .{
+        .title = "Routing & Server",
+        .sections = &[_]SidebarProps.Section{
+            .{
+                .title = "Routing",
+                .href = "/reference#routing",
+                .items = &[_]SidebarProps.Link{
+                    .{ .href = "/reference#pages", .text = "Pages" },
+                    .{ .href = "/reference#layouts", .text = "Layouts" },
+                    .{ .href = "/reference#page-context", .text = "Page Context" },
+                },
+            },
+            .{
+                .title = "Dynamic Routes",
+                .href = "/reference#dynamic-routes",
+                .items = &[_]SidebarProps.Link{
+                    .{ .href = "/reference#dynamic-route-segments", .text = "Route Segments" },
+                    .{ .href = "/reference#route-params", .text = "Route & Query Params" },
+                },
+            },
+            .{
+                .title = "File Conventions",
+                .href = "/reference#file-conventions",
+                .items = &[_]SidebarProps.Link{
+                    .{ .href = "/reference#file-page", .text = "page.zx" },
+                    .{ .href = "/reference#file-layout", .text = "layout.zx" },
+                    .{ .href = "/reference#file-notfound", .text = "notfound.zx" },
+                    .{ .href = "/reference#file-error", .text = "error.zx" },
+                    .{ .href = "/reference#file-route", .text = "route.zig" },
+                    .{ .href = "/reference#file-proxy", .text = "proxy.zig" },
+                },
+            },
+            .{
+                .title = "API & WebSockets",
+                .href = "/reference#api-and-websockets",
+                .items = &[_]SidebarProps.Link{
+                    .{ .href = "/reference#api-routes", .text = "API Routes" },
+                    .{ .href = "/reference#route-context", .text = "RouteContext" },
+                    .{ .href = "/reference#websockets", .text = "WebSockets" },
+                    .{ .href = "/reference#websocket-lifecycle", .text = "Lifecycle Handlers" },
+                    .{ .href = "/reference#socket-context", .text = "SocketContext" },
+                    .{ .href = "/reference#pub-sub", .text = "Pub/Sub" },
+                },
+            },
             .{
                 .title = "Caching",
                 .href = "/reference#caching",
+                .tags = &.{experimental.label},
                 .items = &[_]SidebarProps.Link{
                     .{ .href = "/reference#caching-enabling", .text = "Enabling" },
                     .{ .href = "/reference#caching-overview", .text = "Overview" },
@@ -126,7 +158,7 @@ const categories = [_]SidebarProps.Category{
         },
     },
     .{
-        .title = "BUILD & TOOLS",
+        .title = "Build & Tools",
         .sections = &[_]SidebarProps.Section{
             .{
                 .title = "CLI",
@@ -137,27 +169,12 @@ const categories = [_]SidebarProps.Category{
     },
 };
 
-const toc_links = [_]SidebarProps.Link{
-    // .{ .href = "/reference#overview", .text = "Overview" },
-    .{ .href = "/reference#expressions", .text = "Expressions" },
-    .{ .href = "/reference#control-flow", .text = "Control Flow" },
-    .{ .href = "/reference#components", .text = "Components" },
-    .{ .href = "/reference#routing", .text = "Routing" },
-    .{ .href = "/reference#api-and-websockets", .text = "API & WebSockets" },
-    .{ .href = "/reference#builtin-attributes", .text = "Builtin Attributes" },
-    .{ .href = "/reference#form-actions", .text = "Form Actions" },
-    .{ .href = "/reference#attribute-syntax", .text = "Attribute Syntax" },
-    .{ .href = "/reference#importing", .text = "Importing" },
-    .{ .href = "/reference#dynamic-routes", .text = "Dynamic Routes" },
-    .{ .href = "/reference#fragments", .text = "Fragments" },
-    .{ .href = "/reference#children-props", .text = "Children Props" },
-    .{ .href = "/reference#syntax", .text = "Syntax" },
-    .{ .href = "/reference#caching", .text = "Caching" },
-    .{ .href = "/reference#cli", .text = "CLI" },
-};
+const toc_links = docs_nav.toc(&categories);
 
 const Sidebar = @import("../components/sidebar.zx").Sidebar;
 const SidebarProps = @import("../components/sidebar.zx").SidebarProps;
+const docs_nav = @import("../components/docs_nav.zx");
+const experimental = @import("../components/experimental.zx");
 const cli_docs = @import("cli_docs.zig");
 
 const cli_sidebar_items = blk: {

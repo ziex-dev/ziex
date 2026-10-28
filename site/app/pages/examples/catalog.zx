@@ -1,4 +1,5 @@
 const SidebarProps = @import("../components/sidebar.zx").SidebarProps;
+const experimental = @import("../components/experimental.zx");
 
 pub const rendering = [_]SidebarProps.Section{
     // .{ .title = "Examples Index", .href = "/examples" },
@@ -16,8 +17,8 @@ pub const rendering = [_]SidebarProps.Section{
 
 pub const data_and_apis = [_]SidebarProps.Section{
     .{ .title = "Database", .href = "/examples/db", .tags = &.{ "zx.db", "zx.db.row" } },
-    .{ .title = "Key-Value Storage", .href = "/examples/kv", .tags = &.{ "zx.kv", "zx.State" } },
-    .{ .title = "CRUD", .href = "/examples/crud", .tags = &.{ "zx.db", "zx.server.Event" } },
+    .{ .title = "Key-Value", .href = "/examples/kv", .tags = &.{ "zx.kv", "zx.State" } },
+    .{ .title = "CRUD", .href = "/examples/crud", .tags = &.{ "zx.db", "zx.server.Event", experimental.label } },
     // .{ .title = "API Routes", .href = "/examples/api-route" },
     .{ .title = "Realtime WebSockets", .href = "/examples/realtime", .tags = &.{ "zx.WebSocket", "cookies" } },
 };
@@ -26,9 +27,9 @@ pub const forms_and_actions = [_]SidebarProps.Section{
     .{ .title = "Forms", .href = "/examples/form", .tags = &.{ "queries", "request handler" } },
     .{ .title = "File Upload", .href = "/examples/form/file", .tags = &.{"multiFormData"} },
     .{ .title = "Client Actions", .href = "/examples/client-action", .tags = &.{ "zx.client.Action", "zx.client.Event" } },
-    .{ .title = "Server Actions", .href = "/examples/server-action", .tags = &.{ "zx.server.Action", "ctx.sbind" } },
-    .{ .title = "Server Forms", .href = "/examples/server-form", .tags = &.{ "zx.server.Action", "zx.State" } },
-    .{ .title = "Form Validation", .href = "/examples/server-form-validation", .tags = &.{"zx.server.Action.Stateful"} },
+    .{ .title = "Server Actions", .href = "/examples/server-action", .tags = &.{ "zx.server.Action", "ctx.sbind", experimental.label } },
+    .{ .title = "Server Forms", .href = "/examples/server-form", .tags = &.{ "zx.server.Action", "zx.State", experimental.label } },
+    .{ .title = "Form Validation", .href = "/examples/server-form-validation", .tags = &.{ "zx.server.Action.Stateful", experimental.label } },
     .{ .title = "Auth Form", .href = "/examples/auth", .tags = &.{ "cookies", "AuthState", "formData" } },
 };
 

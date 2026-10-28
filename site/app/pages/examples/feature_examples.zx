@@ -1283,6 +1283,83 @@ pub fn RenderTest(ctx: zx.PageContext) !zx.Component {
     );
 }
 
+// --- Signature: component ---
+pub fn Divider(allocator: zx.Allocator) zx.Component {
+    return (<hr @allocator={allocator} />);
+}
+
+pub fn Badge(allocator: zx.Allocator, props: BadgeProps) zx.Component {
+    return (<span @allocator={allocator}>{props.label}</span>);
+}
+
+pub fn Panel(ctx: *zx.ComponentContext) zx.Component {
+    return (<section @allocator={ctx.allocator}>{ctx.children}</section>);
+}
+
+pub fn Tooltip(ctx: *zx.ComponentCtx(TooltipProps)) zx.Component {
+    return (<span @allocator={ctx.allocator} title={ctx.props.text}>{ctx.children}</span>);
+}
+
+pub fn Price(ctx: *zx.ComponentCtx(PriceProps)) !zx.Component {
+    const text = try std.fmt.allocPrint(ctx.allocator, "${d:.2}", .{ctx.props.amount});
+    return (<span @allocator={ctx.allocator}>{text}</span>);
+}
+
+// --- Signature: client actions ---
+fn onSend(a: zx.client.Action) void {
+    _ = a.data(struct { message: []const u8 });
+}
+
+fn onSendStateful(a: *zx.client.Action.Stateful) void {
+    _ = a.data(struct { message: []const u8 });
+}
+
+// --- Signature: server actions ---
+fn onSave(a: zx.server.Action) void {
+    _ = a.data(struct { title: []const u8 });
+}
+
+fn onSaveStateful(a: *zx.server.Action.Stateful) void {
+    _ = a.data(struct { title: []const u8 });
+}
+
+// --- Signature: server events ---
+fn onRefresh(e: *zx.server.Event) void {
+    _ = e;
+}
+
+fn onRefreshStateful(e: *zx.server.Event.Stateful) void {
+    _ = e;
+}
+
+// --- Signature: support ---
+const BadgeProps = struct { label: []const u8 };
+const TooltipProps = struct { text: []const u8 };
+const PriceProps = struct { amount: f64 };
+
+// Uses every documented signature, so a signature the framework rejects fails the site build.
+pub fn SignatureCheck(ctx: *zx.ComponentContext) zx.Component {
+    return (
+        <div @allocator={ctx.allocator}>
+            <Divider />
+            <Badge label="New" />
+            <Panel>Body</Panel>
+            <Tooltip text="Hint">Hover</Tooltip>
+            <Price amount={9.5} />
+            <form action={onSend}></form>
+            <form action={ctx.bind(onSendStateful)}></form>
+            <form action={onSave}></form>
+            <form action={ctx.bind(onSaveStateful)}></form>
+            <button onclick={ctx.bind(onRefresh)}>Refresh</button>
+            <button onclick={ctx.bind(onRefreshStateful)}>Refresh</button>
+        </div>
+    );
+}
+
+comptime {
+    _ = &SignatureCheck;
+}
+
 const ziex = struct {
     pub fn init(b: *std.Build, app_exe: *std.Build.Step.Compile, options: InitOptions) !void {
         _ = b;

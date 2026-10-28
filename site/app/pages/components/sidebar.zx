@@ -24,7 +24,6 @@ pub const SidebarProps = struct {
     };
 
     categories: []const Category = &.{},
-    links: []const Link = &.{}, // Legacy support
     toc: []const Link = &.{}, // Table of contents for right sidebar
     tabs: []const Tab = &.{}, // Sidebar top tabs (e.g. Learn / Reference)
     active_path: []const u8 = "", // Current path for top-bar active state
@@ -57,10 +56,12 @@ pub fn Sidebar(allocator: zx.Allocator, props: SidebarProps) zx.Component {
                         <span></span>
                         <span></span>
                     </label>
-                    // <form class="top-bar-search" role="search" action="/docs">
-                    //     <input class="top-bar-search-input" type="search" name="q" placeholder="Search docs" aria-label="Search documentation" autocomplete="off" />
-                    //     <span class="top-bar-search-hint">/</span>
-                    // </form>
+                    <div class="top-bar-search" role="search">
+                        <input id="docs-search" class="top-bar-search-input" type="search" placeholder="Search docs" aria-label="Search documentation" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="docs-search-results" />
+                        <span class="top-bar-search-hint" aria-hidden="true">/</span>
+                        <ul id="docs-search-results" class="top-bar-search-results" role="listbox" hidden="true"></ul>
+                        <script type="application/json" id="docs-search-index" @escaping={.none}>{docs_nav.search_index_json}</script>
+                    </div>
                     <div class="top-bar-right">
                         <nav class="top-bar-nav">
                             {for (nav_links) |nav| (
@@ -92,17 +93,11 @@ pub fn Sidebar(allocator: zx.Allocator, props: SidebarProps) zx.Component {
                             )}
                         </div>
                     )}
-                    {if (props.categories.len > 0) (
-                        <div class="sidebar-categories">
-                            {for (props.categories) |category| (
-                                <SidebarCategory allocator={allocator} category={category} />
-                            )}
-                        </div>
-                    ) else (
-                        <ul class="nav-menu">
-                            {for (props.links) |link| (<li><a href={link.href}>{link.text}</a></li>)}
-                        </ul>
-                    )}
+                    <div class="sidebar-categories">
+                        {for (props.categories) |category| (
+                            <SidebarCategory allocator={allocator} category={category} />
+                        )}
+                    </div>
                 </nav>
                 <main class="content">
                     {props.children}
@@ -159,7 +154,7 @@ fn SidebarSection(allocator: zx.Allocator, props: SidebarSectionProps) zx.Compon
                     </summary>
                     <ul class="sidebar-subitems">
                         {for (props.section.items) |item| (
-                            <li><a href={item.href}>{item.text}</a></li>
+                            <li><a href={item.href}>{item.text}<SidebarBadge tags={item.tags} /></a></li>
                         )}
                     </ul>
                 </details>
@@ -172,6 +167,7 @@ fn SidebarSection(allocator: zx.Allocator, props: SidebarSectionProps) zx.Compon
             <li class="sidebar-section" @allocator={allocator}>
                 <a href={props.section.href} class="sidebar-section-link">
                     <span>{props.section.title}</span>
+                    <SidebarBadge tags={props.section.tags} />
                 </a>
             </li>
         );
@@ -193,6 +189,7 @@ fn SidebarSectionTitle(allocator: zx.Allocator, props: SidebarSectionProps) zx.C
         return (
             <a href={props.section.href} class="sidebar-section-link" @allocator={allocator}>
                 <span>{props.section.title}</span>
+                <SidebarBadge tags={props.section.tags} />
             </a>
         );
     }
@@ -200,13 +197,30 @@ fn SidebarSectionTitle(allocator: zx.Allocator, props: SidebarSectionProps) zx.C
     return (
         <span class="sidebar-section-title" @allocator={allocator}>
             <span>{props.section.title}</span>
+            <SidebarBadge tags={props.section.tags} />
         </span>
     );
+}
+
+const SidebarBadgeProps = struct {
+    tags: []const []const u8,
+};
+
+// Only the Experimental tag is shown; other tags (API names on examples) are for the examples index.
+fn SidebarBadge(allocator: zx.Allocator, props: SidebarBadgeProps) ?zx.Component {
+    for (props.tags) |tag| {
+        if (std.mem.eql(u8, tag, experimental.label)) {
+            return (<span class="sidebar-badge" title="This API may change before it is stable" @allocator={allocator}>{experimental.label}</span>);
+        }
+    }
+    return null;
 }
 
 const GitHubIcon = icons.GitHub;
 const DiscordIcon = icons.Discord;
 
 const icons = @import("../components/icons.zx");
+const experimental = @import("experimental.zx");
+const docs_nav = @import("docs_nav.zx");
 const zx = @import("zx");
 const std = @import("std");

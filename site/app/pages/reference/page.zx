@@ -116,6 +116,10 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
     const csr_stateful_handler_example = util.extractSection(allocator, examples_source, "Reference Inline: csr stateful handler");
     const csr_state_bind_example = util.extractSection(allocator, examples_source, "Reference Inline: csr state bind");
     const client_action_example = util.extractSection(allocator, examples_source, "Learn: client action");
+    const component_signatures = util.extractSignatures(allocator, examples_source, "Signature: component");
+    const client_action_signatures = util.extractSignatures(allocator, examples_source, "Signature: client actions");
+    const server_action_signatures = util.extractSignatures(allocator, examples_source, "Signature: server actions");
+    const server_event_signatures = util.extractSignatures(allocator, examples_source, "Signature: server events");
     const server_action_example = util.extractSection(allocator, examples_source, "Learn: server action");
 
     // Allocate files on heap to avoid stack lifetime issues
@@ -200,58 +204,49 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
             <section id="components" class="section">
                 <h2>Components</h2>
                 <p>Components are reusable functions that return <code>zx.Component</code>. They allow you to encapsulate UI logic and create modular, maintainable code. Components can accept props (properties) to customize their behavior and appearance.</p>
-                <h3>Component Function Signatures</h3>
-                <p>Component functions can use one of several signatures depending on their needs:</p>
-                <ul>
-                    <li><strong>Allocator only:</strong> <code>fn Component(allocator: zx.Allocator) zx.Component</code></li>
-                    <li><strong>With props:</strong> <code>fn Component(allocator: zx.Allocator, props: Props) zx.Component</code></li>
-                    <li><strong>Context (children only):</strong> <code>fn Component(ctx: *zx.ComponentContext) zx.Component</code></li>
-                    <li><strong>Context with props:</strong> <code>fn Component(ctx: *zx.ComponentCtx(Props)) zx.Component</code></li>
-                    <li><strong>Fallible:</strong> <code>fn Component(ctx: *zx.ComponentCtx(Props)) !zx.Component</code></li>
-                </ul>
+                <h3 id="component-signatures">Component Function Signatures</h3>
+                <p>A component takes an allocator (optionally followed by props), or a single context pointer. Any form can return <code>!zx.Component</code>{" "}to propagate errors:</p>
+                <CodeBlock code={component_signatures} />
                 <h3 id="component-context">ComponentContext</h3>
                 <p>Use <code>zx.ComponentContext</code> when your component needs access to children but has no custom props:</p>
                 <CodeBlock code={component_ctx_example} />
                 <h3 id="component-ctx-props">ComponentCtx with Props</h3>
                 <p>Use <code>zx.ComponentCtx(Props)</code> when you need both custom props and children access:</p>
                 <CodeBlock code={component_ctx_props_example} />
-                <p>The context provides <code>ctx.allocator</code>, <code>ctx.props</code>, and <code>ctx.children</code>.</p>
-                <h3>Defining Components</h3>
-                <p>To create a component, define a function that returns a <code>zx.Component</code>. The function must have an allocator as its first parameter. If your component needs configuration, add a props struct as the second parameter:</p>
+                <p>Fields of <code>zx.ComponentCtx(Props)</code>:</p>
+                <ApiTable fields={api_docs.component_context} />
+                <h3 id="defining-components">Defining Components</h3>
+                <p>To create a component, define a function that returns a <code>zx.Component</code>. The simplest form takes an allocator as its only parameter. If your component needs configuration, add a props struct as the second parameter:</p>
                 <ExampleBlock id="components" zx_code={zx_example_components} zig_code={zig_example_components} html_code={html_example_components} filename="button_demo.zx" />
-                <h3>Props Coercion</h3>
+                <h3 id="props-coercion">Props Coercion</h3>
                 <p>ZX automatically coerces the attributes you pass to a component into the expected props struct. Missing required fields will result in a compile-time error, while fields with default values are optional. This provides type safety while keeping component usage flexible.</p>
             </section>
-            <section id="routing" class="section">
-                <h2>Routing</h2>
-                <p>Ziex provides a file-based routing system that maps URL paths to page components. Routes can be nested, and layouts can be applied hierarchically to wrap pages with common UI elements.</p>
-                <h3 id="pages">Pages</h3>
-                <p>Pages are the main content components for each route. A page function must:</p>
-                <ul>
-                    <li>Accept a <code>zx.PageContext</code> as its only parameter</li>
-                    <li>Return a <code>zx.Component</code> or <code>!zx.Component</code></li>
-                    <li>Be exported as <code>pub fn Page</code></li>
-                </ul>
-                <ExampleBlock id="routing" zx_code={zx_example_routing} zig_code={zig_example_routing} html_code={html_example_routing} filename="home_page.zx" />
-                <h3 id="layouts">Layouts</h3>
-                <p>Layouts wrap pages with common UI elements like headers, footers, or navigation. A layout function must:</p>
-                <ul>
-                    <li>Accept a <code>zx.LayoutContext</code> as the first parameter</li>
-                    <li>Accept a <code>zx.Component</code> (the page content) as the second parameter</li>
-                    <li>Return a <code>zx.Component</code></li>
-                    <li>Be exported as <code>pub fn Layout</code></li>
-                </ul>
-                <ExampleBlock id="layout" files={layout_files} zig_code={zig_example_layout} html_code={html_example_layout} />
-                <h3>PageContext and LayoutContext</h3>
-                <p>Both <code>PageContext</code> and <code>LayoutContext</code> provide access to:</p>
-                <ul>
-                    <li><code>request</code>: The HTTP request object with headers, query params, body, etc.</li>
-                    <li><code>response</code>: The HTTP response object for setting headers and writing the response</li>
-                    <li><code>allocator</code>: Global allocator for persistent allocations (freed manually)</li>
-                    <li><code>arena</code>: Request-scoped allocator that's automatically freed after the request (recommended for most use cases)</li>
-                    <li><code>data</code>: Request-scoped key/value bag via <code>ctx.data.set</code> / <code>ctx.data.get</code> (e.g. title, description). The page runs first and can set values; parent and root layouts read and use them.</li>
-                </ul>
-                <p>Use <code>ctx.arena</code> for temporary allocations that only need to persist during request processing. This is the recommended allocator for most page and component code.</p>
+            <section id="fragments" class="section">
+                <h2>Fragments</h2>
+                <p>Fragments allow you to return multiple elements from a component without adding an extra wrapper element to the DOM. Use the empty tag syntax <code>{"<>...</>"}</code> to create a fragment:</p>
+                <ExampleBlock id="fragment" zx_code={zx_example_fragment} zig_code={zig_example_fragment} html_code={html_example_fragment} filename="fragment_demo.zx" />
+                <p>The fragment's children are rendered directly without any containing element.</p>
+            </section>
+            <section id="children-props" class="section">
+                <h2>Children Props</h2>
+                <p>Components can accept child elements through a <code>children</code> prop, enabling wrapper and container patterns. Any elements between the opening and closing tags are passed as the <code>children</code> prop:</p>
+                <ExampleBlock id="children" zx_code={zx_example_children} zig_code={zig_example_children} html_code={html_example_children} filename="card_demo.zx" />
+            </section>
+            <section id="attribute-syntax" class="section">
+                <h2>Attribute Syntax</h2>
+                <p>ZX provides convenient syntax for working with attributes beyond simple static values.</p>
+                <h3 id="spread-attributes">Spread Attributes</h3>
+                <p>Use <code>{"{..struct}"}</code> to spread all fields of a struct as attributes on an element. This is useful for passing groups of attributes or forwarding props:</p>
+                <CodeBlock code={spread_attrs_example} />
+                <p>Spread attributes can be combined with explicit attributes. Explicit attributes take precedence when there are conflicts.</p>
+                <h3 id="shorthand-attributes">Shorthand Attributes</h3>
+                <p>When the attribute name matches the variable name, use the shorthand syntax <code>{"{variable}"}</code>:</p>
+                <CodeBlock code={shorthand_attrs_example} />
+                <p>This is equivalent to writing <code>class={"{class}"}</code> but more concise.</p>
+                <h3 id="template-attributes">Template Attributes</h3>
+                <p>Use backticks (<code>`</code>) for string interpolation in attribute values. Embed expressions with <code>{"{expr}"}</code> inside the template:</p>
+                <CodeBlock code={template_attrs_example} />
+                <p>Template attributes are useful for building dynamic URLs, class names, or data attributes that combine static text with dynamic values.</p>
             </section>
             <section id="builtin-attributes" class="section">
                 <h2>Builtin Attributes</h2>
@@ -322,71 +317,19 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
 
                 <p><strong>Client actions</strong> run in the browser via <code>zx.client.Action</code>:</p>
                 <CodeBlock code={client_action_example} />
-                <ul>
-                    <li><code>fn(zx.client.Action) void</code>{" "}or <code>fn(*zx.client.Action) void</code>{" "}- read form data only</li>
-                    <li><code>fn(*zx.client.Action.Stateful) void</code>{" "}with <code>ctx.bind()</code>{" "}- also access component state via <code>a.state(T)</code></li>
-                </ul>
+                <p>Handler signatures. Use the <code>Stateful</code>{" "}form with <code>ctx.bind()</code>{" "}to read component state via <code>a.state(T)</code>:</p>
+                <CodeBlock code={client_action_signatures} />
 
-                <p><strong>Server actions</strong> run on the server via <code>zx.server.Action</code>:</p>
+                <p><strong>Server actions</strong> <Experimental /> run on the server via <code>zx.server.Action</code>. They also expose <code>request</code>, <code>response</code>, and <code>arena</code>:</p>
                 <CodeBlock code={server_action_example} />
-                <ul>
-                    <li><code>fn(zx.server.Action) void</code>{" "}or <code>fn(*zx.server.Action) void</code>{" "}- parse fields with <code>data(T)</code>; also exposes <code>request</code>, <code>response</code>, and <code>arena</code></li>
-                    <li><code>fn(*zx.server.Action.Stateful) void</code>{" "}with <code>ctx.bind()</code>{" "}- update bound component state on the server</li>
-                    <li>You can also pass a struct directly as the handler parameter (e.g. <code>fn(data: FormData) void</code>) and Ziex will coerce the form fields into that type</li>
-                </ul>
-                <p>Supported <code>data(T)</code>{" "}field types include <code>[]const u8</code>, integers, floats, bools, optionals, <code>[]const []const u8</code>{" "}for multi-value fields, and on the server <code>zx.File</code>{" "}/ <code>?zx.File</code>{" "}for multipart uploads.</p>
+                <p>Handler signatures. Use the <code>Stateful</code>{" "}form with <code>ctx.bind()</code>{" "}to update bound component state on the server:</p>
+                <CodeBlock code={server_action_signatures} />
+                <p>Supported <code>data(T)</code>{" "}field types include <code>[]const u8</code>, integers, floats, bools, optionals, <code>[]const []const u8</code>{" "}for multi-value fields, and on the server <code>zx.http.File</code>{" "}/ <code>?zx.http.File</code>{" "}for multipart uploads.</p>
 
-            </section>
-            <section id="attribute-syntax" class="section">
-                <h2>Attribute Syntax</h2>
-                <p>ZX provides convenient syntax for working with attributes beyond simple static values.</p>
-                <h3 id="spread-attributes">Spread Attributes</h3>
-                <p>Use <code>{"{..struct}"}</code> to spread all fields of a struct as attributes on an element. This is useful for passing groups of attributes or forwarding props:</p>
-                <CodeBlock code={spread_attrs_example} />
-                <p>Spread attributes can be combined with explicit attributes. Explicit attributes take precedence when there are conflicts.</p>
-                <h3 id="shorthand-attributes">Shorthand Attributes</h3>
-                <p>When the attribute name matches the variable name, use the shorthand syntax <code>{"{variable}"}</code>:</p>
-                <CodeBlock code={shorthand_attrs_example} />
-                <p>This is equivalent to writing <code>class={"{class}"}</code> but more concise.</p>
-                <h3 id="template-attributes">Template Attributes</h3>
-                <p>Use backticks (<code>`</code>) for string interpolation in attribute values. Embed expressions with <code>{"{expr}"}</code> inside the template:</p>
-                <CodeBlock code={template_attrs_example} />
-                <p>Template attributes are useful for building dynamic URLs, class names, or data attributes that combine static text with dynamic values.</p>
-            </section>
-            <section id="importing" class="section">
-                <h2>Importing</h2>
-                <p>
-                    ZX supports importing components and modules from various sources. You can import ZX components from other files,{" "}
-                    and standard Zig modules. You can't import a <code>.zx</code>{" "}file into a standard <code>.zig</code>{" "}file. If you need to, rename the <code>.zig</code>{" "}file to <code>.zx</code>{" "}(for example, <code>route.zx</code>) so you can import from a <code>.zx</code>{" "}file.
-                </p>
-                <ExampleBlock id="importing" zx_code={zx_example_importing} zig_code={zig_example_importing} html_code={html_example_importing} filename="import_demo.zx" />
-            </section>
-            <section id="dynamic-routes" class="section">
-                <h2>Dynamic Routes</h2>
-                <p>Ziex supports dynamic route segments using bracket notation in folder names.</p>
-                <h3>Creating Dynamic Routes</h3>
-                <p>Create a folder with brackets around the parameter name:</p>
-                <ul>
-                    <li><code>app/pages/user/[id]/page.zx</code> → <code>/user/:id</code></li>
-                    <li><code>app/pages/blog/[slug]/page.zx</code> → <code>/blog/:slug</code></li>
-                    <li><code>app/pages/[category]/[item]/page.zx</code> → <code>/:category/:item</code></li>
-                </ul>
-                <h3>Accessing Route and Query Parameters</h3>
-                <p>Use <code>ctx.request.params.get("name")</code> to access dynamic route parameters and <code>ctx.request.query("name")</code> for query strings:</p>
-                <ExampleBlock id="dynamic-route" zx_code={zx_example_dynamic} zig_code={zig_example_dynamic} html_code={html_example_dynamic} filename="pages/[id]/page.zx" />
-                <p>Both methods return <code>?[]const u8</code>, so use <code>orelse</code> to provide a default value.</p>
-            </section>
-            <APIAndWebSockets api_code={zig_api_route} ws_code={zig_websocket_route} />
-            <section id="fragments" class="section">
-                <h2>Fragments</h2>
-                <p>Fragments allow you to return multiple elements from a component without adding an extra wrapper element to the DOM. Use the empty tag syntax <code>{"<>...</>"}</code> to create a fragment:</p>
-                <ExampleBlock id="fragment" zx_code={zx_example_fragment} zig_code={zig_example_fragment} html_code={html_example_fragment} filename="fragment_demo.zx" />
-                <p>The fragment's children are rendered directly without any containing element.</p>
-            </section>
-            <section id="children-props" class="section">
-                <h2>Children Props</h2>
-                <p>Components can accept child elements through a <code>children</code> prop, enabling wrapper and container patterns. Any elements between the opening and closing tags are passed as the <code>children</code> prop:</p>
-                <ExampleBlock id="children" zx_code={zx_example_children} zig_code={zig_example_children} html_code={html_example_children} filename="card_demo.zx" />
+                <h4 id="server-events">Server events <Experimental /></h4>
+                <p>Bind a DOM event to a handler that runs on the server with <code>ctx.bind()</code>. The handler receives the element's value via <code>e.value()</code>; the <code>Stateful</code>{" "}form can also read and update bound component state:</p>
+                <CodeBlock code={server_event_signatures} />
+
             </section>
             <section id="syntax" class="section">
                 <h2>Syntax Features</h2>
@@ -400,6 +343,55 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                 <CodeBlock code={comments_example} />
                 <p>Comments are stripped from the output and do not appear in the rendered HTML.</p>
             </section>
+            <section id="importing" class="section">
+                <h2>Importing</h2>
+                <p>
+                    ZX supports importing components and modules from various sources. You can import ZX components from other files,{" "}
+                    and standard Zig modules. You can't import a <code>.zx</code>{" "}file into a standard <code>.zig</code>{" "}file. If you need to, rename the <code>.zig</code>{" "}file to <code>.zx</code>{" "}(for example, <code>route.zx</code>) so you can import from a <code>.zx</code>{" "}file.
+                </p>
+                <ExampleBlock id="importing" zx_code={zx_example_importing} zig_code={zig_example_importing} html_code={html_example_importing} filename="import_demo.zx" />
+            </section>
+            <section id="routing" class="section">
+                <h2>Routing</h2>
+                <p>Ziex provides a file-based routing system that maps URL paths to page components. Routes can be nested, and layouts can be applied hierarchically to wrap pages with common UI elements.</p>
+                <h3 id="pages">Pages</h3>
+                <p>Pages are the main content components for each route. A page function must:</p>
+                <ul>
+                    <li>Accept a <code>zx.PageContext</code> as its only parameter</li>
+                    <li>Return a <code>zx.Component</code> or <code>!zx.Component</code></li>
+                    <li>Be exported as <code>pub fn Page</code></li>
+                </ul>
+                <ExampleBlock id="routing" zx_code={zx_example_routing} zig_code={zig_example_routing} html_code={html_example_routing} filename="home_page.zx" />
+                <h3 id="layouts">Layouts</h3>
+                <p>Layouts wrap pages with common UI elements like headers, footers, or navigation. A layout function must:</p>
+                <ul>
+                    <li>Accept a <code>zx.LayoutContext</code> as the first parameter</li>
+                    <li>Accept a <code>zx.Component</code> (the page content) as the second parameter</li>
+                    <li>Return a <code>zx.Component</code></li>
+                    <li>Be exported as <code>pub fn Layout</code></li>
+                </ul>
+                <ExampleBlock id="layout" files={layout_files} zig_code={zig_example_layout} html_code={html_example_layout} />
+                <h3 id="page-context">PageContext and LayoutContext</h3>
+                <p><code>zx.PageContext</code>{" "}and <code>zx.LayoutContext</code>{" "}have the same fields:</p>
+                <ApiTable fields={api_docs.page_context} />
+            </section>
+            <section id="dynamic-routes" class="section">
+                <h2>Dynamic Routes</h2>
+                <p>Ziex supports dynamic route segments using bracket notation in folder names.</p>
+                <h3 id="dynamic-route-segments">Creating Dynamic Routes</h3>
+                <p>Create a folder with brackets around the parameter name:</p>
+                <ul>
+                    <li><code>app/pages/user/[id]/page.zx</code> → <code>/user/:id</code></li>
+                    <li><code>app/pages/blog/[slug]/page.zx</code> → <code>/blog/:slug</code></li>
+                    <li><code>app/pages/[category]/[item]/page.zx</code> → <code>/:category/:item</code></li>
+                </ul>
+                <h3 id="route-params">Accessing Route and Query Parameters</h3>
+                <p>Use <code>ctx.request.params.get("name")</code> to access dynamic route parameters and <code>ctx.request.query("name")</code> for query strings:</p>
+                <ExampleBlock id="dynamic-route" zx_code={zx_example_dynamic} zig_code={zig_example_dynamic} html_code={html_example_dynamic} filename="pages/[id]/page.zx" />
+                <p>Both methods return <code>?[]const u8</code>, so use <code>orelse</code> to provide a default value.</p>
+            </section>
+            <FileConventions />
+            <APIAndWebSockets api_code={zig_api_route} ws_code={zig_websocket_route} />
             <CachingSection />
             <CLISection />
             // <ExamplesSection />
@@ -426,7 +418,72 @@ const example_block = @import("../components/example_block.zig");
 const ExampleBlock = example_block.ExampleBlock;
 const File = example_block.File;
 const CodeBlock = @import("../components/code_block.zig").CodeBlock;
+const ApiTable = @import("../components/api_table.zx").ApiTable;
+const Experimental = @import("../components/experimental.zx").Experimental;
+const api_docs = @import("api_docs.zig");
 const InstallCLI = @import("../components/install_guide.zx").InstallCLI;
+
+fn FileConventions(allocator: zx.Allocator) zx.Component {
+    const source = @embedFile("file_conventions.zx");
+    _ = @import("file_conventions.zx");
+
+    return (
+        <section id="file-conventions" class="section" @allocator={allocator}>
+            <h2>File Conventions</h2>
+            <p>Routing is driven by file names inside <code>app/pages/</code>{" "}(and <code>app/routes/</code>). Each directory is a URL segment; these files give it behavior:</p>
+            <table class="options-table">
+                <thead>
+                    <tr>
+                        <th>File</th>
+                        <th>Exports</th>
+                        <th>Applies to</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><a href="#file-page"><code>page.zx</code></a></td><td><code>Page</code>, <code>options</code></td><td>This path</td></tr>
+                    <tr><td><a href="#file-layout"><code>layout.zx</code></a></td><td><code>Layout</code>, <code>options</code></td><td>This path and everything below it</td></tr>
+                    <tr><td><a href="#file-notfound"><code>notfound.zx</code></a></td><td><code>NotFound</code>, <code>options</code></td><td>Unmatched paths at or below this directory</td></tr>
+                    <tr><td><a href="#file-error"><code>error.zx</code></a></td><td><code>Error</code></td><td>Errors from pages and routes below this directory</td></tr>
+                    <tr><td><a href="#file-route"><code>route.zig</code></a></td><td><code>GET</code>, <code>POST</code>, ..., <code>Route</code>, <code>Socket*</code>, <code>options</code></td><td>This path</td></tr>
+                    <tr><td><a href="#file-proxy"><code>proxy.zig</code></a></td><td><code>Proxy</code>, <code>PageProxy</code>, <code>RouteProxy</code></td><td><code>Proxy</code>: this path and below; the others: this path only</td></tr>
+                </tbody>
+            </table>
+            <p>Every file in a directory is optional. Files that contain ZX markup use <code>.zx</code>; a plain-Zig file can use <code>.zig</code>{" "}instead (for example <code>page.zig</code>).</p>
+
+            <h3 id="file-page">page.zx</h3>
+            <p>Renders the page for the directory's path. Return <code>!zx.Component</code>{" "}to propagate errors to <code>error.zx</code>.</p>
+            <CodeBlock code={util.extractSignatures(allocator, source, "page.zx")} />
+            <ApiTable fields={api_docs.page_options} defaults={true} />
+
+            <h3 id="file-layout">layout.zx</h3>
+            <p>Wraps every page at or below its directory. Layouts nest: the root layout wraps the nested one, which wraps the page.</p>
+            <CodeBlock code={util.extractSignatures(allocator, source, "layout.zx")} />
+            <ApiTable fields={api_docs.layout_options} defaults={true} />
+
+            <h3 id="file-notfound">notfound.zx</h3>
+            <p>Rendered with status 404 when no route matches. Ziex uses the closest <code>notfound.zx</code>{" "}above the requested path and wraps it in that path's layouts. Without one, the response is a plain-text <code>404 Not Found</code>.</p>
+            <CodeBlock code={util.extractSignatures(allocator, source, "notfound.zx")} />
+            <ApiTable fields={api_docs.notfound_options} defaults={true} />
+
+            <h3 id="file-error">error.zx</h3>
+            <p>Rendered with status 500 when a page or route handler returns an error. <code>ctx.err</code>{" "}holds the error; the other fields match <code>PageContext</code>.</p>
+            <CodeBlock code={util.extractSignatures(allocator, source, "error.zx")} />
+            <ApiTable fields={api_docs.error_context} />
+
+            <h3 id="file-route">route.zig</h3>
+            <p>Handles raw HTTP requests. Export a function per method (<code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>, <code>HEAD</code>, <code>OPTIONS</code>, or any other all-uppercase name for a custom method), or <code>Route</code>{" "}as a catch-all. A <code>route.zig</code>{" "}next to a <code>page.zx</code>{" "}can't define a method the page handles (see <code>PageOptions.methods</code>). Handlers can return <code>void</code>{" "}or <code>!void</code>.</p>
+            <CodeBlock code={util.extractSignatures(allocator, source, "route.zig")} />
+            <p>WebSocket handlers live in the same file. See <a href="#websockets">WebSockets</a>.</p>
+            <CodeBlock code={util.extractSignatures(allocator, source, "route.zig sockets")} />
+            <ApiTable fields={api_docs.route_options} defaults={true} />
+
+            <h3 id="file-proxy">proxy.zig</h3>
+            <p>Runs before handlers, like middleware. <code>Proxy</code>{" "}runs for this path and every path below it; <code>PageProxy</code>{" "}runs only before this directory's page and <code>RouteProxy</code>{" "}only before its <code>route.zig</code>. Call <code>ctx.abort()</code>{" "}to stop the chain and send the response as it is; otherwise the request continues.</p>
+            <CodeBlock code={util.extractSignatures(allocator, source, "proxy.zig")} />
+            <ApiTable fields={api_docs.proxy_context} />
+        </section>
+    );
+}
 
 const APIAndWebSocketsProps = struct {
     api_code: []const u8,
@@ -450,12 +507,7 @@ fn APIAndWebSockets(allocator: zx.Allocator, props: APIAndWebSocketsProps) zx.Co
             <h3 id="route-context">RouteContext</h3>
             <p>All API handlers receive a <code>zx.RouteContext</code>, which provides everything needed to handle the request:</p>
             <CodeBlock code={route_ctx_example} />
-            <ul>
-                <li><code>request</code>: Access headers, query params, cookies, and body.</li>
-                <li><code>response</code>: Set status codes and write response data (JSON, HTML, etc.).</li>
-                <li><code>socket</code>: Interface for WebSocket upgrades and broadcasting.</li>
-                <li><code>arena</code>: An allocator that is automatically freed when the request finishes.</li>
-            </ul>
+            <ApiTable fields={api_docs.route_context} />
 
             <h3 id="websockets">WebSockets</h3>
             <p>Ziex has first-class support for WebSockets. You can upgrade an API request to a WebSocket connection and handle real-time messages with simple lifecycle hooks.</p>
@@ -472,6 +524,7 @@ fn APIAndWebSockets(allocator: zx.Allocator, props: APIAndWebSocketsProps) zx.Co
             <h4 id="socket-context">SocketContext</h4>
             <p>Message handlers receive a <code>zx.SocketContext</code> (or others like <code>SocketOpenContext</code>):</p>
             <CodeBlock code={socket_ctx_example} />
+            <ApiTable fields={api_docs.socket_context} />
 
             <h4 id="pub-sub">Pub/Sub and Broadcasting</h4>
             <p>The <code>ctx.socket</code> interface provides a powerful pub/sub system for broadcasting messages to multiple clients:</p>
@@ -496,7 +549,7 @@ fn CachingSection(allocator: zx.Allocator) zx.Component {
 
     return (
         <section id="caching" class="section" @allocator={allocator}>
-            <h2>Caching <span class="badge">Alpha</span></h2>
+            <h2>Caching <Experimental /></h2>
             <p>Ziex provides built-in caching for components, pages, and layouts to improve performance. Cached content is persisted on disk and served directly without re-rendering.</p>
 
             <h3 id="caching-enabling">Enabling</h3>

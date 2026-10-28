@@ -1,0 +1,83 @@
+// Signatures shown under "File Conventions" in /reference. The comptime block below
+// passes this file through the router, so a signature it rejects fails the site build.
+
+// --- page.zx ---
+pub fn Page(ctx: zx.PageContext) zx.Component {
+    return (<h1 @allocator={ctx.arena}>Home</h1>);
+}
+
+pub const options = zx.PageOptions{ .methods = &.{ .GET, .POST } };
+
+// --- layout.zx ---
+pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
+    return (<main @allocator={ctx.arena}>{children}</main>);
+}
+
+// --- notfound.zx ---
+pub fn NotFound(ctx: zx.NotFoundContext) zx.Component {
+    return (<h1 @allocator={ctx.arena}>Page not found</h1>);
+}
+
+// --- error.zx ---
+pub fn Error(ctx: zx.ErrorContext) zx.Component {
+    return (<h1 @allocator={ctx.arena}>{@errorName(ctx.err)}</h1>);
+}
+
+// --- route.zig ---
+pub fn GET(ctx: zx.RouteContext) !void {
+    try ctx.response.json(.{ .ok = true }, .{});
+}
+
+pub fn POST(ctx: zx.RouteContext) !void {
+    ctx.response.setStatus(.created);
+}
+
+pub fn Route(ctx: zx.RouteContext) !void {
+    ctx.response.setStatus(.method_not_allowed);
+}
+
+// --- route.zig sockets ---
+pub fn Socket(ctx: zx.SocketContext) !void {
+    try ctx.socket.send(ctx.message);
+}
+
+pub fn SocketOpen(ctx: zx.SocketOpenContext) void {
+    ctx.socket.subscribe("chat");
+}
+
+pub fn SocketClose(ctx: zx.SocketCloseContext) void {
+    ctx.socket.unsubscribe("chat");
+}
+
+// --- proxy.zig ---
+pub fn Proxy(ctx: *zx.ProxyContext) !void {
+    ctx.next();
+}
+
+pub fn PageProxy(ctx: *zx.ProxyContext) !void {
+    ctx.next();
+}
+
+pub fn RouteProxy(ctx: *zx.ProxyContext) !void {
+    if (ctx.request.headers.get("Authorization") == null) {
+        ctx.response.setStatus(.unauthorized);
+        return ctx.abort();
+    }
+}
+
+// --- end ---
+comptime {
+    if (zx.platform.role == .server) {
+        const App = zx.server.App;
+        _ = App.page(@This());
+        _ = App.layout(@This());
+        _ = App.notfound(@This());
+        _ = App.@"error"(@This());
+        _ = App.route(@This(), null);
+        _ = App.proxy(@This());
+        _ = App.pageProxy(@This());
+        _ = App.routeProxy(@This());
+    }
+}
+
+const zx = @import("zx");

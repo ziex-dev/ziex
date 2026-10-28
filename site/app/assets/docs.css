@@ -292,6 +292,57 @@ body {
     transform: translateY(-50%);
 }
 
+.top-bar-search-results {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 200;
+    margin: 0;
+    padding: .25rem;
+    list-style: none;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px #0000001f;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.top-bar-search-results[hidden] {
+    display: none;
+}
+
+.top-bar-search-result {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    padding: .45rem .6rem;
+    border-radius: 6px;
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+.top-bar-search-results [aria-selected="true"] .top-bar-search-result,
+.top-bar-search-result:hover {
+    background: var(--nav-bg);
+}
+
+.top-bar-search-result-title {
+    font-size: .9rem;
+    font-weight: 500;
+}
+
+.top-bar-search-result-group,
+.top-bar-search-empty {
+    color: var(--subtitle-color);
+    font-size: .75rem;
+}
+
+.top-bar-search-empty {
+    padding: .45rem .6rem;
+}
+
 .top-bar-link-short {
     display: none;
 }
@@ -2419,4 +2470,51 @@ div:has(#tab-editor-emacs:checked) #content-editor-emacs {
     .project-tree-desc {
         display: none;
     }
+}
+.badge-experimental {
+    background: #b45309;
+    color: #fff;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.sidebar-badge {
+    margin-left: .4rem;
+    padding: 0 .3rem;
+    border: 1px solid #b4530966;
+    border-radius: 4px;
+    color: #b45309;
+    font-size: .625rem;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.options-table {
+    width: 100%;
+    margin: 1rem 0 1.5rem;
+    border-collapse: collapse;
+    font-size: .875rem;
+    display: block;
+    overflow-x: auto;
+}
+
+.options-table th,
+.options-table td {
+    padding: .5rem .75rem;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: top;
+}
+
+.options-table th {
+    color: var(--subtitle-color);
+    font-weight: 600;
+}
+
+.api-table code.hljs {
+    display: inline;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    padding: .12em .35em;
+    white-space: nowrap;
 }

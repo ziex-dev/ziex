@@ -2,7 +2,7 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
     const allocator = ctx.arena;
 
     return (
-        <Sidebar @{allocator} categories={&categories} toc={&toc_links} tabs={&tabs} active_path="/learn">
+        <Sidebar @{allocator} categories={&categories} toc={toc_links} tabs={&tabs} active_path="/learn">
             {children}
         </Sidebar>
     );
@@ -13,29 +13,27 @@ const tabs = [_]SidebarProps.Tab{
     .{ .label = "Reference", .href = "/reference", .active = false },
 };
 
-const categories = [_]SidebarProps.Category{
+pub const categories = [_]SidebarProps.Category{
     .{
-        .title = "GET STARTED",
+        .title = "Get Started",
         .sections = &[_]SidebarProps.Section{
             .{ .title = "Quick Start", .href = "/learn" },
+            .{ .title = "Installation", .href = "/learn#installation" },
+            .{ .title = "Create a Project", .href = "/learn#create-project" },
+            .{ .title = "Project Structure", .href = "/learn#project-structure" },
             .{
-                .title = "Installation",
+                .title = "Developer Tools",
+                .href = "/learn#devtools",
                 .items = &[_]SidebarProps.Link{
-                    .{ .href = "/learn#installation", .text = "Install Ziex CLI" },
-                    .{ .href = "/learn#create-project", .text = "Create a Project" },
-                },
-            },
-            .{
-                .title = "Editor Setup",
-                .href = "/learn#editor-setup",
-                .items = &[_]SidebarProps.Link{
-                    .{ .href = "/learn#devtools", .text = "Browser DevTools" },
+                    .{ .href = "/learn#editor-setup", .text = "Editor Extensions" },
+                    .{ .href = "/learn#language-server", .text = "Language Server" },
+                    .{ .href = "/learn#browser-devtools", .text = "Browser DevTools" },
                 },
             },
         },
     },
     .{
-        .title = "LEARN ZIEX",
+        .title = "Learn Ziex",
         .sections = &[_]SidebarProps.Section{
             .{
                 .title = "Describing the UI",
@@ -45,8 +43,6 @@ const categories = [_]SidebarProps.Category{
                     .{ .href = "/learn#fragments", .text = "Fragments" },
                     .{ .href = "/learn#displaying-data", .text = "Displaying Data" },
                     .{ .href = "/learn#dynamic-attributes", .text = "Dynamic Attributes" },
-                    .{ .href = "/learn#interactivity", .text = "Interactivity" },
-                    .{ .href = "/learn#form-actions", .text = "Form Actions" },
                     .{ .href = "/learn#passing-props", .text = "Passing Props" },
                     .{ .href = "/learn#children", .text = "Children Props" },
                 },
@@ -59,9 +55,22 @@ const categories = [_]SidebarProps.Category{
                 },
             },
             .{
+                .title = "Interactivity",
+                .href = "/learn#interactivity",
+                .items = &[_]SidebarProps.Link{
+                    .{ .href = "/learn#event-handlers", .text = "Event Handlers" },
+                    .{ .href = "/learn#binding-state", .text = "Binding State" },
+                    .{ .href = "/learn#form-actions", .text = "Form Actions" },
+                    .{ .href = "/learn#server-actions", .text = "Server Actions", .tags = &.{experimental.label} },
+                },
+            },
+            .{
                 .title = "Routing",
                 .items = &[_]SidebarProps.Link{
-                    .{ .href = "/learn#pages-layouts", .text = "Pages and Layouts" },
+                    .{ .href = "/learn#pages-layouts", .text = "Pages" },
+                    .{ .href = "/learn#dynamic-routes", .text = "Dynamic Routes" },
+                    .{ .href = "/learn#layouts", .text = "Layouts" },
+                    .{ .href = "/learn#page-context", .text = "Page Context" },
                     .{ .href = "/learn#api-routes", .text = "API Routes" },
                 },
             },
@@ -75,63 +84,37 @@ const categories = [_]SidebarProps.Category{
         },
     },
     .{
-        .title = "DEPLOYMENT",
+        .title = "Deployment",
         .sections = &[_]SidebarProps.Section{
             .{
                 .title = "Standalone",
+                .href = "/learn#deployment-standalone",
                 .items = &[_]SidebarProps.Link{
-                    .{ .href = "/learn#deployment-standalone", .text = "Overview" },
                     .{ .href = "/learn#deployment-docker", .text = "Docker" },
                     .{ .href = "/learn#deployment-railway", .text = "Railway" },
                     .{ .href = "/learn#deployment-render", .text = "Render" },
                 },
             },
-            .{
-                .title = "Static",
-                .href = "/learn#deployment-static",
-            },
+            .{ .title = "Static", .href = "/learn#deployment-static" },
             .{
                 .title = "Edge",
+                .href = "/learn#deployment-edge",
                 .items = &[_]SidebarProps.Link{
-                    .{ .href = "/learn#deployment-edge", .text = "Overview" },
                     .{ .href = "/learn#deployment-cloudflare", .text = "Cloudflare" },
                     .{ .href = "/learn#deployment-vercel", .text = "Vercel" },
                     .{ .href = "/learn#deployment-prerender", .text = "Pre-rendering" },
                 },
             },
-            .{
-                .title = "Build output",
-                .href = "/learn#deployment-output",
-            },
+            .{ .title = "Build Output", .href = "/learn#deployment-output" },
         },
     },
 };
 
-const toc_links = [_]SidebarProps.Link{
-    .{ .href = "/learn#installation", .text = "Installation" },
-    .{ .href = "/learn#create-project", .text = "Create a Project" },
-    .{ .href = "/learn#editor-setup", .text = "Editor Setup" },
-    .{ .href = "/learn#devtools", .text = "DevTools" },
-    .{ .href = "/learn#creating-components", .text = "Components" },
-    .{ .href = "/learn#writing-markup", .text = "Markup" },
-    .{ .href = "/learn#fragments", .text = "Fragments" },
-    .{ .href = "/learn#displaying-data", .text = "Displaying Data" },
-    .{ .href = "/learn#dynamic-attributes", .text = "Attributes" },
-    .{ .href = "/learn#interactivity", .text = "Interactivity" },
-    .{ .href = "/learn#form-actions", .text = "Form Actions" },
-    .{ .href = "/learn#conditional-rendering", .text = "Conditionals" },
-    .{ .href = "/learn#rendering-lists", .text = "Lists" },
-    .{ .href = "/learn#passing-props", .text = "Props" },
-    .{ .href = "/learn#children", .text = "Children" },
-    .{ .href = "/learn#pages-layouts", .text = "Pages & Layouts" },
-    .{ .href = "/learn#api-routes", .text = "API Routes" },
-    .{ .href = "/learn#kv", .text = "Key-Value" },
-    .{ .href = "/learn#database", .text = "Database" },
-    .{ .href = "/learn#deployment", .text = "Deployment" },
-    .{ .href = "/learn#next-steps", .text = "Next Steps" },
-};
+const toc_links = docs_nav.toc(&categories);
 
 const Sidebar = @import("../components/sidebar.zx").Sidebar;
 const SidebarProps = @import("../components/sidebar.zx").SidebarProps;
+const docs_nav = @import("../components/docs_nav.zx");
+const experimental = @import("../components/experimental.zx");
 
 const zx = @import("zx");

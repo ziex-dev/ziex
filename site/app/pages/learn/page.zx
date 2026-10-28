@@ -78,6 +78,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
     const spread_attrs_example = util.extractUnwrapSection(allocator, examples_content, "Learn: spread attrs");
     const client_action_example = util.extractSection(allocator, examples_content, "Learn: client action");
     const server_action_example = util.extractSection(allocator, examples_content, "Learn: server action");
+    const component_signatures = util.extractSignatures(allocator, examples_content, "Signature: component");
 
     const html_greeting = util.renderComponentToHtml(allocator, examples.Learn__HelloWorld(allocator));
     const html_markup = util.renderComponentToHtml(allocator, examples.Learn__AboutSection(allocator));
@@ -121,11 +122,11 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
             <Fragments zx_code={zx_fragment} zig_code={zig_fragment} html_code={html_fragment} />
             <DisplayingData zx_text={zx_text} zig_text={zig_text} html_text={html_text} zx_format={zx_format} zig_format={zig_format} html_format={html_format} />
             <DynamicAttributes zx_code={zx_dynattr} zig_code={zig_dynattr} html_code={html_dynattr} template_example={template_attrs_example} spread_example={spread_attrs_example} />
-            <Interactivity zx_onclick={zx_onclick} html_onclick={html_onclick} zx_onclick_state={zx_onclick_state} html_onclick_state={html_onclick_state} zx_state_mgmt={zx_state_mgmt} html_state_mgmt={html_state_mgmt} preview_onclick={preview_onclick} preview_onclick_state={preview_onclick_state} preview_state_mgmt={preview_state_mgmt} client_action_example={client_action_example} server_action_example={server_action_example} />
+            <PassingProps signatures={component_signatures} zx_code={zx_props} zig_code={zig_props} html_code={html_props} />
+            <ChildrenProps zx_code={zx_children} zig_code={zig_children} html_code={html_children} />
             <ConditionalRendering zx_conditional={zx_conditional} zig_conditional={zig_conditional} html_conditional={html_conditional} zx_switch={zx_switch} zig_switch={zig_switch} html_switch={html_switch} />
             <RenderingLists zx_code={zx_list} zig_code={zig_list} html_code={html_list} />
-            <PassingProps zx_code={zx_props} zig_code={zig_props} html_code={html_props} />
-            <ChildrenProps zx_code={zx_children} zig_code={zig_children} html_code={html_children} />
+            <Interactivity zx_onclick={zx_onclick} html_onclick={html_onclick} zx_onclick_state={zx_onclick_state} html_onclick_state={html_onclick_state} zx_state_mgmt={zx_state_mgmt} html_state_mgmt={html_state_mgmt} preview_onclick={preview_onclick} preview_onclick_state={preview_onclick_state} preview_state_mgmt={preview_state_mgmt} client_action_example={client_action_example} server_action_example={server_action_example} />
             <PagesAndLayouts zx_page={zx_page} zig_page={zig_page} html_page={html_page} zx_layout={zx_layout} html_layout={html_layout} zx_dynamic={zx_dynamic} zig_dynamic={zig_dynamic} html_dynamic={html_dynamic} />
             <APIRoutes zig_code={zig_api} />
             <KVStorage kv_basic={kv_basic} kv_typed={kv_typed} kv_scoped={kv_scoped} enable_build={enable_kv_build} />
@@ -195,7 +196,7 @@ fn Installation(allocator: zx.Allocator) !zx.Component {
 
             <p style="margin-top: 1rem;">You can also scaffold a project with <a href="#create-project">Node.js</a>, clone a <a href="#create-project">starter template</a>, or set things up <a href="#create-project">manually</a>. See <a href="#create-project">Create a Project</a> for all options.</p>
 
-            <h3>Install Zig</h3>
+            <h3 id="install-zig">Install Zig</h3>
             <p>Ziex <code>{zx.info.version}</code> requires Zig <code>{zx.info.minimum_zig_version}</code>:</p>
 
             <p>Other available versions:</p>
@@ -377,7 +378,7 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
                 </div>
             </div>
 
-            <h3>Project Structure</h3>
+            <h3 id="project-structure">Project Structure</h3>
             <ProjectTree />
             <div class="callout tip">
                 <strong>Tip:</strong>{" "}The <code>app/pages/</code>{" "}directory uses file-based routing. Each <code>page.zx</code>{" "}file becomes a route.
@@ -388,9 +389,12 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
 
 fn EditorSetup(allocator: zx.Allocator) zx.Component {
     return (
-        <section id="editor-setup" class="section" @allocator={allocator}>
-            <h2>Editor Setup</h2>
-            <p>Set up your editor for the best Ziex development experience.</p>
+        <section id="devtools" class="section" @allocator={allocator}>
+            <h2>Developer Tools</h2>
+            <p>Editor support for ZX files, a language server, and browser DevTools for running apps.</p>
+
+            <h3 id="editor-setup">Editor Extensions</h3>
+            <p>Every editor gets syntax highlighting for <code>.zx</code>{" "}files and diagnostics from the language server.</p>
             <div>
                 <div class="simple-tab-header">
                     <input type="radio" id="tab-editor-vscode" name="editor-setup" class="simple-tab-radio" checked="true" aria-label="VS Code / Cursor" />
@@ -439,10 +443,12 @@ fn EditorSetup(allocator: zx.Allocator) zx.Component {
                     <p><strong>Features:</strong> Tree-sitter syntax highlighting, indentation, imenu, and LSP support via Eglot.</p>
                 </div>
             </div>
-            <p>All editors run the same language server, <code>zx lsp</code>. See the <a href=`{zx.info.repository}/tree/main/ide#language-server` target="_blank" rel="noopener noreferrer">language server guide</a> for how it starts and how to configure it.</p>
 
-            <h3 id="devtools">Browser DevTools</h3>
-            <p>Install the <a href="https://chromewebstore.google.com/detail/ziex-devtools/efnedneccooengjfmahlnmicgkalnopj" target="_blank" rel="noopener noreferrer">Ziex DevTools</a> Chrome extension to inspect and debug Ziex applications from Chrome DevTools.</p>
+            <h3 id="language-server">Language Server</h3>
+            <p>All editors run the same ZX language server, <code>zx lsp</code>, which ships with the Ziex CLI. It provides diagnostics, completion, hover, and formatting for <code>.zx</code>{" "}files, and forwards the Zig parts to ZLS. See the <a href=`{zx.info.repository}/tree/main/ide#language-server` target="_blank" rel="noopener noreferrer">language server guide</a>{" "}for how it starts and how to configure it.</p>
+
+            <h3 id="browser-devtools">Browser DevTools</h3>
+            <p>The <a href="https://chromewebstore.google.com/detail/ziex-devtools/efnedneccooengjfmahlnmicgkalnopj" target="_blank" rel="noopener noreferrer">Ziex DevTools</a>{" "}Chrome extension adds a Ziex panel to Chrome DevTools for inspecting and debugging running Ziex apps. It also works in other Chromium-based browsers that install Chrome Web Store extensions.</p>
 
             <script src=`/assets/docs.js?v={zx.info.version}` defer="true"></script>
         </section>
@@ -483,7 +489,7 @@ fn WritingMarkup(allocator: zx.Allocator, props: WritingMarkupProps) zx.Componen
             <p>ZX is stricter than HTML. You have to close all tags, including self-closing ones like <code>{"<br />"}</code>:</p>
             <ExampleBlock id="markup" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="about_section.zx" />
             <p>CSS classes are specified with the <code>class</code> attribute, same as HTML. Write your CSS in separate files and include them in your layout.</p>
-            <p>ZX automatically escapes HTML content for security. If you need to render raw HTML, see the <a href="/reference#escaping">@escaping documentation</a>.</p>
+            <p>Ziex escapes text content when it renders, for security. If you need to render raw HTML, see the <a href="/reference#escaping">@escaping documentation</a>.</p>
         </section>
     );
 }
@@ -582,12 +588,12 @@ fn Interactivity(allocator: zx.Allocator, props: InteractivityProps) zx.Componen
             <h2>Adding interactivity</h2>
             <p>Interactivity can be added using native HTML attributes. Provide a function as a handler for the event and take action on that event.</p>
 
-            <h3>Event handlers</h3>
+            <h3 id="event-handlers">Event handlers</h3>
             <p>Attach event handlers to elements using the <code>{"on<event_name>"}</code> syntax:</p>
             <ExampleBlock id="onclick" zx_code={props.zx_onclick} html_code={props.html_onclick} filename="events.zig" preview_component={props.preview_onclick} />
             <p>Common event handlers include <code>onclick</code>, <code>onsubmit</code>, <code>onchange</code>, <code>onblur</code>, and more. Handler functions receive a <code>zx.client.Event</code> parameter with access to the DOM event object.</p>
 
-            <h3>Binding state to events</h3>
+            <h3 id="binding-state">Binding state to events</h3>
             <p>To update component state in response to events, use <code>ctx.bind(handler)</code> and access state through the event handler:</p>
             <ExampleBlock id="onclick-state" zx_code={props.zx_onclick_state} html_code={props.html_onclick_state} filename="events.zig" preview_component={props.preview_onclick_state} />
             <p>When you use <code>ctx.bind()</code>, the handler receives a <code>zx.client.Event.Stateful</code> which provides access to component state through <code>event.state(T)</code>. Call <code>state(T)</code> in the same order as the <code>ctx.state()</code> calls in the component; the types must match.</p>
@@ -603,7 +609,7 @@ fn Interactivity(allocator: zx.Allocator, props: InteractivityProps) zx.Componen
             <CodeBlock code={props.client_action_example} filename="contact_form.zx" />
             <p><code>a.data(T)</code>{" "}maps each form field name to a struct field. Supported field types include strings, ints, floats, bools, optionals, and <code>[]const []const u8</code>{" "}for repeated fields.</p>
 
-            <h4 id="server-actions">Server actions</h4>
+            <h4 id="server-actions">Server actions <Experimental /></h4>
             <p>Use <code>zx.server.Action</code> when the form should be handled on the server. Point <code>action</code>{" "}at the handler directly (no <code>ctx.bind()</code>{" "}needed for a plain server action):</p>
             <CodeBlock code={props.server_action_example} filename="login_form.zx" />
             <p>Server actions also expose <code>request</code>, <code>response</code>, and <code>arena</code>. Use <code>*zx.server.Action.Stateful</code>{" "}with <code>ctx.bind()</code>{" "}when the handler needs component state. See the <a href="/reference#form-actions">Form Actions reference</a>{" "}for details.</p>
@@ -653,6 +659,7 @@ fn RenderingLists(allocator: zx.Allocator, props: RenderingListsProps) zx.Compon
 }
 
 const PassingPropsProps = struct {
+    signatures: []const u8,
     zx_code: []const u8,
     zig_code: []const u8,
     html_code: []const u8,
@@ -665,11 +672,10 @@ fn PassingProps(allocator: zx.Allocator, props: PassingPropsProps) zx.Component 
             <p>Components can accept <em>props</em> (properties) to customize their behavior. Define a props struct as the second parameter:</p>
             <ExampleBlock id="props" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="button_demo.zx" />
             <p>ZX automatically coerces attributes to the props struct. Fields with default values are optional. See the <a href="/reference#components">Components documentation</a> for more on props coercion.</p>
-            <h3>Component signatures</h3>
-            <ul>
-                <li><strong>Allocator only:</strong> <code>fn Component(allocator: zx.Allocator) zx.Component</code></li>
-                <li><strong>With props:</strong> <code>fn Component(allocator: zx.Allocator, props: Props) zx.Component</code></li>
-            </ul>
+            <h3 id="component-signatures">Component signatures</h3>
+            <p>A component takes an allocator (optionally followed by props), or a single context pointer. The context form is needed for state and <code>ctx.bind()</code>:</p>
+            <CodeBlock code={props.signatures} />
+            <p>See <a href="/reference#components">Components</a>{" "}for the context fields.</p>
         </section>
     );
 }
@@ -710,7 +716,7 @@ fn PagesAndLayouts(allocator: zx.Allocator, props: PagesAndLayoutsProps) zx.Comp
             <ExampleBlock id="page-example" zx_code={props.zx_page} zig_code={props.zig_page} html_code={props.html_page} filename="page.zx" />
             <p>The file path determines the URL: <code>app/pages/about/page.zx</code> → <code>/about</code></p>
 
-            <h3>Dynamic routes</h3>
+            <h3 id="dynamic-routes">Dynamic routes</h3>
             <p>Use brackets <code>[param]</code> in folder names to create dynamic segments:</p>
             <ul>
                 <li><code>app/pages/user/[id]/page.zx</code> → <code>/user/:id</code></li>
@@ -719,19 +725,13 @@ fn PagesAndLayouts(allocator: zx.Allocator, props: PagesAndLayoutsProps) zx.Comp
             <p>Access the parameter value using <code>ctx.request.params.get("name")</code>:</p>
             <ExampleBlock id="dynamic-route" zx_code={props.zx_dynamic} zig_code={props.zig_dynamic} html_code={props.html_dynamic} filename="pages/user/[id]/page.zx" />
 
-            <h3>Creating layouts</h3>
+            <h3 id="layouts">Creating layouts</h3>
             <p>Layouts wrap pages with common UI. Create a <code>layout.zx</code> file:</p>
             <ExampleBlock id="layout-example" files={layoutFiles(allocator, props.zx_layout, props.zx_page)} zig_code={props.zx_layout} html_code={props.html_layout} />
 
-            <h3>PageContext and LayoutContext</h3>
-            <p>Both contexts provide:</p>
-            <ul>
-                <li><code>request</code> - HTTP request with headers, query params, body</li>
-                <li><code>response</code> - HTTP response for setting headers</li>
-                <li><code>arena</code> - Request-scoped allocator (recommended)</li>
-                <li><code>allocator</code> - Global allocator for persistent allocations</li>
-                <li><code>data</code> - Request-scoped key/value bag (<code>ctx.data.set</code> / <code>ctx.data.get</code>) for page metadata such as title</li>
-            </ul>
+            <h3 id="page-context">PageContext and LayoutContext</h3>
+            <p>Both contexts have the same fields:</p>
+            <ApiTable fields={api_docs.page_context} />
             <div class="callout tip">
                 <strong>Best practice:</strong>{" "}Use <code>ctx.arena</code>{" "}for allocations - it's automatically freed after the request.
             </div>
@@ -766,7 +766,7 @@ const KVStorageProps = struct {
 fn KVStorage(allocator: zx.Allocator, props: KVStorageProps) zx.Component {
     return (
         <section id="kv" class="section" @allocator={allocator}>
-            <h2>Key-Value Storage</h2>
+            <h2>Key-Value</h2>
             <p>Ziex includes a key-value store for persisting small pieces of data across requests and restarts. Access it through <code>zx.kv</code>.</p>
 
             <h3>Enabling</h3>
@@ -789,7 +789,7 @@ fn KVStorage(allocator: zx.Allocator, props: KVStorageProps) zx.Component {
             <p>A scoped store exposes the same methods as the default one.</p>
 
             <div class="callout note">
-                <strong>Storage backend:</strong>{" "}On native platforms, data is stored on the filesystem under <code>{"zig-out/data/kv/"}</code>{" "}in development and <code>{"<ZIEX_ROOT_DIR>/data/kv/"}</code>{" "}in production. On edge runtimes like Cloudflare Workers, ZX uses the platform's KV binding instead.
+                <strong>Storage backend:</strong>{" "}On native platforms, data is stored on the filesystem under <code>{"zig-out/data/kv/"}</code>{" "}in development and <code>{"<ZIEX_ROOT_DIR>/data/kv/"}</code>{" "}in production. On edge runtimes like Cloudflare Workers, Ziex uses the platform's KV binding instead.
             </div>
         </section>
     );
@@ -924,8 +924,8 @@ fn NextSteps(allocator: zx.Allocator) zx.Component {
             <p>You now know the basics of Ziex! Here's what to explore next:</p>
             <div class="next-steps-grid">
                 <a href="/reference" class="next-step-card">
-                    <h3>Documentation</h3>
-                    <p>Deep dive into all Ziex features with detailed examples.</p>
+                    <h3>Reference</h3>
+                    <p>Syntax, APIs, and behavior details for every Ziex feature.</p>
                 </a>
                 <a href="/reference#cli" class="next-step-card">
                     <h3>CLI Reference</h3>
@@ -948,6 +948,9 @@ fn layoutFiles(allocator: zx.Allocator, layout_code: []const u8, page_code: []co
 }
 
 const ExampleBlock = example_block.ExampleBlock;
+const ApiTable = @import("../components/api_table.zx").ApiTable;
+const Experimental = @import("../components/experimental.zx").Experimental;
+const api_docs = @import("../reference/api_docs.zig");
 const File = example_block.File;
 const CodeBlock = code_block.CodeBlock;
 const ProjectTree = project_tree.ProjectTree;

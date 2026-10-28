@@ -5,6 +5,7 @@ import {
   isPlaygroundOpenable,
   type SnippetEntry,
 } from "./playground_share";
+import { setupDocsSearch } from "./search";
 // import "./routing";
 
 // Dynamic import to reduce initial bundle size
@@ -70,6 +71,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupSectionAnchors();
   setupOpenInPlaygroundButtons();
   setupDocsNavActive();
+  setupDocsSearch();
 
   const htmlCodeElements = document.querySelectorAll<HTMLPreElement>('code.language-markup');
 

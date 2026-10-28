@@ -216,6 +216,28 @@ pub fn extractSection(allocator: zx.Allocator, content: []const u8, section: []c
     return stripDedupePrefixes(allocator, dedented);
 }
 
+// Extract only the top-level `fn` declarations and `pub const options` lines of a section,
+// so docs show signatures taken from code that compiles.
+pub fn extractSignatures(allocator: zx.Allocator, content: []const u8, section: []const u8) []const u8 {
+    const body = extractSection(allocator, content, section);
+    var result = std.array_list.Managed(u8).init(allocator);
+    defer result.deinit();
+
+    var it = std.mem.splitScalar(u8, body, '\n');
+    while (it.next()) |line| {
+        const is_fn = std.mem.startsWith(u8, line, "fn ") or std.mem.startsWith(u8, line, "pub fn ");
+        const is_options = std.mem.startsWith(u8, line, "pub const options");
+        if (!is_fn and !is_options) continue;
+
+        var sig = std.mem.trimEnd(u8, line, " \t");
+        if (is_fn and std.mem.endsWith(u8, sig, " {")) sig = sig[0 .. sig.len - 2];
+        if (result.items.len > 0) result.append('\n') catch unreachable;
+        result.appendSlice(sig) catch unreachable;
+    }
+
+    return allocator.dupe(u8, result.items) catch unreachable;
+}
+
 /// Extract a section that is wrapped in a helper function body (e.g. unwrap__...)
 /// and return only the function body content with normalized indentation.
 pub fn extractUnwrapSection(allocator: zx.Allocator, content: []const u8, section: []const u8) []const u8 {

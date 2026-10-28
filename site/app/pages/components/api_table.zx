@@ -1,0 +1,59 @@
+pub const ApiTableProps = struct {
+    fields: []const api_docs.Field,
+    defaults: bool = false,
+};
+
+pub fn ApiTable(allocator: zx.Allocator, props: ApiTableProps) zx.Component {
+    return (
+        <table class="options-table api-table" @allocator={allocator}>
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>Type</th>
+                    {if (props.defaults) (<th>Default</th>)}
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {for (props.fields) |field| (
+                    <tr>
+                        <td><code>{field.name}</code></td>
+                        <td><code class="hljs" @escaping={.none}>{highlight(allocator, field.type_name)}</code></td>
+                        {if (props.defaults) (
+                            <td>{if (field.default) |default| (<code class="hljs" @escaping={.none}>{highlight(allocator, default)}</code>) else "required"}</td>
+                        )}
+                        <td @escaping={.none}>{inlineCode(allocator, field.doc)}</td>
+                    </tr>
+                )}
+            </tbody>
+        </table>
+    );
+}
+
+fn highlight(allocator: zx.Allocator, code: []const u8) []const u8 {
+    return util.highlightZx(allocator, code) catch code;
+}
+
+// Escapes `text` and turns `backtick` spans into <code>.
+fn inlineCode(allocator: zx.Allocator, text: []const u8) []const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var in_code = false;
+    for (text) |c| {
+        switch (c) {
+            '`' => {
+                in_code = !in_code;
+                out.appendSlice(allocator, if (in_code) "<code>" else "</code>") catch return text;
+            },
+            '<' => out.appendSlice(allocator, "&lt;") catch return text,
+            '>' => out.appendSlice(allocator, "&gt;") catch return text,
+            '&' => out.appendSlice(allocator, "&amp;") catch return text,
+            else => out.append(allocator, c) catch return text,
+        }
+    }
+    return out.items;
+}
+
+const api_docs = @import("../reference/api_docs.zig");
+const util = @import("../reference/util.zig");
+const zx = @import("zx");
+const std = @import("std");

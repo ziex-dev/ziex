@@ -1,0 +1,7 @@
+pub const label = "Experimental";
+
+pub fn Experimental(allocator: zx.Allocator) zx.Component {
+    return (<span class="badge badge-experimental" title="This API may change before it is stable" @allocator={allocator}>{label}</span>);
+}
+
+const zx = @import("zx");

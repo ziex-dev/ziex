@@ -1,0 +1,67 @@
+// TOC and search index derived from the sidebars, so neither is maintained by hand.
+
+// One TOC entry per in-page section; groups without their own anchor contribute their items.
+pub fn toc(comptime categories: []const Category) []const Link {
+    comptime {
+        var out: []const Link = &.{};
+        for (categories) |category| {
+            for (category.sections) |section| {
+                if (std.mem.indexOfScalar(u8, section.href, '#') != null) {
+                    out = out ++ [_]Link{.{ .href = section.href, .text = section.title }};
+                } else if (section.href.len == 0) {
+                    out = out ++ section.items;
+                }
+            }
+        }
+        const frozen = out[0..out.len].*;
+        return &frozen;
+    }
+}
+
+pub const search_index_json = blk: {
+    @setEvalBranchQuota(200_000);
+    var json: []const u8 = "[";
+    for (.{
+        .{ "Learn", &learn.categories },
+        .{ "Reference", &reference.categories },
+        .{ "Examples", &examples.categories },
+    }) |source| {
+        for (source[1]) |category| {
+            for (category.sections) |section| {
+                const group = source[0] ++ " / " ++ category.title;
+                if (section.href.len > 0) json = json ++ entry(section.title, group, section.href);
+                for (section.items) |item| {
+                    json = json ++ entry(item.text, group ++ " / " ++ section.title, item.href);
+                }
+            }
+        }
+    }
+    break :blk json[0 .. json.len - 1] ++ "]";
+};
+
+fn entry(comptime title: []const u8, comptime group: []const u8, comptime href: []const u8) []const u8 {
+    return "{\"t\":" ++ quote(title) ++ ",\"g\":" ++ quote(group) ++ ",\"h\":" ++ quote(href) ++ "},";
+}
+
+// JSON string literal, also safe inside <script>: `<` is escaped so `</script>` can't appear.
+fn quote(comptime s: []const u8) []const u8 {
+    var out: []const u8 = "\"";
+    for (s) |c| {
+        out = out ++ switch (c) {
+            '"' => "\\\"",
+            '\\' => "\\\\",
+            '<' => "\\u003c",
+            else => &[_]u8{c},
+        };
+    }
+    return out ++ "\"";
+}
+
+const Category = sidebar.SidebarProps.Category;
+const Link = sidebar.SidebarProps.Link;
+
+const sidebar = @import("sidebar.zx");
+const learn = @import("../learn/layout.zx");
+const reference = @import("../reference/layout.zx");
+const examples = @import("../examples/catalog.zx");
+const std = @import("std");
