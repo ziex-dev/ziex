@@ -31,10 +31,9 @@ pub fn main(init: std.process.Init) !void {
             try entrypoints.append(allocator, args.next() orelse return error.MissingEntry);
         } else if (std.mem.eql(u8, arg, "--alias")) {
             const key = args.next() orelse return error.MissingAlias;
-            const path = args.next() orelse return error.MissingAlias;
-            // esbuild treats paths without a leading ./ as package names
-            const prefix = if (std.fs.path.isAbsolute(path) or std.mem.startsWith(u8, path, ".")) "" else "./";
-            try aliases.append(allocator, try allocator.print("--alias:{s}={s}{s}", .{ key, prefix, path }));
+            // esbuild treats relative paths without a leading ./ (incl. .\ on Windows) as package names
+            const path = try std.Io.Dir.cwd().realPathFileAlloc(init.io, args.next() orelse return error.MissingAlias, allocator);
+            try aliases.append(allocator, try allocator.print("--alias:{s}={s}", .{ key, path }));
         }
     }
 
