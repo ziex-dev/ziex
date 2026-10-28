@@ -241,9 +241,9 @@ fn appendTagCompletions(
         const insert: []const u8 = if (closing)
             name
         else if (elements.isVoid(name))
-            try std.fmt.allocPrint(arena, "{s} />", .{name})
+            try arena.print("{s} />", .{name})
         else
-            try std.fmt.allocPrint(arena, "{s}>$0</{s}>", .{ name, name });
+            try arena.print("{s}>$0</{s}>", .{ name, name });
         try items.append(arena, .{
             .label = name,
             .kind = .Class,
@@ -251,11 +251,11 @@ fn appendTagCompletions(
             .insertText = insert,
             .insertTextFormat = if (closing or elements.isVoid(name)) .PlainText else .Snippet,
             .filterText = name,
-            .sortText = try std.fmt.allocPrint(arena, "1{s}", .{name}),
+            .sortText = try arena.print("1{s}", .{name}),
             .documentation = .{
                 .markup_content = .{
                     .kind = .markdown,
-                    .value = try std.fmt.allocPrint(arena, "**`<{s}>`**\n\n{s}", .{ name, desc }),
+                    .value = try arena.print("**`<{s}>`**\n\n{s}", .{ name, desc }),
                 },
             },
         });
@@ -307,7 +307,7 @@ fn appendBuiltinCompletions(
         const insert = if (builtins.isFlag(full))
             name
         else
-            try std.fmt.allocPrint(arena, "{s}={{$1}}", .{name});
+            try arena.print("{s}={{$1}}", .{name});
 
         const md = try html_hover.builtinAttributeMarkdown(arena, full) orelse "ZX builtin attribute";
 
@@ -318,7 +318,7 @@ fn appendBuiltinCompletions(
             .insertText = insert,
             .insertTextFormat = .Snippet,
             .filterText = full,
-            .sortText = try std.fmt.allocPrint(arena, "0{s}", .{full}),
+            .sortText = try arena.print("0{s}", .{full}),
             .documentation = .{
                 .markup_content = .{
                     .kind = .markdown,
@@ -338,26 +338,24 @@ fn makeAttrItem(
     const doc = docs.attribute(tag, attr);
     const value: []const u8 = if (doc) |d| blk: {
         if (tag.len > 0) {
-            break :blk try std.fmt.allocPrint(
-                arena,
+            break :blk try arena.print(
                 "**`{s}`** attribute of `<{s}>`\n\n{s}",
                 .{ attr, tag, truncate(d.description, 200) },
             );
         }
-        break :blk try std.fmt.allocPrint(
-            arena,
+        break :blk try arena.print(
             "**`{s}`** attribute\n\n{s}",
             .{ attr, truncate(d.description, 200) },
         );
-    } else try std.fmt.allocPrint(arena, "**`{s}`** attribute", .{attr});
+    } else try arena.print("**`{s}`** attribute", .{attr});
 
     return .{
         .label = attr,
         .kind = .Property,
         .detail = "HTML attribute",
-        .insertText = try std.fmt.allocPrint(arena, "{s}=\"$1\"", .{attr}),
+        .insertText = try arena.print("{s}=\"$1\"", .{attr}),
         .insertTextFormat = .Snippet,
-        .sortText = try std.fmt.allocPrint(arena, "{s}{s}", .{ sort_prefix, attr }),
+        .sortText = try arena.print("{s}{s}", .{ sort_prefix, attr }),
         .documentation = .{
             .markup_content = .{
                 .kind = .markdown,

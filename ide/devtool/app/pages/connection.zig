@@ -83,7 +83,7 @@ pub fn applyUrlConfig(allocator: std.mem.Allocator) bool {
     if (port_override) |p| {
         const port = std.fmt.parseInt(u16, p, 10) catch return false;
         if (port == 0) return false;
-        const host = std.fmt.allocPrint(allocator, "localhost:{d}", .{port}) catch return false;
+        const host = allocator.print("localhost:{d}", .{port}) catch return false;
         data.setHost(host);
         return true;
     }

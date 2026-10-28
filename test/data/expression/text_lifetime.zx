@@ -12,7 +12,7 @@ pub fn Page(allocator: zx.Allocator) zx.Component {
     const unicode = "こんにちは 🎉";
 
     // Arena-owned dynamic strings - borrowed, live as long as the request arena.
-    const arena_str = std.fmt.allocPrint(allocator, "arena-{d}", .{42}) catch unreachable;
+    const arena_str = allocator.print("arena-{d}", .{42}) catch unreachable;
     const arena_prefix = arena_str[0..5]; // subslice into arena allocation
     const duped = allocator.dupe(u8, "duped-into-arena") catch unreachable;
 
@@ -30,7 +30,7 @@ pub fn Page(allocator: zx.Allocator) zx.Component {
     const missing: ?[]const u8 = null;
 
     // Trusted HTML for @escaping={.none} - must be arena-owned (not stack).
-    const trusted_html = std.fmt.allocPrint(allocator, "<em>trusted-{s}</em>", .{"ok"}) catch unreachable;
+    const trusted_html = allocator.print("<em>trusted-{s}</em>", .{"ok"}) catch unreachable;
 
     return (
         <main @allocator={allocator}>

@@ -41,14 +41,13 @@ pub fn hostBaseUrl(allocator: std.mem.Allocator) ?[]const u8 {
     if (std.mem.startsWith(u8, host, "http://") or std.mem.startsWith(u8, host, "https://")) {
         return host;
     }
-    return std.fmt.allocPrint(allocator, "http://{s}", .{host}) catch null;
+    return allocator.print("http://{s}", .{host}) catch null;
 }
 
 pub fn componentsUrl(allocator: std.mem.Allocator, query: ComponentsQuery) ?[]const u8 {
     const base = hostBaseUrl(allocator) orelse return null;
     const path = data.current_path;
-    return std.fmt.allocPrint(
-        allocator,
+    return allocator.print(
         "{s}/.well-known/_zx/devtool?path={s}&include_native={d}&include_props={d}&include_attributes={d}",
         .{
             base,
@@ -62,23 +61,22 @@ pub fn componentsUrl(allocator: std.mem.Allocator, query: ComponentsQuery) ?[]co
 
 pub fn routesMetaUrl(allocator: std.mem.Allocator) ?[]const u8 {
     const base = hostBaseUrl(allocator) orelse return null;
-    return std.fmt.allocPrint(allocator, "{s}/.well-known/_zx/devtool?meta=true", .{base}) catch null;
+    return allocator.print("{s}/.well-known/_zx/devtool?meta=true", .{base}) catch null;
 }
 
 pub fn appInfoUrl(allocator: std.mem.Allocator) ?[]const u8 {
     const base = hostBaseUrl(allocator) orelse return null;
-    return std.fmt.allocPrint(allocator, "{s}/.well-known/_zx/app", .{base}) catch null;
+    return allocator.print("{s}/.well-known/_zx/app", .{base}) catch null;
 }
 
 pub fn runtimeInfoUrl(allocator: std.mem.Allocator) ?[]const u8 {
     const base = hostBaseUrl(allocator) orelse return null;
-    return std.fmt.allocPrint(allocator, "{s}/.well-known/_zx/devtool?info=true", .{base}) catch null;
+    return allocator.print("{s}/.well-known/_zx/devtool?info=true", .{base}) catch null;
 }
 
 pub fn openInEditorUrl(allocator: std.mem.Allocator, file: []const u8, line: u32) ?[]const u8 {
     const base = hostBaseUrl(allocator) orelse return null;
-    return std.fmt.allocPrint(
-        allocator,
+    return allocator.print(
         "{s}/.well-known/_zx/open-in-editor?file={s}&line={d}&col=1",
         .{ base, file, line },
     ) catch null;
@@ -86,7 +84,7 @@ pub fn openInEditorUrl(allocator: std.mem.Allocator, file: []const u8, line: u32
 
 pub fn routeHref(allocator: std.mem.Allocator, path: []const u8) []const u8 {
     const base = hostBaseUrl(allocator) orelse return "#";
-    return std.fmt.allocPrint(allocator, "{s}{s}", .{ base, path }) catch "#";
+    return allocator.print("{s}{s}", .{ base, path }) catch "#";
 }
 
 pub fn countSerializable(node: *const zx.util.devtool.ComponentSerializable, acc: usize) usize {

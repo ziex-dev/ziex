@@ -82,7 +82,7 @@ fn EntryRow(allocator: zx.Allocator, props: EntryRowProps) zx.Component {
     const entry = props.entry;
     const is_folder = entry.isFolder();
     const row_class = if (is_folder) "project-tree-row is-folder" else "project-tree-row is-file";
-    const indent = std.fmt.allocPrint(allocator, "--depth:{d}", .{props.depth}) catch "--depth:0";
+    const indent = allocator.print("--depth:{d}", .{props.depth}) catch "--depth:0";
 
     return (
         <fragment @allocator={allocator}>

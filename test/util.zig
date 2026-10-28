@@ -115,7 +115,7 @@ pub const TestFileCache = struct {
         // Load .zx and .zig files for each test file
         for (test_files) |file_path| {
             for ([_]struct { ext: []const u8 }{ .{ .ext = ".zx" }, .{ .ext = ".zig" } }) |ext_info| {
-                const full_path = try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ base_path, file_path, ext_info.ext });
+                const full_path = try allocator.print("{s}{s}{s}", .{ base_path, file_path, ext_info.ext });
                 defer allocator.free(full_path);
 
                 const content = std.Io.Dir.cwd().readFileAlloc(
@@ -127,7 +127,7 @@ pub const TestFileCache = struct {
                     error.FileNotFound => continue,
                     else => return err,
                 };
-                const cache_key = try std.fmt.allocPrint(allocator, "{s}{s}", .{ file_path, ext_info.ext });
+                const cache_key = try allocator.print("{s}{s}", .{ file_path, ext_info.ext });
                 try cache.files.put(cache_key, content);
             }
         }
@@ -152,7 +152,7 @@ pub const TestFileCache = struct {
 
         // File not in cache, try to fetch it from disk
         const base_path = "test/data/";
-        const full_path = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{ base_path, path });
+        const full_path = try self.allocator.print("{s}{s}", .{ base_path, path });
         defer self.allocator.free(full_path);
 
         const content = std.Io.Dir.cwd().readFileAlloc(
@@ -166,7 +166,7 @@ pub const TestFileCache = struct {
         };
 
         // Cache the file for future calls
-        const cache_key = try std.fmt.allocPrint(self.allocator, "{s}", .{path});
+        const cache_key = try self.allocator.print("{s}", .{path});
         try self.files.put(cache_key, content);
 
         return content;

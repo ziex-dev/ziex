@@ -37,7 +37,7 @@ pub fn ExampleBlock(allocator: zx.Allocator, props: ExampleBlockProps) zx.Compon
         break :blk fallback;
     };
 
-    const file_radio_name = std.fmt.allocPrint(allocator, "file-{s}", .{props.id}) catch unreachable;
+    const file_radio_name = allocator.print("file-{s}", .{props.id}) catch unreachable;
 
     // Process files to add computed fields
     const files: []const File = blk: {
@@ -53,23 +53,23 @@ pub fn ExampleBlock(allocator: zx.Allocator, props: ExampleBlockProps) zx.Compon
                 .filename = file.filename,
                 .code = file.code,
                 .highlighted = highlighted,
-                .radio_id = std.fmt.allocPrint(allocator, "file-{s}-{d}", .{ props.id, i }) catch unreachable,
-                .content_id = std.fmt.allocPrint(allocator, "file-content-{s}-{d}", .{ props.id, i }) catch unreachable,
+                .radio_id = allocator.print("file-{s}-{d}", .{ props.id, i }) catch unreachable,
+                .content_id = allocator.print("file-content-{s}-{d}", .{ props.id, i }) catch unreachable,
                 .is_first = i == 0,
             };
         }
         break :blk result;
     };
 
-    const html_with_style = std.fmt.allocPrint(allocator, "{s}{s}", .{ dark_mode_style, props.html_code }) catch unreachable;
+    const html_with_style = allocator.print("{s}{s}", .{ dark_mode_style, props.html_code }) catch unreachable;
 
-    const preview_id = std.fmt.allocPrint(allocator, "tab-{s}-preview", .{props.id}) catch unreachable;
-    const html_id = std.fmt.allocPrint(allocator, "tab-{s}-html", .{props.id}) catch unreachable;
-    const zig_id = std.fmt.allocPrint(allocator, "tab-{s}-zig", .{props.id}) catch unreachable;
-    const name_id = std.fmt.allocPrint(allocator, "tab-{s}", .{props.id}) catch unreachable;
-    const preview_content_id = std.fmt.allocPrint(allocator, "tab-preview-{s}", .{props.id}) catch unreachable;
-    const html_content_id = std.fmt.allocPrint(allocator, "tab-html-{s}", .{props.id}) catch unreachable;
-    const zig_content_id = std.fmt.allocPrint(allocator, "tab-zig-{s}", .{props.id}) catch unreachable;
+    const preview_id = allocator.print("tab-{s}-preview", .{props.id}) catch unreachable;
+    const html_id = allocator.print("tab-{s}-html", .{props.id}) catch unreachable;
+    const zig_id = allocator.print("tab-{s}-zig", .{props.id}) catch unreachable;
+    const name_id = allocator.print("tab-{s}", .{props.id}) catch unreachable;
+    const preview_content_id = allocator.print("tab-preview-{s}", .{props.id}) catch unreachable;
+    const html_content_id = allocator.print("tab-html-{s}", .{props.id}) catch unreachable;
+    const zig_content_id = allocator.print("tab-zig-{s}", .{props.id}) catch unreachable;
 
     return (
         <div class="sandbox" @allocator={allocator}>

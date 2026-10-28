@@ -185,7 +185,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
         var seen = std.StringHashMap(void).init(a);
         for (attrs.items) |at| {
             if (at.element.len == 0) continue;
-            const key = try std.fmt.allocPrint(a, "{s}\t{s}", .{ at.element, at.name });
+            const key = try a.print("{s}\t{s}", .{ at.element, at.name });
             if (seen.contains(key)) continue;
             try seen.put(key, {});
             try keys.append(a, key);
@@ -242,7 +242,7 @@ fn fetchJson(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
     const result = client.fetch(.{
         .location = .{ .url = data_url },
         .method = .GET,
-        .redirect_behavior = @enumFromInt(5),
+        .redirect_behavior = @fromBackingInt(@intCast(5)),
         .response_writer = &aw.writer,
         .extra_headers = &.{
             .{ .name = "user-agent", .value = "ziex-htmldocsgen" },

@@ -225,9 +225,9 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
     dev_server.inner_port = inner_port;
     children.inner_port = inner_port;
 
-    const inner_port_str = try std.fmt.allocPrint(allocator, "{d}", .{inner_port});
+    const inner_port_str = try allocator.print("{d}", .{inner_port});
     defer allocator.free(inner_port_str);
-    const outer_port_str = try std.fmt.allocPrint(allocator, "{d}", .{outer_port});
+    const outer_port_str = try allocator.print("{d}", .{outer_port});
     defer allocator.free(outer_port_str);
 
     try env_map.put("ZIEX_INNER_PORT", inner_port_str);

@@ -218,7 +218,7 @@ pub const BuildState = struct {
         }
 
         if (parseUserAssetInstall(line)) |asset| {
-            const web_path = std.fmt.allocPrint(self.allocator, "/{s}", .{asset.web_path}) catch null;
+            const web_path = self.allocator.print("/{s}", .{asset.web_path}) catch null;
             if (web_path) |wp| {
                 self.pending_asset_paths.append(self.allocator, wp) catch self.allocator.free(wp);
             }

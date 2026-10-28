@@ -187,7 +187,7 @@ test "action > forms carry id" {
             try expectEqual(@as(u16, 200), res.status);
             try expect(std.mem.indexOf(u8, res.body, "method=\"post\" enctype=\"multipart/form-data\"") != null);
             inline for (.{ actions.src.profile, actions.src.greet, actions.src.add, actions.src.direct }) |s| {
-                const needle = try std.fmt.allocPrint(arena, "name=\"__$action\" value=\"{s}\"", .{idStr(arena, s)});
+                const needle = try arena.print("name=\"__$action\" value=\"{s}\"", .{idStr(arena, s)});
                 if (std.mem.indexOf(u8, res.body, needle) == null) {
                     std.debug.print("missing `{s}` in:\n{s}\n", .{ needle, res.body });
                     return error.MissingActionId;
@@ -222,7 +222,7 @@ test "action > native multipart" {
 test "action > native urlencoded" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const body = try std.fmt.allocPrint(arena, "__%24action={s}&name=Grace+Hopper&age=85", .{idStr(arena, actions.src.profile)});
+            const body = try arena.print("__%24action={s}&name=Grace+Hopper&age=85", .{idStr(arena, actions.src.profile)});
             const res = try h.fetch(arena, .{
                 .method = .POST,
                 .path = "/actions",
@@ -370,7 +370,7 @@ fn runOn(backend: Backend, comptime body: *const fn (*Harness, Allocator) anyerr
 /// Handler/action id the runtime derives from an attribute's `@src()`.
 fn idStr(arena: Allocator, comptime src: std.builtin.SourceLocation) []const u8 {
     const id = comptime zx.x.Id.extendId(null, src, 0).short();
-    return std.fmt.allocPrint(arena, "{d}", .{id}) catch @panic("OOM");
+    return arena.print("{d}", .{id}) catch @panic("OOM");
 }
 
 fn eventBody(arena: Allocator, value: ?[]const u8, states: []const []const u8) ![]const u8 {

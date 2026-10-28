@@ -253,7 +253,7 @@ pub const CommentMarker = struct {
 
     /// Insert a vnode (from JS `domNodes`) before the end comment.
     pub fn insertVNode(self: CommentMarker, vnode_id: u64) void {
-        @import("../dom_cmd.zig").hydrateInsert(vnode_id, @intFromEnum(self.end_comment.value));
+        @import("../dom_cmd.zig").hydrateInsert(vnode_id, @backingInt(self.end_comment.value));
     }
 
     /// Clear SSR content between markers, then insert the vnode root.
@@ -305,10 +305,10 @@ pub fn findCommentMarker(self: Document, id: []const u8, occurrence: usize) erro
 
     // Build the patterns we're looking for
     // Start marker: $id or $id {...}
-    const start_prefix = std.fmt.allocPrint(allocator, "${s}", .{id}) catch return error.MarkerNotFound;
+    const start_prefix = allocator.print("${s}", .{id}) catch return error.MarkerNotFound;
     defer allocator.free(start_prefix);
     // End marker: /$id
-    const end_marker = std.fmt.allocPrint(allocator, "/${s}", .{id}) catch return error.MarkerNotFound;
+    const end_marker = allocator.print("/${s}", .{id}) catch return error.MarkerNotFound;
     defer allocator.free(end_marker);
 
     // Use TreeWalker to find comment nodes

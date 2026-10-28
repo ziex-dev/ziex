@@ -1301,7 +1301,7 @@ pub fn Tooltip(ctx: *zx.ComponentCtx(TooltipProps)) zx.Component {
 }
 
 pub fn Price(ctx: *zx.ComponentCtx(PriceProps)) !zx.Component {
-    const text = try std.fmt.allocPrint(ctx.allocator, "${d:.2}", .{ctx.props.amount});
+    const text = try ctx.allocator.print("${d:.2}", .{ctx.props.amount});
     return (<span @allocator={ctx.allocator}>{text}</span>);
 }
 

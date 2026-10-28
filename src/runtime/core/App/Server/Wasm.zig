@@ -385,7 +385,7 @@ pub fn logFn(
     args: anytype,
 ) void {
     const prefix = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ") ";
-    const msg = std.fmt.allocPrint(std.heap.wasm_allocator, prefix ++ format, args) catch return;
+    const msg = std.heap.wasm_allocator.print(prefix ++ format, args) catch return;
     defer std.heap.wasm_allocator.free(msg);
     ext.log(level, msg);
 }

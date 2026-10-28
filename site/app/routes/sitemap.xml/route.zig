@@ -37,7 +37,7 @@ fn hasStaticRoute(path: []const u8) bool {
 fn writeSitemapUrl(w: *std.Io.Writer, arena: std.mem.Allocator, host: []const u8, path: []const u8) !void {
     _ = try w.write("  <url>\n");
     _ = try w.write("    <loc>");
-    const full_path = try std.fmt.allocPrint(arena, "https://{s}{s}", .{ host, path });
+    const full_path = try arena.print("https://{s}{s}", .{ host, path });
     _ = try w.write(full_path);
     _ = try w.write("</loc>\n");
     _ = try w.write("  </url>\n");

@@ -127,7 +127,7 @@ pub fn formatDiagnostics(allocator: std.mem.Allocator, diagnostics: []const Diag
             .warning => "warning",
             .note => "note",
         };
-        const line = try std.fmt.allocPrint(allocator, "{s}:{d}:{d}: {s}: {s}\n", .{
+        const line = try allocator.print("{s}:{d}:{d}: {s}: {s}\n", .{
             d.file, d.line, d.col, kind_str, d.message,
         });
         defer allocator.free(line);

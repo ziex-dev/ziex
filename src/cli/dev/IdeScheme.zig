@@ -76,7 +76,7 @@ pub fn detect(allocator: std.mem.Allocator, env_map: *const std.process.Environ.
     var args = try allocator.alloc([]const u8, 3);
     args[0] = try allocator.dupe(u8, "code");
     args[1] = try allocator.dupe(u8, "-g");
-    args[2] = try std.fmt.allocPrint(allocator, "{s}:{s}:{s}", .{ file, line, col });
+    args[2] = try allocator.print("{s}:{s}:{s}", .{ file, line, col });
     return args;
 }
 

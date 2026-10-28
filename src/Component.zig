@@ -258,7 +258,7 @@ pub const Component = union(enum) {
 
 fn keyFromProps(allocator: Allocator, props: anytype) ?[]const u8 {
     if (!@hasField(@TypeOf(props), "key")) return null;
-    return std.fmt.allocPrint(allocator, "{any}", .{@field(props, "key")}) catch null;
+    return allocator.print("{any}", .{@field(props, "key")}) catch null;
 }
 
 pub const Element = struct {

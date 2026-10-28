@@ -159,57 +159,57 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
         const has_calc = data.units.length or data.units.percentage or data.units.angle or data.units.time;
         if (has_calc) {
             try prop_union.addField(fa, "", "calc_", "CalcExpr", null);
-            const calc_sig = try std.fmt.allocPrint(fa, "(expr: CalcExpr) {s}", .{final_type_name});
+            const calc_sig = try fa.print("(expr: CalcExpr) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "calc", calc_sig, "return .{ .calc_ = expr };");
         }
 
         if (data.units.length) {
-            const px_sig = try std.fmt.allocPrint(fa, "(v: f32) {s}", .{final_type_name});
+            const px_sig = try fa.print("(v: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "px", px_sig, "return .{ .px_ = .{ v, v, v, v } };");
 
-            const px2_sig = try std.fmt.allocPrint(fa, "(v1: f32, v2: f32) {s}", .{final_type_name});
+            const px2_sig = try fa.print("(v1: f32, v2: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "px2", px2_sig, "return .{ .px_ = .{ v1, v2, v1, v2 } };");
 
-            const px4_sig = try std.fmt.allocPrint(fa, "(v1: f32, v2: f32, v3: f32, v4: f32) {s}", .{final_type_name});
+            const px4_sig = try fa.print("(v1: f32, v2: f32, v3: f32, v4: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "px4", px4_sig, "return .{ .px_ = .{ v1, v2, v3, v4 } };");
 
-            const em_sig = try std.fmt.allocPrint(fa, "(v: f32) {s}", .{final_type_name});
+            const em_sig = try fa.print("(v: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "em", em_sig, "return .{ .em_ = .{ v, v, v, v } };");
 
-            const em2_sig = try std.fmt.allocPrint(fa, "(v1: f32, v2: f32) {s}", .{final_type_name});
+            const em2_sig = try fa.print("(v1: f32, v2: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "em2", em2_sig, "return .{ .em_ = .{ v1, v2, v1, v2 } };");
 
-            const rem_sig = try std.fmt.allocPrint(fa, "(v: f32) {s}", .{final_type_name});
+            const rem_sig = try fa.print("(v: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "rem", rem_sig, "return .{ .rem_ = .{ v, v, v, v } };");
 
-            const rem2_sig = try std.fmt.allocPrint(fa, "(v1: f32, v2: f32) {s}", .{final_type_name});
+            const rem2_sig = try fa.print("(v1: f32, v2: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "rem2", rem2_sig, "return .{ .rem_ = .{ v1, v2, v1, v2 } };");
 
-            const vh_sig = try std.fmt.allocPrint(fa, "(v: f32) {s}", .{final_type_name});
+            const vh_sig = try fa.print("(v: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "vh", vh_sig, "return .{ .vh_ = v };");
 
-            const vw_sig = try std.fmt.allocPrint(fa, "(v: f32) {s}", .{final_type_name});
+            const vw_sig = try fa.print("(v: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "vw", vw_sig, "return .{ .vw_ = v };");
 
-            const vmin_sig = try std.fmt.allocPrint(fa, "(v: f32) {s}", .{final_type_name});
+            const vmin_sig = try fa.print("(v: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "vmin", vmin_sig, "return .{ .vmin_ = v };");
 
-            const vmax_sig = try std.fmt.allocPrint(fa, "(v: f32) {s}", .{final_type_name});
+            const vmax_sig = try fa.print("(v: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "vmax", vmax_sig, "return .{ .vmax_ = v };");
         }
         if (data.units.percentage) {
-            const pct_sig = try std.fmt.allocPrint(fa, "(v: f32) {s}", .{final_type_name});
+            const pct_sig = try fa.print("(v: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "percent", pct_sig, "return .{ .percent_ = .{ v, v, v, v } };");
 
-            const pct2_sig = try std.fmt.allocPrint(fa, "(v1: f32, v2: f32) {s}", .{final_type_name});
+            const pct2_sig = try fa.print("(v1: f32, v2: f32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "percent2", pct2_sig, "return .{ .percent_ = .{ v1, v2, v1, v2 } };");
         }
         if (data.units.color) {
-            const hex_sig = try std.fmt.allocPrint(fa, "(v: u32) {s}", .{final_type_name});
+            const hex_sig = try fa.print("(v: u32) {s}", .{final_type_name});
             _ = try prop_union.addMethod(fa, "", "hex", hex_sig, "return .{ .hex_ = v };");
         }
 
-        const format_sig = try std.fmt.allocPrint(fa, "(self: {s}, w: anytype) std.Io.Writer.Error!void", .{final_type_name});
+        const format_sig = try fa.print("(self: {s}, w: anytype) std.Io.Writer.Error!void", .{final_type_name});
         _ = try prop_union.addMethod(fa, "", "format", format_sig, "return core.formatValue(self, w);");
     }
 

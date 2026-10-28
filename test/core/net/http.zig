@@ -406,7 +406,7 @@ test "ctx > fetch uses the request arena" {
         io,
     );
 
-    const target = try std.fmt.allocPrint(arena, "http://127.0.0.1:{d}/echo?q=ctx", .{harness.tcp.?.port});
+    const target = try arena.print("http://127.0.0.1:{d}/echo?q=ctx", .{harness.tcp.?.port});
     // No deinit: the arena owns the result.
     const res = try ctx.fetch(.{ .url = target });
     try std.testing.expectEqualStrings("ctx", res.body);

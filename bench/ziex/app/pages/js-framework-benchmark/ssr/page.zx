@@ -22,8 +22,8 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                     <table class="table table-hover table-striped test-data">
                         <tbody id="tbody">
                             {for (bench_state.rows.items) |row| (
-                                <tr data-id={std.fmt.allocPrint(allocator, "{d}", .{row.id}) catch @panic("OOM")} class={if (bench_state.selected_id != null and bench_state.selected_id.? == row.id) "danger" else ""}>
-                                    <td class="col-md-1">{std.fmt.allocPrint(allocator, "{d}", .{row.id}) catch @panic("OOM")}</td>
+                                <tr data-id={allocator.print("{d}", .{row.id}) catch @panic("OOM")} class={if (bench_state.selected_id != null and bench_state.selected_id.? == row.id) "danger" else ""}>
+                                    <td class="col-md-1">{allocator.print("{d}", .{row.id}) catch @panic("OOM")}</td>
                                     <td class="col-md-4">
                                         <a class="select-link" href="#">
                                             {row.label}

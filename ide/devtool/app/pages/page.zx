@@ -114,7 +114,7 @@ pub fn ComponentState(ctx: *zx.ComponentCtx(struct {})) ?zx.Component {
                 @allocator={ctx.allocator}
                 class="prefs-chip"
                 data-open-file={comp.source}
-                data-open-line={std.fmt.allocPrint(ctx.allocator, "{d}", .{comp.line}) catch "1"}
+                data-open-line={ctx.allocator.print("{d}", .{comp.line}) catch "1"}
             >Open</button>
         ) else (
             <span @allocator={ctx.allocator}></span>
@@ -285,11 +285,11 @@ fn BuiltinBadges(allocator: zx.Allocator, badges: []const []const u8) zx.Compone
 
 fn ComponentItem(allocator: zx.Allocator, props: ComponentItemProps) zx.Component {
     const sel = store.selected_component;
-    const dom_id = std.fmt.allocPrint(allocator, "comp-{s}", .{props.id}) catch "";
+    const dom_id = allocator.print("comp-{s}", .{props.id}) catch "";
     const padding = props.depth * 12 + 8;
-    const style_str = std.fmt.allocPrint(allocator, "padding-left: {d}px", .{padding}) catch "";
+    const style_str = allocator.print("padding-left: {d}px", .{padding}) catch "";
     const is_selected = std.mem.eql(u8, props.id, sel);
-    const idx_str = std.fmt.allocPrint(allocator, "{d}", .{props.occurrence}) catch "0";
+    const idx_str = allocator.print("{d}", .{props.occurrence}) catch "0";
     const item_class = if (is_selected) "component-root" else "component-item";
     const name_class = if (is_selected) "component-name-root" else "component-name";
     const group_class = tree.getComponentGroupClass(props.name, props.has_children, props.children, store.inputvalue);
@@ -349,7 +349,7 @@ fn ComponentItem(allocator: zx.Allocator, props: ComponentItemProps) zx.Componen
 
 fn StateSection(allocator: zx.Allocator, props: struct { title: []const u8, items: []const StateItem }) ?zx.Component {
     if (props.items.len == 0) return null;
-    const id = std.fmt.allocPrint(allocator, "state-section-{s}", .{props.title}) catch "";
+    const id = allocator.print("state-section-{s}", .{props.title}) catch "";
     return (
         <div @allocator={allocator} class="state-section">
             <input type="checkbox" id={id} class="state-toggle" checked />
@@ -362,7 +362,7 @@ fn StateSection(allocator: zx.Allocator, props: struct { title: []const u8, item
                     <StateItemRow
                         allocator={allocator}
                         item={item}
-                        path={std.fmt.allocPrint(allocator, "ss-{s}-{d}", .{ props.title, i }) catch ""}
+                        path={allocator.print("ss-{s}-{d}", .{ props.title, i }) catch ""}
                     />
                 )}
             </div>
@@ -375,8 +375,8 @@ fn StateItemRow(allocator: zx.Allocator, props: struct { item: StateItem, depth:
     const has_children = item.children.len > 0;
     const value_color = format.getValueColor(item.value);
     const padding = props.depth * 12;
-    const style_str = std.fmt.allocPrint(allocator, "padding-left: {d}px", .{padding}) catch "";
-    const id = std.fmt.allocPrint(allocator, "sr-{s}", .{props.path}) catch "";
+    const style_str = allocator.print("padding-left: {d}px", .{padding}) catch "";
+    const id = allocator.print("sr-{s}", .{props.path}) catch "";
     const group_class = tree.getStateItemGroupClass(item, store.stateFilter);
     const multiline = format.isMultilineStringValue(item.value);
     const display_value = if (multiline) format.decodeJsonString(allocator, item.value) else item.value;
@@ -398,7 +398,7 @@ fn StateItemRow(allocator: zx.Allocator, props: struct { item: StateItem, depth:
                                 allocator={allocator}
                                 item={child}
                                 depth={props.depth + 1}
-                                path={std.fmt.allocPrint(allocator, "{s}-{d}", .{ props.path, i }) catch ""}
+                                path={allocator.print("{s}-{d}", .{ props.path, i }) catch ""}
                             />
                         )}
                     </div>
@@ -408,7 +408,7 @@ fn StateItemRow(allocator: zx.Allocator, props: struct { item: StateItem, depth:
                     <span class="item-spacer"></span>
                     <span class="key-default">{item.key}</span>
                     <span class="item-colon">:</span>
-                    <textarea class="value-multiline" readonly rows={std.fmt.allocPrint(allocator, "{d}", .{format.countLines(display_value)}) catch "3"}>{display_value}</textarea>
+                    <textarea class="value-multiline" readonly rows={allocator.print("{d}", .{format.countLines(display_value)}) catch "3"}>{display_value}</textarea>
                     {if (item.meta.len > 0) (<span class="item-meta">{item.meta}</span>) else ""}
                 </div>
             ) else (

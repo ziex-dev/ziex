@@ -26,7 +26,7 @@ pub fn buildUrl(allocator: std.mem.Allocator, path: []const u8) []const u8 {
         if (std.mem.eql(u8, path, "/")) {
             return "index.html";
         }
-        return std.fmt.allocPrint(allocator, "{s}.html", .{path}) catch unreachable;
+        return allocator.print("{s}.html", .{path}) catch unreachable;
     }
     return path;
 }

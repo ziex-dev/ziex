@@ -67,12 +67,12 @@ pub fn main(init: std.process.Init) !void {
 /// Queries the latest successful run of the benchmark workflow via the gh CLI.
 fn latestRun(arena: std.mem.Allocator, io: std.Io) !RunInfo {
     const result = try gh(arena, io, &.{
-        "gh",          "run",
-        "list",        "--workflow=" ++ workflow,
-        "--status",    "success",
-        "--limit",     "1",
-        "--json",      "databaseId,url,updatedAt,headSha",
-        "--jq",        ".[0] | \"\\(.databaseId)\\n\\(.url)\\n\\(.updatedAt)\\n\\(.headSha)\"",
+        "gh",       "run",
+        "list",     "--workflow=" ++ workflow,
+        "--status", "success",
+        "--limit",  "1",
+        "--json",   "databaseId,url,updatedAt,headSha",
+        "--jq",     ".[0] | \"\\(.databaseId)\\n\\(.url)\\n\\(.updatedAt)\\n\\(.headSha)\"",
     });
 
     var lines = std.mem.tokenizeScalar(u8, result, '\n');
@@ -93,10 +93,10 @@ fn latestRun(arena: std.mem.Allocator, io: std.Io) !RunInfo {
 /// Queries a specific workflow run by id via the gh CLI.
 fn runById(arena: std.mem.Allocator, io: std.Io, id: []const u8) !RunInfo {
     const result = try gh(arena, io, &.{
-        "gh",   "run",
-        "view", id,
+        "gh",     "run",
+        "view",   id,
         "--json", "url,updatedAt,headSha",
-        "--jq", "\"\\(.url)\\n\\(.updatedAt)\\n\\(.headSha)\"",
+        "--jq",   "\"\\(.url)\\n\\(.updatedAt)\\n\\(.headSha)\"",
     });
 
     var lines = std.mem.tokenizeScalar(u8, result, '\n');
@@ -116,8 +116,8 @@ fn runById(arena: std.mem.Allocator, io: std.Io, id: []const u8) !RunInfo {
 /// Downloads the bench-results artifact (result.csv) for the given run,
 /// caching it in /tmp keyed by run id.
 fn downloadResults(arena: std.mem.Allocator, io: std.Io, run_info: RunInfo) ![]u8 {
-    const dir = try std.fmt.allocPrint(arena, "/tmp/ziex-bench-results-{s}", .{run_info.id});
-    const csv_path = try std.fmt.allocPrint(arena, "{s}/result.csv", .{dir});
+    const dir = try arena.print("/tmp/ziex-bench-results-{s}", .{run_info.id});
+    const csv_path = try arena.print("{s}/result.csv", .{dir});
 
     if (std.Io.Dir.cwd().readFileAlloc(io, csv_path, arena, .limited(1 << 20))) |cached| {
         std.log.info("using cached artifact at {s}", .{csv_path});
@@ -126,8 +126,8 @@ fn downloadResults(arena: std.mem.Allocator, io: std.Io, run_info: RunInfo) ![]u
 
     std.log.info("downloading bench-results artifact for run {s}...", .{run_info.id});
     _ = try gh(arena, io, &.{
-        "gh",     "run",          "download", run_info.id,
-        "--name", "bench-results", "--dir",   dir,
+        "gh",     "run",           "download", run_info.id,
+        "--name", "bench-results", "--dir",    dir,
     });
 
     return std.Io.Dir.cwd().readFileAlloc(io, csv_path, arena, .limited(1 << 20));
@@ -187,10 +187,10 @@ fn csvToZon(arena: std.mem.Allocator, csv: []const u8, run_info: RunInfo) ![]u8 
     , .{ run_info.url, run_info.date, run_info.commit });
 
     const zon_fields = [_][]const u8{
-        "idle_memory_mb",  "peak_memory_mb", "build_time_s",
-        "image_mb",        "binary_mb",      "cold_start_ms",
-        "cpu_avg_pct",     "cpu_peak_pct",   "requests_per_sec",
-        "p50_latency_ms",  "p99_latency_ms",
+        "idle_memory_mb", "peak_memory_mb", "build_time_s",
+        "image_mb",       "binary_mb",      "cold_start_ms",
+        "cpu_avg_pct",    "cpu_peak_pct",   "requests_per_sec",
+        "p50_latency_ms", "p99_latency_ms",
     };
 
     var rows: usize = 0;

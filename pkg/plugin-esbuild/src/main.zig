@@ -34,7 +34,7 @@ pub fn main(init: std.process.Init) !void {
             const path = args.next() orelse return error.MissingAlias;
             // esbuild treats paths without a leading ./ as package names
             const prefix = if (std.fs.path.isAbsolute(path) or std.mem.startsWith(u8, path, ".")) "" else "./";
-            try aliases.append(allocator, try std.fmt.allocPrint(allocator, "--alias:{s}={s}{s}", .{ key, prefix, path }));
+            try aliases.append(allocator, try allocator.print("--alias:{s}={s}{s}", .{ key, prefix, path }));
         }
     }
 
@@ -74,7 +74,7 @@ pub fn main(init: std.process.Init) !void {
     var all_deps = std.ArrayList([]const u8).empty;
     defer all_deps.deinit(allocator);
 
-    const meta_path = try std.fmt.allocPrint(allocator, "{s}/.esbuild-meta.json", .{outdir});
+    const meta_path = try allocator.print("{s}/.esbuild-meta.json", .{outdir});
 
     const argv = try buildEsbuildArgv(allocator, esbuild_path, entrypoints.items, aliases.items, opts, outdir, meta_path);
     defer allocator.free(argv);
@@ -139,15 +139,15 @@ fn buildEsbuildArgv(
     // Bundle defaults to true (matches previous runner behavior).
     if (opts.bundle orelse true) try argv.append(allocator, "--bundle");
 
-    try argv.append(allocator, try std.fmt.allocPrint(allocator, "--outdir={s}", .{outdir}));
-    try argv.append(allocator, try std.fmt.allocPrint(allocator, "--metafile={s}", .{meta_path}));
+    try argv.append(allocator, try allocator.print("--outdir={s}", .{outdir}));
+    try argv.append(allocator, try allocator.print("--metafile={s}", .{meta_path}));
     try argv.append(allocator, "--log-level=error");
 
     if (opts.platform) |v| {
-        try argv.append(allocator, try std.fmt.allocPrint(allocator, "--platform={s}", .{@tagName(v)}));
+        try argv.append(allocator, try allocator.print("--platform={s}", .{@tagName(v)}));
     }
     if (opts.format) |v| {
-        try argv.append(allocator, try std.fmt.allocPrint(allocator, "--format={s}", .{@tagName(v)}));
+        try argv.append(allocator, try allocator.print("--format={s}", .{@tagName(v)}));
     }
     if (opts.minify) |v| {
         if (v) try argv.append(allocator, "--minify");
@@ -156,15 +156,15 @@ fn buildEsbuildArgv(
         if (v) try argv.append(allocator, "--splitting");
     }
     if (opts.public_path) |v| {
-        try argv.append(allocator, try std.fmt.allocPrint(allocator, "--public-path={s}", .{v}));
+        try argv.append(allocator, try allocator.print("--public-path={s}", .{v}));
     }
     if (opts.sourcemap) |v| {
         if (v != .none) {
-            try argv.append(allocator, try std.fmt.allocPrint(allocator, "--sourcemap={s}", .{@tagName(v)}));
+            try argv.append(allocator, try allocator.print("--sourcemap={s}", .{@tagName(v)}));
         }
     }
     for (opts.external) |ext| {
-        try argv.append(allocator, try std.fmt.allocPrint(allocator, "--external:{s}", .{ext}));
+        try argv.append(allocator, try allocator.print("--external:{s}", .{ext}));
     }
     if (opts.target.len > 0) {
         var targets: std.ArrayList(u8) = .empty;
@@ -173,10 +173,10 @@ fn buildEsbuildArgv(
             if (i > 0) try targets.append(allocator, ',');
             try targets.appendSlice(allocator, t);
         }
-        try argv.append(allocator, try std.fmt.allocPrint(allocator, "--target={s}", .{targets.items}));
+        try argv.append(allocator, try allocator.print("--target={s}", .{targets.items}));
     }
     for (opts.define) |d| {
-        try argv.append(allocator, try std.fmt.allocPrint(allocator, "--define:{s}={s}", .{ d.key, d.value }));
+        try argv.append(allocator, try allocator.print("--define:{s}={s}", .{ d.key, d.value }));
     }
     try argv.appendSlice(allocator, aliases);
 

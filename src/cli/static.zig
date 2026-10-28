@@ -30,7 +30,7 @@ pub fn buildStatic(ctx: CommandContext, args: anytype) !void {
     defer ctx.allocator.free(config_arg);
     try build_argv.appendSlice(ctx.allocator, &.{ args.@"zig-path", "build", config_arg });
 
-    const release_arg = try std.fmt.allocPrint(ctx.allocator, "--release={s}", .{args.release});
+    const release_arg = try ctx.allocator.print("--release={s}", .{args.release});
     defer ctx.allocator.free(release_arg);
     try build_argv.append(ctx.allocator, release_arg);
 
@@ -92,7 +92,7 @@ pub fn buildStatic(ctx: CommandContext, args: anytype) !void {
     defer ctx.allocator.free(exe_path);
 
     const port = DevServer.findFreePort(io) catch 3000;
-    const port_str = try std.fmt.allocPrint(ctx.allocator, "{d}", .{port});
+    const port_str = try ctx.allocator.print("{d}", .{port});
     defer ctx.allocator.free(port_str);
     const host = "0.0.0.0";
 
@@ -329,7 +329,7 @@ fn processRoute(
     defer aw.deinit();
 
     const effective_host = if (std.mem.eql(u8, host, "0.0.0.0")) "127.0.0.1" else host;
-    const url = try std.fmt.allocPrint(allocator, "http://{s}:{d}{s}", .{ effective_host, port, route.path });
+    const url = try allocator.print("http://{s}:{d}{s}", .{ effective_host, port, route.path });
     defer allocator.free(url);
 
     const uri = try std.Uri.parse(url);
@@ -509,7 +509,7 @@ fn resolveExportFilePath(allocator: std.mem.Allocator, route_path: []const u8, e
     const last_component = path_components.items[path_components.items.len - 1];
     // Add .html extension if it doesn't have one
     if (std.fs.path.extension(last_component).len == 0) {
-        const last_with_ext = try std.fmt.allocPrint(allocator, "{s}.html", .{last_component});
+        const last_with_ext = try allocator.print("{s}.html", .{last_component});
         defer allocator.free(last_with_ext);
 
         // Replace the last component with the one that has .html extension
@@ -535,7 +535,7 @@ fn fetchStaticParams(io: std.Io, allocator: std.mem.Allocator, host: []const u8,
     defer aw.deinit();
 
     const effective_host = if (std.mem.eql(u8, host, "0.0.0.0")) "127.0.0.1" else host;
-    const url = try std.fmt.allocPrint(allocator, "http://{s}:{d}{s}", .{ effective_host, port, route_path });
+    const url = try allocator.print("http://{s}:{d}{s}", .{ effective_host, port, route_path });
     defer allocator.free(url);
 
     var extra_headers: [1]std.http.Header = .{.{ .name = "x-zx-static-data", .value = "true" }};

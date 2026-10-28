@@ -62,7 +62,7 @@ fn isZigKeyword(name: []const u8) bool {
 
 fn zigIdent(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
     if (isValidIdent(name) and !isZigKeyword(name)) return name;
-    return try std.fmt.allocPrint(allocator, "@\"{s}\"", .{name});
+    return try allocator.print("@\"{s}\"", .{name});
 }
 
 // Converts a camelCase WebIDL identifier to snake_case for Zig field naming.

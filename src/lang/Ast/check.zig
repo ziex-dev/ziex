@@ -157,7 +157,7 @@ fn errorDiagnostic(allocator: std.mem.Allocator, node: ts.Node, source: []const 
     const snippet = if (raw.len > max_snippet) raw[0..max_snippet] else raw;
 
     const message = if (snippet.len > 0)
-        try std.fmt.allocPrint(allocator, "Unexpected token '{s}'", .{snippet})
+        try allocator.print("Unexpected token '{s}'", .{snippet})
     else
         try allocator.dupe(u8, "Syntax error");
 
@@ -175,7 +175,7 @@ fn missingDiagnostic(allocator: std.mem.Allocator, node: ts.Node) !Diagnostic {
     const start_point = node.startPoint();
     const end_point = node.endPoint();
     const token = node.kind();
-    const message = try std.fmt.allocPrint(allocator, "Expected '{s}'", .{token});
+    const message = try allocator.print("Expected '{s}'", .{token});
 
     return Diagnostic{
         .message = message,
@@ -441,7 +441,7 @@ fn appendDiagnostic(
 ) AllocError!void {
     const start_point = node.startPoint();
     const end_point = node.endPoint();
-    const message = try std.fmt.allocPrint(allocator, fmt, args);
+    const message = try allocator.print(fmt, args);
     errdefer allocator.free(message);
     try list.append(allocator, .{
         .message = message,

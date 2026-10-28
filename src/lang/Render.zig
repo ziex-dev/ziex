@@ -75,7 +75,7 @@ fn extractBlocksInner(
         try blocks.append(allocator, block_copy);
 
         // Use a valid Zig identifier as placeholder
-        const placeholder = try std.fmt.allocPrint(allocator, "__ZX_BLOCK_{d}__", .{blocks.items.len - 1});
+        const placeholder = try allocator.print("__ZX_BLOCK_{d}__", .{blocks.items.len - 1});
         defer allocator.free(placeholder);
         try cleaned_source.appendSlice(allocator, placeholder);
         return;
@@ -344,7 +344,6 @@ fn renderSourceWithChildren(
         try w.writeAll(self.ast.source[current_pos..end_byte]);
     }
 }
-
 
 /// Render zx_block: ( <element> )
 fn renderBlock(

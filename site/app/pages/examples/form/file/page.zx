@@ -40,7 +40,7 @@ fn formatImageSrc(ctx: zx.PageContext) ?[]const u8 {
             break :m "image/png";
         } else "image/png";
 
-        const prefix = std.fmt.allocPrint(ctx.arena, "data:{s};base64,", .{mime}) catch break :b null;
+        const prefix = ctx.arena.print("data:{s};base64,", .{mime}) catch break :b null;
         const encoded_len = std.base64.standard.Encoder.calcSize(pd.len);
         const out = ctx.arena.alloc(u8, prefix.len + encoded_len) catch break :b null;
         @memcpy(out[0..prefix.len], prefix);

@@ -711,14 +711,14 @@ fn componentOwnerId(allocator: zx.Allocator, component: zx.Component, owner_comp
             const short = comp_fn.id.short();
             if (comp_fn.key) |key| {
                 if (owner_component_id.len > 0) {
-                    break :blk std.fmt.allocPrint(allocator, "{s}/c{x:0>8}:{s}", .{ owner_component_id, short, key }) catch @panic("OOM");
+                    break :blk allocator.print("{s}/c{x:0>8}:{s}", .{ owner_component_id, short, key }) catch @panic("OOM");
                 }
-                break :blk std.fmt.allocPrint(allocator, "c{x:0>8}:{s}", .{ short, key }) catch @panic("OOM");
+                break :blk allocator.print("c{x:0>8}:{s}", .{ short, key }) catch @panic("OOM");
             }
             if (owner_component_id.len > 0) {
-                break :blk std.fmt.allocPrint(allocator, "{s}/c{x:0>8}:{d}", .{ owner_component_id, short, sibling_index }) catch @panic("OOM");
+                break :blk allocator.print("{s}/c{x:0>8}:{d}", .{ owner_component_id, short, sibling_index }) catch @panic("OOM");
             }
-            break :blk std.fmt.allocPrint(allocator, "c{x:0>8}:{d}", .{ short, sibling_index }) catch @panic("OOM");
+            break :blk allocator.print("c{x:0>8}:{d}", .{ short, sibling_index }) catch @panic("OOM");
         },
         else => owner_component_id,
     };

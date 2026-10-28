@@ -69,7 +69,7 @@ test "init --force" {
 //     defer allocator.free(test_dir_abs);
 
 //     const port = "3456";
-//     const port_colon = try std.fmt.allocPrint(allocator, ":{s}", .{port});
+//     const port_colon = try allocator.print(":{s}", .{port});
 //     defer allocator.free(port_colon);
 
 //     // Kill anything on that port (cross-platform)
@@ -96,7 +96,7 @@ test "init --force" {
 //     var aw = std.Io.Writer.Allocating.init(allocator);
 //     defer aw.deinit();
 
-//     const url = try std.fmt.allocPrint(allocator, "http://{s}:{s}", .{ "localhost", port });
+//     const url = try allocator.print("http://{s}:{s}", .{ "localhost", port });
 //     defer allocator.free(url);
 
 //     // wait for 2 seconds
@@ -912,8 +912,7 @@ fn killPort(port: []const u8) !void {
     const target_os = builtin.target.os.tag;
 
     if (target_os == .windows) {
-        const cmd = try std.fmt.allocPrint(
-            allocator,
+        const cmd = try allocator.print(
             "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr \":{s}\"') do @taskkill /F /PID %a >nul 2>&1",
             .{port},
         );
@@ -928,7 +927,7 @@ fn killPort(port: []const u8) !void {
         defer allocator.free(result.stderr);
     } else {
         // Unix-like: Use lsof and kill
-        const kill_command = try std.fmt.allocPrint(allocator, "kill -9 $(lsof -t -i:{s})", .{port});
+        const kill_command = try allocator.print("kill -9 $(lsof -t -i:{s})", .{port});
         defer allocator.free(kill_command);
 
         const result = std.process.run(allocator, std.testing.io, .{

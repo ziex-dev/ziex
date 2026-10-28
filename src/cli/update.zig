@@ -14,17 +14,17 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const canary = args.canary;
 
     const ref = if (!std.mem.eql(u8, version, "latest"))
-        try std.fmt.allocPrint(ctx.allocator, "#v{s}", .{version})
+        try ctx.allocator.print("#v{s}", .{version})
     else if (canary)
         try ctx.allocator.dupe(u8, "")
     else blk: {
         const tag = try fetchLatestReleaseTag(app.io, ctx.allocator, app.environ_map);
         defer ctx.allocator.free(tag);
-        break :blk try std.fmt.allocPrint(ctx.allocator, "#{s}", .{tag});
+        break :blk try ctx.allocator.print("#{s}", .{tag});
     };
     defer ctx.allocator.free(ref);
 
-    const fetch_uri = try std.fmt.allocPrint(ctx.allocator, "git+{s}{s}", .{ zx_info.repository, ref });
+    const fetch_uri = try ctx.allocator.print("git+{s}{s}", .{ zx_info.repository, ref });
     defer ctx.allocator.free(fetch_uri);
 
     var system = try util.spawnZig(app.io, .{
@@ -47,7 +47,7 @@ fn fetchLatestReleaseTag(
         if (token.len == 0) break :blk null;
         break :blk .{
             .name = "authorization",
-            .value = try std.fmt.allocPrint(allocator, "Bearer {s}", .{token}),
+            .value = try allocator.print("Bearer {s}", .{token}),
         };
     } else null;
     defer if (auth_header) |h| allocator.free(h.value);
@@ -58,8 +58,7 @@ fn fetchLatestReleaseTag(
     else
         slug;
 
-    const url = try std.fmt.allocPrint(
-        allocator,
+    const url = try allocator.print(
         "https://api.github.com/repos/{s}/releases/latest",
         .{owner_repo},
     );
@@ -79,7 +78,7 @@ fn fetchLatestReleaseTag(
     const result = client.fetch(.{
         .location = .{ .url = url },
         .method = .GET,
-        .redirect_behavior = @enumFromInt(5),
+        .redirect_behavior = @fromBackingInt(@intCast(5)),
         .response_writer = &aw.writer,
         .extra_headers = headers.items,
     }) catch return error.NetworkError;

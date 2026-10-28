@@ -66,7 +66,7 @@ test "sm > embed format roundtrip" {
     const embed = try sm.formatEmbed(allocator);
     defer allocator.free(embed);
 
-    const zig = try std.fmt.allocPrint(allocator, "pub fn main() void {{}}\n\n{s}", .{embed});
+    const zig = try allocator.print("pub fn main() void {{}}\n\n{s}", .{embed});
     defer allocator.free(zig);
 
     var parsed = (try sourcemap.PositionMap.parseEmbed(allocator, zig)).?;
@@ -491,7 +491,7 @@ test "sm > diagnostics remap via embed" {
     const embed = try map_ref.formatEmbed(allocator);
     defer allocator.free(embed);
 
-    const zig_with_embed = try std.fmt.allocPrint(allocator, "{s}\n{s}", .{ result.zx_source, embed });
+    const zig_with_embed = try allocator.print("{s}\n{s}", .{ result.zx_source, embed });
     defer allocator.free(zig_with_embed);
 
     var parsed = (try sourcemap.PositionMap.parseEmbed(allocator, zig_with_embed)).?;
@@ -638,7 +638,7 @@ test "sm > generate position map debug files" {
         const human = try sm.formatHuman(allocator, source, result.zx_source);
         defer allocator.free(human);
 
-        const map_path = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/.zx/sourcemap-debug/{s}.map", .{tf.name});
+        const map_path = try allocator.print(".zig-cache/tmp/.zx/sourcemap-debug/{s}.map", .{tf.name});
         defer allocator.free(map_path);
         try writeFile(map_path, human);
 
@@ -650,14 +650,14 @@ test "sm > generate position map debug files" {
         const embed = try embed_map.formatEmbed(allocator);
         defer allocator.free(embed);
 
-        const inline_zig = try std.fmt.allocPrint(allocator, "{s}\n{s}", .{ result.zx_source, embed });
+        const inline_zig = try allocator.print("{s}\n{s}", .{ result.zx_source, embed });
         defer allocator.free(inline_zig);
 
-        const zig_path = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/.zx/sourcemap-debug/{s}.zig", .{tf.name});
+        const zig_path = try allocator.print(".zig-cache/tmp/.zx/sourcemap-debug/{s}.zig", .{tf.name});
         defer allocator.free(zig_path);
         try writeFile(zig_path, inline_zig);
 
-        const zx_out_path = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/.zx/sourcemap-debug/{s}.zx", .{tf.name});
+        const zx_out_path = try allocator.print(".zig-cache/tmp/.zx/sourcemap-debug/{s}.zx", .{tf.name});
         defer allocator.free(zx_out_path);
         try writeFile(zx_out_path, source);
 

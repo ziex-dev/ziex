@@ -92,7 +92,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                 <p>Available frameworks:</p>
                 <ul>
                     {for (frameworks) |framework| (
-                        <li><a href={std.fmt.allocPrint(allocator, "/vs/{s}", .{framework.slug}) catch unreachable}>{framework.name}</a></li>
+                        <li><a href={allocator.print("/vs/{s}", .{framework.slug}) catch unreachable}>{framework.name}</a></li>
                     )}
                 </ul>
             </main>

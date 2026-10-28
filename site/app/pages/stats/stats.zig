@@ -119,7 +119,7 @@ const Acc = struct {
 fn getTimeline(a: std.mem.Allocator, io: std.Io, repo_root: []const u8) ![]const TimelineEntry {
     var args = std.array_list.Managed([]const u8).init(a);
     try args.appendSlice(&.{ "log", "--reverse", "--format=__C__%ad %aE", "--date=format:%Y-%m", "--numstat", "--" });
-    for (CODE_EXTS) |ext| try args.append(try std.fmt.allocPrint(a, "*{s}", .{ext}));
+    for (CODE_EXTS) |ext| try args.append(try a.print("*{s}", .{ext}));
 
     const log = try gitOutAt(a, io, repo_root, args.items);
 
@@ -190,7 +190,7 @@ fn getStarTimeline(a: std.mem.Allocator, io: std.Io) ![]const StarEntry {
     var dates = std.array_list.Managed([]const u8).init(a);
     var page: usize = 1;
     while (page <= 20) : (page += 1) {
-        const url = try std.fmt.allocPrint(a, "https://api.github.com/repos/{s}/stargazers?per_page=100&page={d}", .{ REPO, page });
+        const url = try a.print("https://api.github.com/repos/{s}/stargazers?per_page=100&page={d}", .{ REPO, page });
         const body = httpGet(a, io, url, "application/vnd.github.star+json") catch break;
         var got: usize = 0;
         var it = std.mem.splitSequence(u8, body, "\"starred_at\":");
@@ -253,7 +253,7 @@ fn httpGet(a: std.mem.Allocator, io: std.Io, url: []const u8, accept: ?[]const u
         if (tok.len > 0) {
             try headers.append(a, .{
                 .name = "authorization",
-                .value = try std.fmt.allocPrint(a, "Bearer {s}", .{tok}),
+                .value = try a.print("Bearer {s}", .{tok}),
             });
         }
     }
@@ -262,7 +262,7 @@ fn httpGet(a: std.mem.Allocator, io: std.Io, url: []const u8, accept: ?[]const u
     const result = client.fetch(.{
         .location = .{ .url = url },
         .method = .GET,
-        .redirect_behavior = @enumFromInt(5),
+        .redirect_behavior = @fromBackingInt(@intCast(5)),
         .response_writer = &aw.writer,
         .extra_headers = headers.items,
     }) catch return error.NetworkError;
@@ -330,7 +330,7 @@ fn countNonEmptyLines(s: []const u8) u64 {
 fn countMatches(a: std.mem.Allocator, io: std.Io, repo_root: []const u8) !u64 {
     var args = std.array_list.Managed([]const u8).init(a);
     try args.appendSlice(&.{ "grep", "-I", "-E", "TODO|FIXME", "--" });
-    for (CODE_EXTS) |ext| try args.append(try std.fmt.allocPrint(a, "*{s}", .{ext}));
+    for (CODE_EXTS) |ext| try args.append(try a.print("*{s}", .{ext}));
     const s = gitOutAt(a, io, repo_root, args.items) catch return 0;
     return countNonEmptyLines(s);
 }

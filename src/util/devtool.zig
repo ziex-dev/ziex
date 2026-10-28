@@ -273,9 +273,9 @@ pub const ComponentSerializable = struct {
     fn formatCachingValue(allocator: Allocator, caching: zx.BuiltinAttribute.Caching) ![]const u8 {
         const secs = caching.ttl.toSeconds();
         if (caching.key) |key| {
-            return try std.fmt.allocPrint(allocator, "{d}s:{s}", .{ secs, key });
+            return try allocator.print("{d}s:{s}", .{ secs, key });
         }
-        return try std.fmt.allocPrint(allocator, "{d}s", .{secs});
+        return try allocator.print("{d}s", .{secs});
     }
 
     fn serializeComponentBuiltins(allocator: Allocator, comp_fn: zx.Component.ComponentFn) !?[]const BuiltinSerializable {

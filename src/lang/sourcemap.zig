@@ -95,7 +95,7 @@ pub const PositionMap = struct {
     pub fn formatEmbed(self: PositionMap, allocator: std.mem.Allocator) ![]u8 {
         const data = try self.serializeData(allocator);
         defer allocator.free(data);
-        return std.fmt.allocPrint(allocator, "{s}{s}\n{s}{s}\n", .{
+        return allocator.print("{s}{s}\n{s}{s}\n", .{
             MAP_PREFIX,
             self.source,
             MAP_DATA_PREFIX,

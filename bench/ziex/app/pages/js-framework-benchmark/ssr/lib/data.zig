@@ -51,7 +51,7 @@ pub fn buildData(allocator: std.mem.Allocator, count: usize) !std.ArrayList(Row)
         const colour = colours[random(colours.len)];
         const noun = nouns[random(nouns.len)];
 
-        const label = try std.fmt.allocPrint(allocator, "{s} {s} {s}", .{ adj, colour, noun });
+        const label = try allocator.print("{s} {s} {s}", .{ adj, colour, noun });
 
         try rows.append(allocator, .{
             .id = id_counter,

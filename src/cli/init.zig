@@ -134,7 +134,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
 
 fn printInitFooter(printer: *tui.Printer, allocator: std.mem.Allocator, init_path: []const u8, has_init_path_arg: bool) !void {
     if (has_init_path_arg) {
-        const suggested_cmd = try std.fmt.allocPrint(allocator, "cd {s} && zig build dev", .{init_path});
+        const suggested_cmd = try allocator.print("cd {s} && zig build dev", .{init_path});
         defer allocator.free(suggested_cmd);
         printer.footer("Now run {s}\n\n{s}{s}{s}", .{ tui.Printer.emoji("→"), colors.cyan, suggested_cmd, colors.reset });
     } else {

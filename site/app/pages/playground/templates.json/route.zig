@@ -202,9 +202,9 @@ fn withZxImport(allocator: zx.Allocator, body: []const u8) ![]const u8 {
     }
     const needs_std = std.mem.indexOf(u8, trimmed, "std.") != null;
     if (needs_std) {
-        return try std.fmt.allocPrint(allocator, "{s}\n\nconst std = @import(\"std\");\nconst zx = @import(\"zx\");\n", .{trimmed});
+        return try allocator.print("{s}\n\nconst std = @import(\"std\");\nconst zx = @import(\"zx\");\n", .{trimmed});
     }
-    return try std.fmt.allocPrint(allocator, "{s}\n\nconst zx = @import(\"zx\");\n", .{trimmed});
+    return try allocator.print("{s}\n\nconst zx = @import(\"zx\");\n", .{trimmed});
 }
 
 fn files(allocator: zx.Allocator, items: []const Template.File) ![]const Template.File {

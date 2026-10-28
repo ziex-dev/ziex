@@ -412,8 +412,8 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                         <nav class="features-nav" aria-label="Feature list">
                             <ul class="features-nav-list">
                                 {for (features, 0..) |f, i| (
-                                    <li class="features-nav-item" data-feature-index={std.fmt.allocPrint(allocator, "{d}", .{i}) catch unreachable}>
-                                        <button type="button" class="features-nav-btn" data-feature-target={std.fmt.allocPrint(allocator, "feature-{s}", .{f.id}) catch unreachable}>
+                                    <li class="features-nav-item" data-feature-index={allocator.print("{d}", .{i}) catch unreachable}>
+                                        <button type="button" class="features-nav-btn" data-feature-target={allocator.print("feature-{s}", .{f.id}) catch unreachable}>
                                             <span class="features-nav-icon">{f.icon_fn(allocator)}</span>
                                             <span class="features-nav-label">{f.label}</span>
                                         </button>
@@ -609,8 +609,8 @@ const FeaturePanelProps = struct {
     code_section: []const u8 = "",
 };
 fn FeaturePanel(allocator: zx.Allocator, props: FeaturePanelProps) zx.Component {
-    const layer_id = std.fmt.allocPrint(allocator, "feature-{s}", .{props.id}) catch unreachable;
-    const index_str = std.fmt.allocPrint(allocator, "{d}", .{props.index}) catch unreachable;
+    const layer_id = allocator.print("feature-{s}", .{props.id}) catch unreachable;
+    const index_str = allocator.print("{d}", .{props.index}) catch unreachable;
 
     if (props.show_code) {
         const code_html = resolveCode(allocator, props.code_source, props.code_section, "");
@@ -761,7 +761,7 @@ fn buildBenchTabStyles(allocator: zx.Allocator, container_id: []const u8, tabs: 
 }
 
 fn BenchmarkRowView(allocator: zx.Allocator, props: BenchmarkRowViewProps) zx.Component {
-    const style_value = std.fmt.allocPrint(allocator, "--value: {d:.3};", .{props.normalized_value}) catch unreachable;
+    const style_value = allocator.print("--value: {d:.3};", .{props.normalized_value}) catch unreachable;
     return (
         <div @allocator={allocator} class="bench-row" style={style_value} data-self={if (props.row.url.len == 0) "true" else "false"}>
             <div class="bench-label">
@@ -798,8 +798,8 @@ fn normalizeValue(value: f64, rows: []const BenchmarkRow) f64 {
 }
 
 fn BenchmarksPanel(allocator: zx.Allocator, tab: BenchmarkTab, run_url: []const u8, run_date: []const u8) zx.Component {
-    const panel_id = std.fmt.allocPrint(allocator, "panel-{s}", .{tab.id}) catch unreachable;
-    const tab_id = std.fmt.allocPrint(allocator, "tab-{s}", .{tab.id}) catch unreachable;
+    const panel_id = allocator.print("panel-{s}", .{tab.id}) catch unreachable;
+    const tab_id = allocator.print("tab-{s}", .{tab.id}) catch unreachable;
     return (
         <div @allocator={allocator} class="benchmarks-panel" data-tab={tab.id} data-lower-is-better={if (tab.lower_is_better) "true" else "false"} role="tabpanel" id={panel_id} aria-labelledby={tab_id}>
             // <div class="benchmarks-metric">{tab.metric}</div>
@@ -811,7 +811,7 @@ fn BenchmarksPanel(allocator: zx.Allocator, tab: BenchmarkTab, run_url: []const 
             <div class="benchmarks-footnote">
                 <span>{tab.footnote}</span>
                 {if (run_url.len > 0) (
-                    <a href={run_url} target="_blank" rel="noopener noreferrer" class="benchmarks-run-link" data-tooltip={std.fmt.allocPrint(allocator, "Last benchmarked on {s}", .{run_date}) catch unreachable}>View CI run</a>
+                    <a href={run_url} target="_blank" rel="noopener noreferrer" class="benchmarks-run-link" data-tooltip={allocator.print("Last benchmarked on {s}", .{run_date}) catch unreachable}>View CI run</a>
                 )}
             </div>
         </div>
@@ -837,7 +837,7 @@ fn BenchmarksSection(allocator: zx.Allocator, props: BenchmarksSectionProps) zx.
                             ) else (
                                 <input type="radio" id={tab.id} name="bench-tabs" class="benchmarks-tab-radio" aria-hidden="true" tabindex="-1" />
                             )}
-                            <label for={tab.id} class="benchmarks-tab-label" role="tab" id={std.fmt.allocPrint(allocator, "tab-{s}", .{tab.id}) catch unreachable} aria-selected={if (tab.checked) "true" else "false"} aria-controls={std.fmt.allocPrint(allocator, "panel-{s}", .{tab.id}) catch unreachable} tabindex={if (tab.checked) "0" else "-1"}>{tab.label}</label>
+                            <label for={tab.id} class="benchmarks-tab-label" role="tab" id={allocator.print("tab-{s}", .{tab.id}) catch unreachable} aria-selected={if (tab.checked) "true" else "false"} aria-controls={allocator.print("panel-{s}", .{tab.id}) catch unreachable} tabindex={if (tab.checked) "0" else "-1"}>{tab.label}</label>
                         </>
                     )}
                 </div>

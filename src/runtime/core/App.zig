@@ -310,7 +310,7 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
     if (comptime app_opts.feat_sqlite_server) {
         const db_dir = try std.fs.path.join(alloc, &.{ datadir, "db", "default.db" });
         defer alloc.free(db_dir);
-        const db_url = try std.fmt.allocPrint(alloc, "file:{s}", .{db_dir});
+        const db_url = try alloc.print("file:{s}", .{db_dir});
         zx.db = try zx.Db.Sqlite.open(alloc, inita.io, db_url, .{});
         resolved.db_url = db_url;
     }

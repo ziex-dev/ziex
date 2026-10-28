@@ -111,7 +111,7 @@ pub fn start(self: *Spinner, comptime format: []const u8, args: anytype) !void {
     self.mutex.lockUncancelable(io);
     defer self.mutex.unlock(io);
 
-    const message = try std.fmt.allocPrint(self.allocator, format, args);
+    const message = try self.allocator.print(format, args);
     if (self.message.len > 0) {
         self.allocator.free(self.message);
     }
@@ -160,7 +160,7 @@ pub fn updateStyle(self: *Spinner, options: SpinnerOptions) void {
 }
 
 pub fn updateMessage(self: *Spinner, comptime format: []const u8, args: anytype) !void {
-    const message = try std.fmt.allocPrint(self.allocator, format, args);
+    const message = try self.allocator.print(format, args);
 
     const io = std.Io.Threaded.global_single_threaded.io();
     self.mutex.lockUncancelable(io);
@@ -225,7 +225,7 @@ fn finalize(self: *Spinner, state: State, comptime format: []const u8, args: any
     if (self.message.len > 0) {
         self.allocator.free(self.message);
     }
-    self.message = try std.fmt.allocPrint(self.allocator, format, args);
+    self.message = try self.allocator.print(format, args);
 
     self.clearLine();
 

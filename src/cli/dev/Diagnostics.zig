@@ -209,7 +209,7 @@ pub fn readSourceContext(allocator: std.mem.Allocator, file_path: []const u8, ta
     while (lines.next()) |line| {
         if (line_num >= start_line and line_num <= end_line) {
             // Line number prefix
-            const prefix = std.fmt.allocPrint(allocator, "{d: >4} | ", .{line_num}) catch return null;
+            const prefix = allocator.print("{d: >4} | ", .{line_num}) catch return null;
             defer allocator.free(prefix);
             buf.appendSlice(allocator, prefix) catch return null;
             buf.appendSlice(allocator, line) catch return null;
@@ -333,11 +333,11 @@ pub fn toJson(allocator: std.mem.Allocator, diagnostics: []const Builder.Diagnos
         try buf.appendSlice(allocator, "{\"file\":\"");
         try jsonEscapeAppend(allocator, &buf, d.file);
         try buf.appendSlice(allocator, "\",\"line\":");
-        const line_str = try std.fmt.allocPrint(allocator, "{d}", .{d.line});
+        const line_str = try allocator.print("{d}", .{d.line});
         defer allocator.free(line_str);
         try buf.appendSlice(allocator, line_str);
         try buf.appendSlice(allocator, ",\"col\":");
-        const col_str = try std.fmt.allocPrint(allocator, "{d}", .{d.col});
+        const col_str = try allocator.print("{d}", .{d.col});
         defer allocator.free(col_str);
         try buf.appendSlice(allocator, col_str);
         try buf.appendSlice(allocator, ",\"kind\":\"");

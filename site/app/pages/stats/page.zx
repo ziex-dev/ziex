@@ -17,7 +17,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
     };
 
     const age_str = formatAge(allocator, s.first_commit, s.last_commit);
-    const since_str = std.fmt.allocPrint(allocator, "Since {s} · {s}", .{ s.first_commit[0..@min(10, s.first_commit.len)], age_str }) catch "";
+    const since_str = allocator.print("Since {s} · {s}", .{ s.first_commit[0..@min(10, s.first_commit.len)], age_str }) catch "";
 
     return (
         <div @allocator={allocator}>
@@ -55,7 +55,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                     <h2 class="stats-panel-title">Lines by language</h2>
                     <div class="stats-bars">
                         {for (lang_rows) |row| (
-                            <div class="stats-bar-row" style={std.fmt.allocPrint(allocator, "--value: {d:.4};", .{row.value / lang_max}) catch ""}>
+                            <div class="stats-bar-row" style={allocator.print("--value: {d:.4};", .{row.value / lang_max}) catch ""}>
                                 <span class="stats-bar-label">{row.label}</span>
                                 <div class="stats-bar-track"><span class="stats-bar-fill"></span></div>
                                 <span class="stats-bar-value">{row.display}</span>
@@ -113,15 +113,15 @@ fn formatInt(allocator: zx.Allocator, n: u64) []const u8 {
 fn formatCompact(allocator: zx.Allocator, n: f64) []const u8 {
     if (n >= 1000) {
         const k = n / 1000;
-        if (k >= 100) return std.fmt.allocPrint(allocator, "{d:.0}k", .{k}) catch "0";
-        return std.fmt.allocPrint(allocator, "{d:.1}k", .{k}) catch "0";
+        if (k >= 100) return allocator.print("{d:.0}k", .{k}) catch "0";
+        return allocator.print("{d:.1}k", .{k}) catch "0";
     }
-    return std.fmt.allocPrint(allocator, "{d:.0}", .{n}) catch "0";
+    return allocator.print("{d:.0}", .{n}) catch "0";
 }
 
 fn formatSize(allocator: zx.Allocator, kb: f64) []const u8 {
-    if (kb >= 1024) return std.fmt.allocPrint(allocator, "{d:.1} MB", .{kb / 1024}) catch "0 MB";
-    return std.fmt.allocPrint(allocator, "{d:.0} KB", .{kb}) catch "0 KB";
+    if (kb >= 1024) return allocator.print("{d:.1} MB", .{kb / 1024}) catch "0 MB";
+    return allocator.print("{d:.0} KB", .{kb}) catch "0 KB";
 }
 
 fn parseYmd(iso: []const u8) ?struct { y: i32, m: i32, d: i32 } {
@@ -221,7 +221,7 @@ fn sparkPath(allocator: zx.Allocator, points: []const f64) []const u8 {
     for (points, 0..) |p, i| {
         const x = step * @as(f64, @floatFromInt(i));
         const y = 32.0 - (p / max) * 30.0 - 1.0;
-        const seg = std.fmt.allocPrint(allocator, "{d:.2},{d:.2} ", .{ x, y }) catch "";
+        const seg = allocator.print("{d:.2},{d:.2} ", .{ x, y }) catch "";
         out.appendSlice(seg) catch {};
     }
     return out.items;

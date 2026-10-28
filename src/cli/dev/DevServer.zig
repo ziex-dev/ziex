@@ -294,7 +294,7 @@ fn pushEvent(ds: *DevServer, json: []const u8) void {
 }
 
 pub fn notify(ds: *DevServer, notification: Notification) void {
-    const json = std.fmt.allocPrint(ds.gpa, "{f}", .{notification}) catch return;
+    const json = ds.gpa.print("{f}", .{notification}) catch return;
     defer ds.gpa.free(json);
 
     ds.updateStickyState(notification, json);
@@ -715,7 +715,7 @@ const ProxyOptions = struct {
 fn serveWebSocket(ds: *DevServer, sock: *http.Server.WebSocket, stream: std.Io.net.Stream) !noreturn {
     // Send initial connected message (also flushes the 101 handshake response).
     log.debug("ws: sending connected message", .{});
-    const connected = try std.fmt.allocPrint(ds.gpa, "{f}", .{Notification{ .type = .connected }});
+    const connected = try ds.gpa.print("{f}", .{Notification{ .type = .connected }});
     defer ds.gpa.free(connected);
 
     sock.writeMessage(connected, .text) catch |err| {
@@ -851,7 +851,7 @@ fn proxyToInner(
     }
 
     for (opts.extra_headers) |h| {
-        const line = try std.fmt.allocPrint(ds.gpa, "\r\n{s}: {s}", .{ h.name, h.value });
+        const line = try ds.gpa.print("\r\n{s}: {s}", .{ h.name, h.value });
         defer ds.gpa.free(line);
         try transformed.appendSlice(ds.gpa, line);
     }
@@ -895,7 +895,7 @@ fn rewriteRequestTarget(allocator: Allocator, header_part: []const u8, new_targe
     const target_end = std.mem.indexOfScalar(u8, after_method, ' ') orelse return error.InvalidRequest;
     const version = after_method[target_end + 1 ..];
 
-    return std.fmt.allocPrint(allocator, "{s} {s} {s}{s}", .{
+    return allocator.print("{s} {s} {s}{s}", .{
         first_line[0..method_end],
         new_target,
         version,

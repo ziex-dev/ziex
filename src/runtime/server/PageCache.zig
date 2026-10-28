@@ -127,7 +127,7 @@ pub fn store(self: *PageCache, req: Request, res: Response, info: StoreInfo) voi
         .body_len = info.body.len,
     }) catch return;
 
-    const etag = std.fmt.allocPrint(self.allocator, "\"{x}\"", .{std.hash.Wyhash.hash(0, info.body)}) catch return;
+    const etag = self.allocator.print("\"{x}\"", .{std.hash.Wyhash.hash(0, info.body)}) catch return;
 
     const cached_body = self.allocator.dupe(u8, info.body) catch {
         self.allocator.free(etag);
@@ -160,7 +160,7 @@ pub fn store(self: *PageCache, req: Request, res: Response, info: StoreInfo) voi
 
 fn setCacheHeaders(res: Response, etag: []const u8, arena: Allocator, ttl: u32, result: enum { hit, miss }) void {
     res.headers.set("ETag", etag);
-    res.headers.set("Cache-Control", std.fmt.allocPrint(arena, "public, max-age={d}", .{ttl}) catch "public, max-age=300");
+    res.headers.set("Cache-Control", arena.print("public, max-age={d}", .{ttl}) catch "public, max-age=300");
     res.headers.set("X-Cache", if (result == .hit) "HIT" else "MISS");
 }
 

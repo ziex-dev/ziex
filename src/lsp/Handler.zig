@@ -270,7 +270,7 @@ fn ensureZxFileOpenInBacking(handler: *Handler, arena: std.mem.Allocator, doc_di
     };
     defer handler.allocator.free(resolved_path);
 
-    const zx_uri = std.fmt.allocPrint(handler.allocator, "file://{s}", .{resolved_path}) catch return;
+    const zx_uri = handler.allocator.print("file://{s}", .{resolved_path}) catch return;
     defer handler.allocator.free(zx_uri);
 
     if (handler.zx_files.contains(zx_uri)) return;

@@ -101,7 +101,7 @@ fn handleUpdate() void {
     var i: usize = 0;
     while (i < rows.items.len) : (i += 10) {
         const old_label = rows.items[i].label;
-        const new_label = std.fmt.allocPrint(arena.allocator(), "{s} !!!", .{old_label}) catch @panic("OOM");
+        const new_label = arena.allocator().print("{s} !!!", .{old_label}) catch @panic("OOM");
         arena.allocator().free(old_label);
         rows.items[i].label = new_label;
     }

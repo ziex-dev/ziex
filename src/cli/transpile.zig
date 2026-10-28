@@ -356,7 +356,7 @@ fn writeInlinePositionMap(
     output_path: []const u8,
     embed: []const u8,
 ) !void {
-    const comment = try std.fmt.allocPrint(allocator, "\n{s}", .{embed});
+    const comment = try allocator.print("\n{s}", .{embed});
     defer allocator.free(comment);
     var file = try std.Io.Dir.cwd().openFile(io, output_path, .{ .mode = .read_write });
     defer file.close(io);
@@ -654,7 +654,7 @@ fn collectZxImports(
             continue;
 
         for ([_][]const u8{ ".zx", ".mdzx", ".md" }) |ext| {
-            const cand = std.fmt.allocPrint(allocator, "{s}{s}", .{ stem, ext }) catch continue;
+            const cand = allocator.print("{s}{s}", .{ stem, ext }) catch continue;
             const resolved = std.fs.path.join(allocator, &.{ source_dir, cand }) catch {
                 allocator.free(cand);
                 continue;
@@ -1107,7 +1107,7 @@ fn resolveZx(io: std.Io, allocator: std.mem.Allocator, source_dir: []const u8, i
         return null;
 
     for ([_][]const u8{ ".zx", ".mdzx", ".md" }) |ext| {
-        const cand = std.fmt.allocPrint(allocator, "{s}{s}", .{ stem, ext }) catch return null;
+        const cand = allocator.print("{s}{s}", .{ stem, ext }) catch return null;
         const resolved = std.fs.path.join(allocator, &.{ source_dir, cand }) catch {
             allocator.free(cand);
             return null;
@@ -1173,7 +1173,7 @@ fn writeClientZon(
 
 fn joinDecl(allocator: std.mem.Allocator, prefix: []const u8, name: []const u8) ![]const u8 {
     if (prefix.len == 0) return allocator.dupe(u8, name);
-    return std.fmt.allocPrint(allocator, "{s}.{s}", .{ prefix, name });
+    return allocator.print("{s}.{s}", .{ prefix, name });
 }
 
 fn readClientZons(
@@ -1217,7 +1217,7 @@ fn readClientZons(
                 .name = try allocator.dupe(u8, component.name),
                 .path = try allocator.dupe(u8, component.path),
                 .route = try allocator.dupe(u8, component.route),
-                .import = try std.fmt.allocPrint(allocator, "@zx.client.ComponentMeta.init(@@@import(@@{s}@@).{s})@", .{ module, component.decl }),
+                .import = try allocator.print("@zx.client.ComponentMeta.init(@@@import(@@{s}@@).{s})@", .{ module, component.decl }),
             });
         }
     }
@@ -1639,7 +1639,7 @@ fn transpileFile(
                 //   "@ and @" - markers to strip outer quotes from ZON serialization
                 //   @@@ - literal @ (for @import)
                 //   @@ - literal " (for quotes inside @import())
-                cloned_import = try std.fmt.allocPrint(allocator, "@zx.client.ComponentMeta.init(@@@import(@@{s}@@).{s})@", .{ clean_path, component.name });
+                cloned_import = try allocator.print("@zx.client.ComponentMeta.init(@@@import(@@{s}@@).{s})@", .{ clean_path, component.name });
             },
         }
 

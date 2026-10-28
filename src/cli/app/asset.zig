@@ -42,9 +42,9 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     }
 
     const dest_name, const href = if (no_hash) blk: {
-        const name = try std.fmt.allocPrint(allocator, "{s}{s}", .{ file_stem, file_ext });
+        const name = try allocator.print("{s}{s}", .{ file_stem, file_ext });
         const url = if (href_stem) |stem|
-            try std.fmt.allocPrint(allocator, "{s}{s}", .{ stem, file_ext })
+            try allocator.print("{s}{s}", .{ stem, file_ext })
         else
             "";
         break :blk .{ name, url };
@@ -56,9 +56,9 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
             content;
 
         const hash_tag = hashing.contentTag(hash_input);
-        const name = try std.fmt.allocPrint(allocator, "{s}.{s}{s}", .{ file_stem, &hash_tag, file_ext });
+        const name = try allocator.print("{s}.{s}{s}", .{ file_stem, &hash_tag, file_ext });
         const url = if (href_stem) |stem|
-            try std.fmt.allocPrint(allocator, "{s}.{s}{s}", .{ stem, &hash_tag, file_ext })
+            try allocator.print("{s}.{s}{s}", .{ stem, &hash_tag, file_ext })
         else
             "";
         break :blk .{ name, url };

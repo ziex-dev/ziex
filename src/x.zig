@@ -189,13 +189,13 @@ const Context = struct {
 
     pub fn fmt(self: *Context, comptime format: []const u8, args: anytype) Component {
         const allocator = self.getAlloc();
-        const text = std.fmt.allocPrint(allocator, format, args) catch @panic("OOM");
+        const text = allocator.print(format, args) catch @panic("OOM");
         return .{ .text = text };
     }
 
     pub fn printf(self: *Context, comptime format: []const u8, args: anytype) []const u8 {
         const allocator = self.getAlloc();
-        const text = std.fmt.allocPrint(allocator, format, args) catch @panic("OOM");
+        const text = allocator.print(format, args) catch @panic("OOM");
         return text;
     }
 
@@ -289,7 +289,7 @@ const Context = struct {
                 break :blk .{ .name = name, .handler = handler };
             } else if (comptime @hasDecl(T, "format")) blk: {
                 const allocator = self.getAlloc();
-                const str = std.fmt.allocPrint(allocator, "{f}", .{val}) catch @panic("OOM");
+                const str = allocator.print("{f}", .{val}) catch @panic("OOM");
                 break :blk .{
                     .name = name,
                     .value = str,
@@ -298,7 +298,7 @@ const Context = struct {
 
             .@"union" => if (comptime @hasDecl(T, "format")) blk: {
                 const allocator = self.getAlloc();
-                const str = std.fmt.allocPrint(allocator, "{f}", .{val}) catch @panic("OOM");
+                const str = allocator.print("{f}", .{val}) catch @panic("OOM");
                 break :blk .{
                     .name = name,
                     .value = str,
@@ -311,7 +311,7 @@ const Context = struct {
 
     pub fn attrf(self: *Context, comptime name: []const u8, comptime format: []const u8, args: anytype) ?Element.Attribute {
         const allocator = self.getAlloc();
-        const text = std.fmt.allocPrint(allocator, format, args) catch @panic("OOM");
+        const text = allocator.print(format, args) catch @panic("OOM");
         return self.attr(@src(), name, text);
     }
 
@@ -325,7 +325,7 @@ const Context = struct {
 
     pub fn propf(self: *Context, comptime format: []const u8, args: anytype) []const u8 {
         const allocator = self.getAlloc();
-        return std.fmt.allocPrint(allocator, format, args) catch @panic("OOM");
+        return allocator.print(format, args) catch @panic("OOM");
     }
     pub const propv = attrv;
 
@@ -701,7 +701,7 @@ pub const Id = enum(u64) {
         hash.update(cp("{d}", .{src.column}));
         var buf: [40]u8 = undefined;
         hash.update(std.fmt.bufPrint(&buf, "{d}", .{id_extra}) catch unreachable);
-        return @enumFromInt(hash.final());
+        return @fromBackingInt(@intCast(hash.final()));
     }
 
     /// Runtime variant of `extendId` that hashes a runtime `std.builtin.SourceLocation`.
@@ -718,7 +718,7 @@ pub const Id = enum(u64) {
         hash.update(std.fmt.bufPrint(&buf, "{d}", .{src.line}) catch unreachable);
         hash.update(std.fmt.bufPrint(&buf, "{d}", .{src.column}) catch unreachable);
         hash.update(std.fmt.bufPrint(&buf, "{d}", .{id_extra}) catch unreachable);
-        return @enumFromInt(hash.final());
+        return @fromBackingInt(@intCast(hash.final()));
     }
 
     /// Make a new id by combining id with a name, commonly a string key like `"__value"`.
@@ -727,25 +727,25 @@ pub const Id = enum(u64) {
         var h = fnv.init();
         h.value = id.asU64();
         h.update(name);
-        return @enumFromInt(h.final());
+        return @fromBackingInt(@intCast(h.final()));
     }
 
     pub fn asU64(self: Id) u64 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 
     /// Shortened, stable 32-bit form of the id (the low 32 bits of the hash).
     /// Used for compact, human-readable string keys (see `fmtShort`). Collision
     /// risk within a single page is negligible.
     pub fn short(self: Id) u32 {
-        return @truncate(@intFromEnum(self));
+        return @truncate(@backingInt(self));
     }
 
     /// Format the id as a short, prefixed, stable string (e.g. `c1a2b3c4` for a
     /// component instance, `a9f8e7d6` for an action handler). The result is
     /// allocated with `allocator`.
     pub fn fmtShort(self: Id, allocator: std.mem.Allocator, comptime prefix: []const u8) []const u8 {
-        return std.fmt.allocPrint(allocator, prefix ++ "{x:0>8}", .{self.short()}) catch @panic("OOM");
+        return allocator.print(prefix ++ "{x:0>8}", .{self.short()}) catch @panic("OOM");
     }
 
     /// ALWAYS prefer using `asU64` unless a `usize` is required as it could
@@ -754,7 +754,7 @@ pub const Id = enum(u64) {
     /// Using an `Id` as `Options.id_extra` would be a valid use of this function
     pub fn asUsize(self: Id) usize {
         // usize might be u32 (like on wasm32)
-        return @truncate(@intFromEnum(self));
+        return @truncate(@backingInt(self));
     }
 
     pub fn format(self: *const Id, writer: *std.Io.Writer) !void {

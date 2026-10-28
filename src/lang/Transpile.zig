@@ -2464,7 +2464,7 @@ fn parseAttribute(self: *Transpile, node: ts.Node) !ZxAttribute {
         if (name_node) |n| {
             const var_name = try self.ast.getNodeText(n);
             // Prepend @ to create the builtin attribute name
-            const attr_name = try std.fmt.allocPrint(self.allocator, "@{s}", .{var_name});
+            const attr_name = try self.allocator.print("@{s}", .{var_name});
             return ZxAttribute{
                 .name = attr_name,
                 .name_byte_offset = n.startByte(),

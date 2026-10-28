@@ -21,7 +21,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     defer ctx.allocator.free(config_arg);
     try build_argv.appendSlice(ctx.allocator, &.{ args.@"zig-path", "build", config_arg, "--prefix", install_prefix });
 
-    const release_arg = if (args.release.len > 0) try std.fmt.allocPrint(ctx.allocator, "--release={s}", .{args.release}) else null;
+    const release_arg = if (args.release.len > 0) try ctx.allocator.print("--release={s}", .{args.release}) else null;
     defer if (release_arg) |r| ctx.allocator.free(r);
     if (release_arg) |r| try build_argv.append(ctx.allocator, r);
 
@@ -56,7 +56,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const environ_map = app.environ_map;
     try environ_map.put("ZIEX_ROOT_DIR", install_prefix);
 
-    const port_str = if (port != 0) try std.fmt.allocPrint(ctx.allocator, "{d}", .{port}) else null;
+    const port_str = if (port != 0) try ctx.allocator.print("{d}", .{port}) else null;
     defer if (port_str) |s| ctx.allocator.free(s);
     if (port_str) |s| try environ_map.put("PORT", s);
 

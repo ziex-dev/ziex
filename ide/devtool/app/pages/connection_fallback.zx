@@ -48,7 +48,7 @@ fn portValue(allocator: std.mem.Allocator, host: []const u8) []const u8 {
             return maybe_port;
         }
     }
-    return std.fmt.allocPrint(allocator, "3000", .{}) catch "3000";
+    return allocator.print("3000", .{}) catch "3000";
 }
 
 pub fn handlePortInput(ctx: zx.client.Event) void {
@@ -57,7 +57,7 @@ pub fn handlePortInput(ctx: zx.client.Event) void {
         if (trimmed.len == 0) return;
         const port = std.fmt.parseInt(u16, trimmed, 10) catch return;
         if (port == 0) return;
-        const host = std.fmt.allocPrint(zx.allocator, "localhost:{d}", .{port}) catch return;
+        const host = zx.allocator.print("localhost:{d}", .{port}) catch return;
         data.setHost(host);
         retryFetches(zx.allocator);
     }

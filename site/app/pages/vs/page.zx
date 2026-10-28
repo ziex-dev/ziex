@@ -9,17 +9,17 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
     const highlights = [_]MetricSummary{
         .{
             .label = "Fastest Throughput",
-            .value = std.fmt.allocPrint(allocator, "{s} · {s} req/s", .{ fastest.label, formatRequests(allocator, fastest.requests_per_sec) }) catch unreachable,
+            .value = allocator.print("{s} · {s} req/s", .{ fastest.label, formatRequests(allocator, fastest.requests_per_sec) }) catch unreachable,
             .note = "Measured with Dockerized SSR benchmark at 50 concurrent connections.",
         },
         .{
             .label = "Fastest Cold Start",
-            .value = std.fmt.allocPrint(allocator, "{s} · {d:.0} ms", .{ quickest_boot.label, quickest_boot.cold_start_ms }) catch unreachable,
+            .value = allocator.print("{s} · {d:.0} ms", .{ quickest_boot.label, quickest_boot.cold_start_ms }) catch unreachable,
             .note = "Container start-to-ready time under the same benchmark setup.",
         },
         .{
             .label = "Lowest Peak Memory",
-            .value = std.fmt.allocPrint(allocator, "{s} · {s}", .{ leanest_memory.label, formatMemory(allocator, leanest_memory.peak_memory_mb) }) catch unreachable,
+            .value = allocator.print("{s} · {s}", .{ leanest_memory.label, formatMemory(allocator, leanest_memory.peak_memory_mb) }) catch unreachable,
             .note = "Peak memory usage while serving load.",
         },
     };
@@ -62,7 +62,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                             </div>
                             <p class="vs-framework-tagline">{frameworkMetaFor(entry.id).tagline}</p>
                             <div class="vs-framework-links">
-                                <a class="vs-framework-link" href={std.fmt.allocPrint(allocator, "/vs/{s}", .{entry.id}) catch unreachable}>View details →</a>
+                                <a class="vs-framework-link" href={allocator.print("/vs/{s}", .{entry.id}) catch unreachable}>View details →</a>
                                 {if (frameworkMetaFor(entry.id).href.len > 0) (
                                     <a class="vs-framework-link" href={frameworkMetaFor(entry.id).href} target="_blank" rel="noopener noreferrer">Website ↗</a>
                                 )}
@@ -233,25 +233,25 @@ fn formatRequests(allocator: zx.Allocator, value: f64) []const u8 {
     if (int_value >= 1000) {
         const thousands = int_value / 1000;
         const remainder = int_value % 1000;
-        return std.fmt.allocPrint(allocator, "{d},{d:0>3}", .{ thousands, remainder }) catch unreachable;
+        return allocator.print("{d},{d:0>3}", .{ thousands, remainder }) catch unreachable;
     }
-    return std.fmt.allocPrint(allocator, "{d}", .{int_value}) catch unreachable;
+    return allocator.print("{d}", .{int_value}) catch unreachable;
 }
 
 fn formatMillis(allocator: zx.Allocator, value: f64) []const u8 {
-    return std.fmt.allocPrint(allocator, "{d:.2} ms", .{value}) catch unreachable;
+    return allocator.print("{d:.2} ms", .{value}) catch unreachable;
 }
 
 fn formatSeconds(allocator: zx.Allocator, value: f64) []const u8 {
-    return std.fmt.allocPrint(allocator, "{d:.0} s", .{value}) catch unreachable;
+    return allocator.print("{d:.0} s", .{value}) catch unreachable;
 }
 
 fn formatMemory(allocator: zx.Allocator, value: f64) []const u8 {
-    return std.fmt.allocPrint(allocator, "{d:.1} MB", .{value}) catch unreachable;
+    return allocator.print("{d:.1} MB", .{value}) catch unreachable;
 }
 
 fn formatPercent(allocator: zx.Allocator, value: f64) []const u8 {
-    return std.fmt.allocPrint(allocator, "{d:.1}%", .{value}) catch unreachable;
+    return allocator.print("{d:.1}%", .{value}) catch unreachable;
 }
 
 fn bestByRequests() BenchEntry {

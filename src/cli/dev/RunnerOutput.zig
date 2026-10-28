@@ -195,7 +195,7 @@ fn drainStderr(state: *State, reader: *Io.Reader, final: bool) void {
             const done_waiting = state.main_done_waiting;
             if (done_waiting and !state.main_claimed_first_line and !state.first_line_forwarded) {
                 _ = state.output_epoch.fetchAdd(1, .release);
-                if (std.fmt.allocPrint(state.allocator, "{s}\n", .{owned})) |line_nl| {
+                if (state.allocator.print("{s}\n", .{owned})) |line_nl| {
                     defer state.allocator.free(line_nl);
                     forward(state, Io.File.stderr(), line_nl);
                 } else |_| {}
@@ -306,7 +306,7 @@ fn appendLeakSummary(state: *State, out: *std.ArrayList(u8)) void {
     if (unlocated > 0) signature +%= 1;
     if (signature == last_leak_signature) {
         for (groups.items) |g| {
-            const line = std.fmt.allocPrint(allocator, "   {s}memory leak in `{s}` unchanged ({s}:{d}:{d}){s}\n", .{ Colors.gray, g.function, g.file, g.line, g.col, Colors.reset }) catch continue;
+            const line = allocator.print("   {s}memory leak in `{s}` unchanged ({s}:{d}:{d}){s}\n", .{ Colors.gray, g.function, g.file, g.line, g.col, Colors.reset }) catch continue;
             defer allocator.free(line);
             out.appendSlice(allocator, line) catch {};
         }
@@ -322,11 +322,11 @@ fn appendLeakSummary(state: *State, out: *std.ArrayList(u8)) void {
     }
     for (groups.items) |g| {
         const message = if (g.places.items.len > 1)
-            std.fmt.allocPrint(allocator, "memory leak in `{s}` ({d} allocations at {d} places, first shown)", .{ g.function, g.count, g.places.items.len })
+            allocator.print("memory leak in `{s}` ({d} allocations at {d} places, first shown)", .{ g.function, g.count, g.places.items.len })
         else if (g.count > 1)
-            std.fmt.allocPrint(allocator, "memory leak in `{s}` ({d}×)", .{ g.function, g.count })
+            allocator.print("memory leak in `{s}` ({d}×)", .{ g.function, g.count })
         else
-            std.fmt.allocPrint(allocator, "memory leak in `{s}`", .{g.function});
+            allocator.print("memory leak in `{s}`", .{g.function});
         diagnostics.append(allocator, .{
             .file = g.file,
             .line = g.line,
@@ -341,7 +341,7 @@ fn appendLeakSummary(state: *State, out: *std.ArrayList(u8)) void {
     out.appendSlice(allocator, formatted) catch {};
 
     if (unlocated > 0) {
-        const line = std.fmt.allocPrint(allocator, "   {s}{s}error{s}: memory leak ({d}×, no stack trace)\n\n", .{ Colors.red, Colors.bold, Colors.reset, unlocated }) catch return;
+        const line = allocator.print("   {s}{s}error{s}: memory leak ({d}×, no stack trace)\n\n", .{ Colors.red, Colors.bold, Colors.reset, unlocated }) catch return;
         defer allocator.free(line);
         out.appendSlice(allocator, line) catch {};
     }

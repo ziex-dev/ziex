@@ -12,7 +12,7 @@ test "formatting" {
         .width = .px(100),
     };
 
-    const result = try std.fmt.allocPrint(std.testing.allocator, "{f}", .{style});
+    const result = try std.testing.allocator.print("{f}", .{style});
     defer std.testing.allocator.free(result);
 
     // std.debug.print("\nGenerated CSS: {s}\n", .{result});
@@ -69,7 +69,7 @@ test "pseudo-states" {
         },
     };
 
-    const result = try std.fmt.allocPrint(std.testing.allocator, "{f}", .{style});
+    const result = try std.testing.allocator.print("{f}", .{style});
     defer std.testing.allocator.free(result);
 
     try std.testing.expect(std.mem.indexOf(u8, result, "background-color: #0000ff;") != null);
@@ -82,7 +82,7 @@ test "shorthands" {
         .margin = .px4(5, 10, 15, 20),
     };
 
-    const result = try std.fmt.allocPrint(std.testing.allocator, "{f}", .{style});
+    const result = try std.testing.allocator.print("{f}", .{style});
     defer std.testing.allocator.free(result);
 
     try std.testing.expect(std.mem.indexOf(u8, result, "padding: 10px 20px;") != null);
@@ -97,7 +97,7 @@ test "viewport units and calc" {
         .max_width = .calc(Calc.px(960).sub(Calc.px(48))),
     };
 
-    const result = try std.fmt.allocPrint(std.testing.allocator, "{f}", .{style});
+    const result = try std.testing.allocator.print("{f}", .{style});
     defer std.testing.allocator.free(result);
 
     try std.testing.expect(std.mem.indexOf(u8, result, "min-height: 60vh;") != null);

@@ -128,13 +128,13 @@ fn buildSelector(allocator: std.mem.Allocator, tag: zx.ElementTag, attributes: a
         for (attrs) |a| {
             if (std.mem.eql(u8, a.name, "id")) {
                 if (a.value) |v| if (v.len > 0)
-                    return std.fmt.allocPrint(allocator, "{s}[id=\"{s}\"]", .{ tag_name, v }) catch tag_name;
+                    return allocator.print("{s}[id=\"{s}\"]", .{ tag_name, v }) catch tag_name;
             }
         }
         for (attrs) |a| {
             if (std.mem.eql(u8, a.name, "class")) {
                 if (a.value) |v| if (v.len > 0)
-                    return std.fmt.allocPrint(allocator, "{s}[class=\"{s}\"]", .{ tag_name, v }) catch tag_name;
+                    return allocator.print("{s}[class=\"{s}\"]", .{ tag_name, v }) catch tag_name;
             }
         }
     }
@@ -185,7 +185,7 @@ pub fn fromSerializable(allocator: std.mem.Allocator, s: zx.util.devtool.Compone
             if (std.mem.eql(u8, b.name, "rendering") and std.mem.eql(u8, b.value, "client")) {
                 try badges_list.append(allocator, try allocator.dupe(u8, "client"));
             } else {
-                try badges_list.append(allocator, try std.fmt.allocPrint(allocator, "{s}={s}", .{ b.name, b.value }));
+                try badges_list.append(allocator, try allocator.print("{s}={s}", .{ b.name, b.value }));
             }
         }
     } else if (s.client) {
@@ -216,7 +216,7 @@ pub fn fromSerializable(allocator: std.mem.Allocator, s: zx.util.devtool.Compone
             {
                 continue;
             }
-            const child_path = try std.fmt.allocPrint(allocator, "{s}.{d}", .{ path, child_idx });
+            const child_path = try allocator.print("{s}.{d}", .{ path, child_idx });
             child_idx += 1;
             try tree_children.append(allocator, try fromSerializable(allocator, child_s, child_path, counters));
         }
@@ -242,11 +242,11 @@ pub fn fromSerializable(allocator: std.mem.Allocator, s: zx.util.devtool.Compone
             const prop_value = if (std.mem.eql(u8, b.name, "escaping") or
                 std.mem.eql(u8, b.name, "rendering") or
                 std.mem.eql(u8, b.name, "async"))
-                try std.fmt.allocPrint(allocator, ".{s}", .{b.value})
+                try allocator.print(".{s}", .{b.value})
             else
                 try allocator.dupe(u8, b.value);
             try props_list.append(allocator, .{
-                .key = try std.fmt.allocPrint(allocator, "@{s}", .{b.name}),
+                .key = try allocator.print("@{s}", .{b.name}),
                 .value = prop_value,
             });
         }
@@ -324,7 +324,7 @@ pub fn fromSerializableSlice(allocator: std.mem.Allocator, sc: []const zx.util.d
 
     var children = try allocator.alloc(Component, sc.len);
     for (sc, 0..) |child_s, i| {
-        const path = try std.fmt.allocPrint(allocator, "{d}", .{i});
+        const path = try allocator.print("{d}", .{i});
         children[i] = try fromSerializable(allocator, child_s, path, &counters);
     }
     return children;

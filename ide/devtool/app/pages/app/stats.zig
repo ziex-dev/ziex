@@ -168,20 +168,20 @@ fn onFetchRuntimeInfo(_: void, result: zx.http.Client.Error!zx.http.Client.Resul
 }
 
 pub fn componentCountLabel(allocator: std.mem.Allocator) []const u8 {
-    return std.fmt.allocPrint(allocator, "{d}", .{component_count}) catch "0";
+    return allocator.print("{d}", .{component_count}) catch "0";
 }
 
 pub fn routeCountLabel(allocator: std.mem.Allocator) []const u8 {
-    return std.fmt.allocPrint(allocator, "{d}", .{route_count}) catch "0";
+    return allocator.print("{d}", .{route_count}) catch "0";
 }
 
 pub fn injectionCountLabel(allocator: std.mem.Allocator) []const u8 {
-    return std.fmt.allocPrint(allocator, "{d}", .{injection_count}) catch "0";
+    return allocator.print("{d}", .{injection_count}) catch "0";
 }
 
 pub fn portLabel(allocator: std.mem.Allocator, port: u16) []const u8 {
     if (port == 0) return "—";
-    return std.fmt.allocPrint(allocator, "{d}", .{port}) catch "—";
+    return allocator.print("{d}", .{port}) catch "—";
 }
 
 pub fn displayOrDash(value: []const u8) []const u8 {

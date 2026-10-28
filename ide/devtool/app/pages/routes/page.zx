@@ -184,10 +184,10 @@ fn RouteSection(allocator: zx.Allocator, props: struct { route: store.AppRoute }
 
 fn OptsSection(allocator: zx.Allocator, props: struct { title: []const u8, opts: store.RouteOpts }) zx.Component {
     const opts = props.opts;
-    const id = std.fmt.allocPrint(allocator, "route-section-{s}", .{props.title}) catch "";
+    const id = allocator.print("route-section-{s}", .{props.title}) catch "";
     const rendering = opts.rendering orelse "—";
     const ttl = if (opts.caching_ttl_s) |t|
-        std.fmt.allocPrint(allocator, "{d}s", .{t}) catch "0s"
+        allocator.print("{d}s", .{t}) catch "0s"
     else
         "—";
     const cache_key = opts.caching_key orelse "—";

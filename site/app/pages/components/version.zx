@@ -68,11 +68,11 @@ fn displayVersion(allocator: zx.Allocator, raw: []const u8) []const u8 {
     const text = if (raw.len > 0 and raw[0] == 'v') raw[1..] else raw;
     var parsed = std.SemanticVersion.parse(text) catch return text;
     parsed.build = null;
-    return std.fmt.allocPrint(allocator, "{f}", .{parsed}) catch text;
+    return allocator.print("{f}", .{parsed}) catch text;
 }
 
 fn releaseUrl(allocator: zx.Allocator, version: []const u8) []const u8 {
-    return std.fmt.allocPrint(allocator, "{s}/releases/tag/v{s}", .{ zx.info.repository, version }) catch zx.info.repository;
+    return allocator.print("{s}/releases/tag/v{s}", .{ zx.info.repository, version }) catch zx.info.repository;
 }
 
 fn LiveVersionBadge(allocator: zx.Allocator) zx.Component {
@@ -104,8 +104,7 @@ fn fetchLatestRelease(allocator: zx.Allocator) ?GhRelease {
     zx.log.debug("Fetching version from GH...", .{});
     const slug = repoSlug() orelse return null;
 
-    const url = std.fmt.allocPrint(
-        allocator,
+    const url = allocator.print(
         "https://api.github.com/repos/{s}/releases/latest",
         .{slug},
     ) catch return null;
@@ -132,7 +131,7 @@ fn fetchLatestRelease(allocator: zx.Allocator) ?GhRelease {
     const html_url = if (parsed.value.html_url.len > 0)
         parsed.value.html_url
     else
-        std.fmt.allocPrint(allocator, "{s}/releases/tag/{s}", .{ zx.info.repository, tag }) catch return null;
+        allocator.print("{s}/releases/tag/{s}", .{ zx.info.repository, tag }) catch return null;
 
     return .{
         .version = allocator.dupe(u8, version) catch return null,
@@ -163,7 +162,7 @@ fn repoSlug() ?[]const u8 {
 }
 
 fn releasesUrl(allocator: zx.Allocator) ?[]const u8 {
-    return std.fmt.allocPrint(allocator, "{s}/releases", .{zx.info.repository}) catch null;
+    return allocator.print("{s}/releases", .{zx.info.repository}) catch null;
 }
 
 // TODO: dedupe the struct for versions.zon

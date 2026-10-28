@@ -4,7 +4,7 @@ fn resolveBinPath(io: std.Io, allocator: std.mem.Allocator, binpath: []const u8)
     }
 
     if (builtin.os.tag == .windows and !std.mem.endsWith(u8, binpath, ".exe")) {
-        const exe_binpath = try std.fmt.allocPrint(allocator, "{s}.exe", .{binpath});
+        const exe_binpath = try allocator.print("{s}.exe", .{binpath});
         if (fileExists(io, exe_binpath)) {
             return exe_binpath;
         }
@@ -335,8 +335,7 @@ pub const TempDir = struct {
 
     pub fn init(io: std.Io, allocator: std.mem.Allocator) !TempDir {
         return .{
-            .path = try std.fmt.allocPrint(
-                allocator,
+            .path = try allocator.print(
                 "{f}{s}{x}",
                 .{ temp_dir, std.fs.path.sep_str, randInt(io, u32) },
             ),

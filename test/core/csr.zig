@@ -62,7 +62,7 @@ test "flaky: performance > csr" {
         @memcpy(updated, items);
         var i: usize = 0;
         while (i < updated.len) : (i += 10) {
-            updated[i].label = try std.fmt.allocPrint(a, "{s} !!!", .{items[i].label});
+            updated[i].label = try a.print("{s} !!!", .{items[i].label});
         }
         const next = try buildTable(a, updated);
 
@@ -233,7 +233,7 @@ test "flaky: performance > csr extreme" {
         @memcpy(updated, items);
         var i: usize = 0;
         while (i < updated.len) : (i += 10) {
-            updated[i].label = try std.fmt.allocPrint(a, "{s} !!!", .{items[i].label});
+            updated[i].label = try a.print("{s} !!!", .{items[i].label});
         }
         const next = try buildTable(a, updated);
 
@@ -361,7 +361,7 @@ fn buildItems(allocator: std.mem.Allocator, count: usize, start_id: u32) ![]Item
         const id = start_id + @as(u32, @intCast(i));
         items[i] = .{
             .id = id,
-            .label = try std.fmt.allocPrint(allocator, "pretty yellow {d}", .{id}),
+            .label = try allocator.print("pretty yellow {d}", .{id}),
         };
     }
     return items;
@@ -403,7 +403,7 @@ fn buildTable(allocator: std.mem.Allocator, items: []const Item) !zx.Component {
 }
 
 fn buildRow(allocator: std.mem.Allocator, item: Item) !zx.Component {
-    const id_str = try std.fmt.allocPrint(allocator, "{d}", .{item.id});
+    const id_str = try allocator.print("{d}", .{item.id});
 
     const id_text = try allocator.alloc(zx.Component, 1);
     id_text[0] = .{ .text = id_str };

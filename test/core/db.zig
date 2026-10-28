@@ -861,7 +861,7 @@ fn expectText(value: Db.Value) []const u8 {
 
 fn makeTestDatabaseUrl(allocator: std.mem.Allocator) ![]const u8 {
     const id = next_db_id.fetchAdd(1, .monotonic);
-    const url = try std.fmt.allocPrint(allocator, "file:/tmp/ziex-db-test-{d}.sqlite", .{id});
+    const url = try allocator.print("file:/tmp/ziex-db-test-{d}.sqlite", .{id});
     errdefer allocator.free(url);
 
     try cleanupDatabaseFiles(filePathFromUrl(url));

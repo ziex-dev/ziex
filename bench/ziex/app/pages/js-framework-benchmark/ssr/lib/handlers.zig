@@ -96,7 +96,7 @@ pub fn update(allocator: std.mem.Allocator) ![]u8 {
     var i: usize = 0;
     while (i < rows.items.len) : (i += 10) {
         const old_label = rows.items[i].label;
-        const new_label = try std.fmt.allocPrint(arena.allocator(), "{s} !!!", .{old_label});
+        const new_label = try arena.allocator().print("{s} !!!", .{old_label});
         arena.allocator().free(old_label);
         rows.items[i].label = new_label;
     }

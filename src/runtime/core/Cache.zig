@@ -226,7 +226,7 @@ pub fn deletePrefix(self: Cache, prefix: []const u8) !usize {
 }
 
 fn scopedKey(allocator: Allocator, ns: []const u8, key: []const u8) ![]u8 {
-    return std.fmt.allocPrint(allocator, "{s}\x1f{s}", .{ ns, key });
+    return allocator.print("{s}\x1f{s}", .{ ns, key });
 }
 
 /// A `Kv.Meta.Expiry` line followed by the payload.

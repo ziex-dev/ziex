@@ -14,7 +14,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
             <div>
                 {for (request_info.filtered_users.items) |user| (
                     <form method="get">
-                        {user.id}: {user.name} - <button name="delete" value={std.fmt.allocPrint(allocator, "{d}", .{user.id}) catch @panic("OOM")}>Delete</button>
+                        {user.id}: {user.name} - <button name="delete" value={allocator.print("{d}", .{user.id}) catch @panic("OOM")}>Delete</button>
                     </form>
                 )}
             </div>

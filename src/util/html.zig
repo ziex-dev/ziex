@@ -118,5 +118,5 @@ pub fn shouldPrefixPathWithBasePath(normalized_base_path: []const u8, path: []co
 pub fn prefixPathWithBasePath(allocator: std.mem.Allocator, base_path: ?[]const u8, path: []const u8) []const u8 {
     const normalized_base = normalizeBasePathForPrefixing(base_path) orelse return path;
     if (!shouldPrefixPathWithBasePath(normalized_base, path)) return path;
-    return std.fmt.allocPrint(allocator, "{s}{s}", .{ normalized_base, path }) catch @panic("OOM");
+    return allocator.print("{s}{s}", .{ normalized_base, path }) catch @panic("OOM");
 }

@@ -109,7 +109,7 @@ pub fn log(allocator: std.mem.Allocator, io: std.Io, args: Args) void {
         }
     };
 
-    const msg = std.fmt.allocPrint(allocator, "{s}{s}{s}{s} {s}{s}{s} {s}{d}{s} {s}{d:.3}ms{s}\x1b[K", .{
+    const msg = allocator.print("{s}{s}{s}{s} {s}{s}{s} {s}{d}{s} {s}{d:.3}ms{s}\x1b[K", .{
         StatusIndicator.get(args.cache_status, args.status),
         c.method_c,
         args.method,

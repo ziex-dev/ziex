@@ -138,7 +138,7 @@ pub fn main(init: std.process.Init) !void {
 
             try std.Io.sleep(init.io, .fromMilliseconds(10), .awake);
 
-            const ev_name = try std.fmt.allocPrint(arena, "{s} ({d})", .{ ev.name, ev.id });
+            const ev_name = try arena.print("{s} ({d})", .{ ev.name, ev.id });
 
             switch (ev.type) {
                 .start => {

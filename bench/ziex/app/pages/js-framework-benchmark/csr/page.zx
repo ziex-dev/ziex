@@ -96,7 +96,7 @@ fn updateRows(_: *zx.client.Event) void {
     var i: usize = 0;
     while (i < items.items.len) : (i += 10) {
         const item = &items.items[i];
-        const new_label = std.fmt.allocPrint(zx.allocator, "{s} !!!", .{item.label}) catch @panic("OOM");
+        const new_label = zx.allocator.print("{s} !!!", .{item.label}) catch @panic("OOM");
         item.label = new_label;
     }
     zx.client.rerender();
@@ -165,7 +165,7 @@ fn BuildRows(count_to_add: u32, clear_first: bool) void {
     }
 
     for (0..count_to_add) |_| {
-        const label = std.fmt.allocPrint(zx.allocator, "{s} {s} {s}", .{
+        const label = zx.allocator.print("{s} {s} {s}", .{
             adjectives[RandomNumber(adjectives.len)],
             colours[RandomNumber(colours.len)],
             nouns[RandomNumber(nouns.len)],

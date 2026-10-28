@@ -369,7 +369,7 @@ fn test_fmt_inner(comptime file_path: []const u8, comptime has_diff_expected: bo
 
     // Get pre-loaded source file
     const source = try cache.get(source_path) orelse return error.FileNotFound;
-    const source_altered = try std.fmt.allocPrint(allocator, "\n\n {s} \n\n", .{source});
+    const source_altered = try allocator.print("\n\n {s} \n\n", .{source});
     defer allocator.free(source_altered);
     const source_z = try allocator.dupeSentinel(u8, source_altered, 0);
     defer allocator.free(source_z);

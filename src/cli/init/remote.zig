@@ -14,20 +14,19 @@ pub fn fetch(
         if (token.len == 0) break :blk null;
         break :blk .{
             .name = "authorization",
-            .value = try std.fmt.allocPrint(allocator, "Bearer {s}", .{token}),
+            .value = try allocator.print("Bearer {s}", .{token}),
         };
     } else null;
     defer if (auth_header) |h| allocator.free(h.value);
 
-    const repo = try std.fmt.allocPrint(allocator, "template-{s}", .{template});
+    const repo = try allocator.print("template-{s}", .{template});
     defer allocator.free(repo);
 
     const tag = try fetchLatestReleaseTag(&client, allocator, auth_header, repo);
     defer allocator.free(tag);
 
     // codeload serves the gzipped source tarball for a given ref.
-    const tarball_url = try std.fmt.allocPrint(
-        allocator,
+    const tarball_url = try allocator.print(
         "https://codeload.github.com/{s}/{s}/tar.gz/refs/tags/{s}",
         .{ org, repo, tag },
     );
@@ -59,8 +58,7 @@ fn fetchLatestReleaseTag(
     auth_header: ?std.http.Header,
     repo: []const u8,
 ) ![]const u8 {
-    const url = try std.fmt.allocPrint(
-        allocator,
+    const url = try allocator.print(
         "https://api.github.com/repos/{s}/{s}/releases/latest",
         .{ org, repo },
     );
@@ -97,7 +95,7 @@ fn get(
     const result = client.fetch(.{
         .location = .{ .url = url },
         .method = .GET,
-        .redirect_behavior = @enumFromInt(5),
+        .redirect_behavior = @fromBackingInt(@intCast(5)),
         .response_writer = &aw.writer,
         .extra_headers = headers.items,
     }) catch return error.NetworkError;

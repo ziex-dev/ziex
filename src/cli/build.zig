@@ -39,10 +39,10 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     defer build_args.deinit(allocator);
     try build_args.appendSlice(allocator, &.{ args.@"zig-path", "build", "--prefix", args.@"install-prefix" });
 
-    const target_arg = if (args.target.len > 0) try std.fmt.allocPrint(allocator, "-Dtarget={s}", .{args.target}) else null;
+    const target_arg = if (args.target.len > 0) try allocator.print("-Dtarget={s}", .{args.target}) else null;
     defer if (target_arg) |t| allocator.free(t);
     if (target_arg) |t| try build_args.append(allocator, t);
-    const release_arg = if (args.release.len > 0) try std.fmt.allocPrint(allocator, "--release={s}", .{args.release}) else null;
+    const release_arg = if (args.release.len > 0) try allocator.print("--release={s}", .{args.release}) else null;
     defer if (release_arg) |r| allocator.free(r);
     if (release_arg) |r| try build_args.append(allocator, r);
     const config_arg = if (args.prerender) try (BuildConfig{ .prerender = true }).arg(allocator) else null;
