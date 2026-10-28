@@ -49,7 +49,7 @@ pub const Io = struct {
     }
 
     pub const noop: Io = .{ .mode = .callback, .callback = onFetchNoop };
-    fn onFetchNoop(_: ?*Response, _: ?FetchError) void {}
+    fn onFetchNoop(_: ?*Response, _: ?Error) void {}
 
     /// Check if this Io mode is supported on the current platform.
     pub fn isSupported(self: Io) bool {
@@ -185,7 +185,7 @@ pub const Headers = struct {
     }
 };
 
-pub const FetchError = error{
+pub const Error = error{
     Timeout,
     NetworkError,
     InvalidUrl,
@@ -202,10 +202,10 @@ pub const FetchError = error{
 /// Callback type for async fetch completion.
 /// - response: The response if successful, null on error
 /// - err: The error if failed, null on success
-pub const ResponseCallback = *const fn (response: ?*Response, err: ?FetchError) void;
+pub const ResponseCallback = *const fn (response: ?*Response, err: ?Error) void;
 
 /// Like ResponseCallback but carries an opaque context pointer for stateful callbacks.
-pub const ResponseCallbackCtx = *const fn (ctx: *anyopaque, response: ?*Response, err: ?FetchError) void;
+pub const ResponseCallbackCtx = *const fn (ctx: *anyopaque, response: ?*Response, err: ?Error) void;
 
 /// Perform an HTTP fetch request.
 ///
@@ -224,7 +224,7 @@ pub const ResponseCallbackCtx = *const fn (ctx: *anyopaque, response: ?*Response
 /// ```zig
 /// zx.fetch(zx.Io.wasm(&onComplete), allocator, "/api/users", .{});
 ///
-/// fn onComplete(response: ?*zx.Fetch.Response, err: ?zx.Fetch.FetchError) void {
+/// fn onComplete(response: ?*zx.Fetch.Response, err: ?zx.Fetch.Error) void {
 ///     if (response) |res| {
 ///         defer res.deinit();
 ///         const text = res.text() catch return;
@@ -234,14 +234,14 @@ pub const ResponseCallbackCtx = *const fn (ctx: *anyopaque, response: ?*Response
 /// ```
 ///
 /// **Returns:**
-/// - For `Io.blocking`: Returns `FetchError!Response`
-/// - For `Io.wasm`: Returns `FetchError!void` (result via callback)
+/// - For `Io.blocking`: Returns `Error!Response`
+/// - For `Io.wasm`: Returns `Error!void` (result via callback)
 pub fn fetch(
     io: Io,
     allocator: std.mem.Allocator,
     url: []const u8,
     init: RequestInit,
-) FetchError!?Response {
+) Error!?Response {
     if (!io.isSupported()) {
         return error.UnsupportedIoMode;
     }

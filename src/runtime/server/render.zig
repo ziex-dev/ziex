@@ -121,7 +121,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
 
                     // Try to get from cache
                     const cached = cmp_cache.get(func.allocator, generated_key) catch |err| switch (err) {
-                        error.CacheUnavailable => null,
+                        error.Unavailable => null,
                         else => return err,
                     };
                     if (cached) |cached_html| {
@@ -137,7 +137,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
 
                     const rendered = buf_writer.written();
                     cmp_cache.put(generated_key, rendered, .{ .ttl = caching.ttl }) catch |err| switch (err) {
-                        error.CacheUnavailable => {},
+                        error.Unavailable => {},
                         else => return err,
                     };
 

@@ -63,7 +63,7 @@ fn onTimeoutFired() void {
     std.log.info("setTimeout fired after 2 seconds!", .{});
 }
 
-fn onFetchComplete(response: ?*zx.Fetch.Response, err: ?zx.Fetch.FetchError) void {
+fn onFetchComplete(response: ?*zx.Fetch.Response, err: ?zx.Fetch.Error) void {
     if (err) |e| {
         status.set("Fetch failed");
         std.log.err("Fetch error!", .{});

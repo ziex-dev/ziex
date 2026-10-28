@@ -621,9 +621,9 @@ fn eventHandler(ctx: *anyopaque, event: zx.client.Event) void {
     }
 }
 
-fn onActionResponse(_: ?*@import("../Fetch.zig").Response, _: ?@import("../Fetch.zig").FetchError) void {}
+fn onActionResponse(_: ?*@import("../Fetch.zig").Response, _: ?@import("../Fetch.zig").Error) void {}
 
-fn onEventResponse(ctx_ptr: *anyopaque, response: ?*@import("../Fetch.zig").Response, _: ?@import("../Fetch.zig").FetchError) void {
+fn onEventResponse(ctx_ptr: *anyopaque, response: ?*@import("../Fetch.zig").Response, _: ?@import("../Fetch.zig").Error) void {
     const cb_ctx: *Context = @ptrCast(@alignCast(ctx_ptr));
     defer getGlobalAllocator().destroy(cb_ctx);
 

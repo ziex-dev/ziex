@@ -7,7 +7,6 @@ const Fetch = @import("../core/Fetch.zig");
 const Response = Fetch.Response;
 const Headers = Fetch.Headers;
 const RequestInit = Fetch.RequestInit;
-const FetchError = Fetch.FetchError;
 const ResponseCallback = Fetch.ResponseCallback;
 const ResponseCallbackCtx = Fetch.ResponseCallbackCtx;
 
@@ -190,7 +189,7 @@ pub fn onFetchComplete(
 
     // Helper to dispatch errors to whichever callback is registered.
     const dispatchErr = struct {
-        fn call(pcb: ?ResponseCallback, ccb: ?ResponseCallbackCtx, cp: ?*anyopaque, err: FetchError) void {
+        fn call(pcb: ?ResponseCallback, ccb: ?ResponseCallbackCtx, cp: ?*anyopaque, err: Fetch.Error) void {
             if (ccb) |cb| cb(cp.?, null, err) else if (pcb) |cb| cb(null, err);
         }
     }.call;

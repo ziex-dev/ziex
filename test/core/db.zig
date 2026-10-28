@@ -34,7 +34,6 @@ test "api > module surface compiles" {
     _ = Db.row;
     _ = Db.rows;
     _ = Db.transaction;
-    _ = Db.transactionDeferred;
     _ = Db.transactionWith;
     _ = Db.close;
 
@@ -52,11 +51,11 @@ test "api > module surface compiles" {
     _ = Db.Statement.run;
     _ = Db.Statement.values;
     _ = Db.Statement.iterate;
-    _ = Db.Statement.finalize;
+    _ = Db.Statement.deinit;
     _ = Db.Statement.toString;
     _ = Db.Statement.columnNames;
     _ = Db.Statement.columnTypes;
-    _ = Db.Statement.paramsCount;
+    _ = Db.Statement.paramCount;
     _ = Db.Row.int;
     _ = Db.Row.float;
     _ = Db.Row.text;
@@ -97,7 +96,7 @@ test "api > statement get/all/values and metadata" {
     );
     defer statement.deinit();
 
-    try std.testing.expectEqual(@as(usize, 1), try statement.paramsCount());
+    try std.testing.expectEqual(@as(usize, 1), try statement.paramCount());
 
     const column_names = try statement.columnNames();
     try std.testing.expectEqual(@as(usize, 3), column_names.len);
@@ -183,9 +182,9 @@ test "api > statement typed row and rows" {
     try std.testing.expectEqualStrings("Grace", typed_rows[1].name);
 
     const raw_row = (try one_stmt.get(alloc, .{ .name = "Ada" })).?;
-    try std.testing.expectEqual(@as(i64, 1), try raw_row.getTyped(i64, "id"));
-    try std.testing.expectEqualStrings("Ada", try raw_row.getTyped([]const u8, "name"));
-    try std.testing.expectError(Db.DbError.InvalidQuery, raw_row.getTyped(i64, "missing_column"));
+    try std.testing.expectEqual(@as(i64, 1), try raw_row.as("id", i64));
+    try std.testing.expectEqualStrings("Ada", try raw_row.as("name", []const u8));
+    try std.testing.expectError(Db.Error.InvalidQuery, raw_row.as("missing_column", i64));
 }
 
 test "api > statement run with named bindings" {
@@ -559,7 +558,7 @@ test "api > plain and deferred transactions commit" {
     try database.transaction({}, insertCommittedUser);
     try std.testing.expectEqual(@as(i64, 1), try countUsers(&database));
 
-    try database.transactionDeferred({}, insertCommittedUser);
+    try database.transactionWith(.deferred, {}, insertCommittedUser);
     try std.testing.expectEqual(@as(i64, 2), try countUsers(&database));
 }
 
@@ -605,7 +604,7 @@ test "api > operations on a closed database fail" {
 
     // The backend is freed; the vtable userdata is gone. Statement handles that
     // outlive the connection report Closed.
-    try std.testing.expectError(Db.DbError.Closed, requireClosedStatement());
+    try std.testing.expectError(Db.Error.Closed, requireClosedStatement());
 }
 
 fn requireClosedStatement() !void {
@@ -616,13 +615,13 @@ fn requireClosedStatement() !void {
 test "api > failing connection returns closed" {
     const database = Db.failing;
 
-    try std.testing.expectError(Db.DbError.Closed, database.prepare("SELECT 1"));
-    try std.testing.expectError(Db.DbError.Closed, database.run("SELECT 1", .empty));
+    try std.testing.expectError(Db.Error.Closed, database.prepare("SELECT 1"));
+    try std.testing.expectError(Db.Error.Closed, database.run("SELECT 1", .empty));
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    try std.testing.expectError(Db.DbError.Closed, database.get(arena.allocator(), "SELECT 1", .{}));
-    try std.testing.expectError(Db.DbError.Closed, database.all(arena.allocator(), "SELECT 1", .{}));
+    try std.testing.expectError(Db.Error.Closed, database.get(arena.allocator(), "SELECT 1", .{}));
+    try std.testing.expectError(Db.Error.Closed, database.all(arena.allocator(), "SELECT 1", .{}));
 }
 
 test "api > sqlite.from recovers the backend" {
@@ -716,7 +715,7 @@ test "api > named bindings resolve across all sigils" {
     var miss_stmt = try database.prepare("SELECT id FROM users WHERE name = $who");
     defer miss_stmt.deinit();
     const missing = Db.Bindings.fromNamed(&.{.{ .name = "$nope", .value = .{ .text = "Ada" } }});
-    try std.testing.expectError(Db.DbError.InvalidBindings, miss_stmt.get(alloc, missing));
+    try std.testing.expectError(Db.Error.InvalidBindings, miss_stmt.get(alloc, missing));
 }
 
 test "api > schema option targets an attached database for serialize" {

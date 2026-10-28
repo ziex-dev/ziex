@@ -8,7 +8,7 @@ pub const Header = common.Header;
 /// Iterator over raw HTTP header bytes (`std.http.HeaderIterator`).
 pub const HeaderIterator = std.http.HeaderIterator;
 
-backend_ctx: ?*anyopaque = null,
+userdata: ?*anyopaque = null,
 vtable: ?*const VTable = null,
 /// Whether this instance is read-only (request headers).
 read_only: bool = true,
@@ -29,7 +29,7 @@ pub fn isReadOnly(self: *const Headers) bool {
 /// Returns the value of the header with the specified name.
 pub fn get(self: *const Headers, name: []const u8) ?[]const u8 {
     if (self.vtable) |vt| {
-        if (self.backend_ctx) |ctx| {
+        if (self.userdata) |ctx| {
             return vt.get(ctx, name);
         }
     }
@@ -39,7 +39,7 @@ pub fn get(self: *const Headers, name: []const u8) ?[]const u8 {
 /// Returns whether a header with the specified name exists.
 pub fn has(self: *const Headers, name: []const u8) bool {
     if (self.vtable) |vt| {
-        if (self.backend_ctx) |ctx| {
+        if (self.userdata) |ctx| {
             return vt.has(ctx, name);
         }
     }
@@ -52,7 +52,7 @@ pub fn has(self: *const Headers, name: []const u8) bool {
 pub fn append(self: *Headers, name: []const u8, value: []const u8) void {
     if (self.read_only) return;
     if (self.vtable) |vt| {
-        if (self.backend_ctx) |ctx| {
+        if (self.userdata) |ctx| {
             vt.append(ctx, name, value);
         }
     }
@@ -64,7 +64,7 @@ pub fn append(self: *Headers, name: []const u8, value: []const u8) void {
 pub fn set(self: *Headers, name: []const u8, value: []const u8) void {
     if (self.read_only) return;
     if (self.vtable) |vt| {
-        if (self.backend_ctx) |ctx| {
+        if (self.userdata) |ctx| {
             vt.set(ctx, name, value);
         }
     }
@@ -82,7 +82,7 @@ pub fn delete(self: *Headers, name: []const u8) void {
 /// Returns an iterator over all key/value pairs.
 pub fn entries(self: *const Headers) ?Iterator {
     if (self.vtable) |vt| {
-        if (self.backend_ctx) |ctx| {
+        if (self.userdata) |ctx| {
             return vt.iterate(ctx);
         }
     }
@@ -102,13 +102,13 @@ pub fn forEach(self: *const Headers, callback: *const fn (value: []const u8, key
 }
 
 pub const Iterator = struct {
-    backend_ctx: ?*anyopaque = null,
+    userdata: ?*anyopaque = null,
     nextFn: ?*const fn (ctx: *anyopaque) ?Header = null,
 
     /// Returns the next header, or null if iteration is complete.
     pub fn next(self: *Iterator) ?Header {
         if (self.nextFn) |nextFunc| {
-            if (self.backend_ctx) |ctx| {
+            if (self.userdata) |ctx| {
                 return nextFunc(ctx);
             }
         }
@@ -118,13 +118,13 @@ pub const Iterator = struct {
 
 // --- Builder --- //
 pub const Builder = struct {
-    backend_ctx: ?*anyopaque = null,
+    userdata: ?*anyopaque = null,
     vtable: ?*const VTable = null,
     read_only: bool = true,
 
     pub fn build(self: Builder) Headers {
         return .{
-            .backend_ctx = self.backend_ctx,
+            .userdata = self.userdata,
             .vtable = self.vtable,
             .read_only = self.read_only,
         };

@@ -290,7 +290,7 @@ test "headers > write read-only" {
 test "headers > builder default" {
     const headers = (Headers.Builder{}).build();
     try std.testing.expect(headers.read_only);
-    try std.testing.expect(headers.backend_ctx == null);
+    try std.testing.expect(headers.userdata == null);
     try std.testing.expect(headers.vtable == null);
 }
 

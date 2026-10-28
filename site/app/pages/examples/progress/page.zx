@@ -77,7 +77,7 @@ fn fetch() void {
     _ = zx.fetch(.wasm(&onFetch), zx.allocator, zx.allocator.print("/examples/progress?actionId={d}", .{action_id}) catch "/examples/progress", .{ .method = .POST }) catch {};
 }
 
-fn onFetch(res: ?*zx.Fetch.Response, _: ?zx.Fetch.FetchError) void {
+fn onFetch(res: ?*zx.Fetch.Response, _: ?zx.Fetch.Error) void {
     running.set(false);
     if (res) |r| {
         defer r.deinit();

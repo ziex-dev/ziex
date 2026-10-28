@@ -40,7 +40,7 @@ const WorkerContext = struct {
 const worker_iterations = 100;
 
 fn ensureCache() !void {
-    cache = try zx.Cache.init(std.testing.io, allocator, cache_fs.kv(), .{
+    cache = try zx.Cache.init(allocator, std.testing.io, cache_fs.kv(), .{
         .max_size = 4096,
         .segment_count = 8,
     });
@@ -67,7 +67,7 @@ test "put/get/delete roundtrip" {
     var key_buf: [96]u8 = undefined;
     const key = try uniqueLabel("cache-roundtrip", &key_buf);
 
-    defer cache.delete(key) catch {};
+    defer _ = cache.delete(key) catch false;
 
     try cache.put(key, "cached value", .{ .ttl = .fromSeconds(30) });
 
@@ -76,7 +76,7 @@ test "put/get/delete roundtrip" {
 
     try std.testing.expectEqualStrings("cached value", found);
 
-    try cache.delete(key);
+    _ = try cache.delete(key);
     try std.testing.expect((try cache.get(allocator, key)) == null);
 }
 
@@ -87,11 +87,11 @@ test "del reports whether key existed" {
     var key_buf: [96]u8 = undefined;
     const key = try uniqueLabel("cache-del", &key_buf);
 
-    try std.testing.expect(!cache.del(key));
+    try std.testing.expect(!try cache.delete(key));
 
     try cache.put(key, "delete me", .{ .ttl = .fromSeconds(30) });
-    try std.testing.expect(cache.del(key));
-    try std.testing.expect(!cache.del(key));
+    try std.testing.expect(try cache.delete(key));
+    try std.testing.expect(!try cache.delete(key));
 }
 
 test "put without expiration does not overflow memory ttl" {
@@ -101,7 +101,7 @@ test "put without expiration does not overflow memory ttl" {
     var key_buf: [96]u8 = undefined;
     const key = try uniqueLabel("cache-no-expiration", &key_buf);
 
-    defer cache.delete(key) catch {};
+    defer _ = cache.delete(key) catch false;
 
     try cache.put(key, "no-expiration", .{});
 
@@ -119,7 +119,7 @@ test "stress many entries without expiration" {
     const prefix = try uniqueLabel("cache-stress", &prefix_buf);
     const scoped = scopedCache(prefix);
 
-    defer _ = scoped.delPrefix("") catch 0;
+    defer _ = scoped.deletePrefix("") catch 0;
 
     var key_buf: [128]u8 = undefined;
     var value_buf: [128]u8 = undefined;
@@ -158,8 +158,8 @@ test "list and del prefix work for live entries" {
     const key2 = try std.fmt.bufPrint(&key2_buf, "{s}-b", .{prefix});
     const other_key = try uniqueLabel("cache-other", &other_key_buf);
 
-    defer _ = cache.delPrefix(prefix) catch 0;
-    defer cache.delete(other_key) catch {};
+    defer _ = cache.deletePrefix(prefix) catch 0;
+    defer _ = cache.delete(other_key) catch false;
 
     try cache.put(key1, "value-a", .{ .ttl = .fromSeconds(30) });
     try cache.put(key2, "value-b", .{ .ttl = .fromSeconds(30) });
@@ -182,7 +182,7 @@ test "list and del prefix work for live entries" {
 
     try std.testing.expect(saw_key1);
     try std.testing.expect(saw_key2);
-    try std.testing.expectEqual(@as(usize, 2), try scopedCache("default").delPrefix(prefix));
+    try std.testing.expectEqual(@as(usize, 2), try scopedCache("default").deletePrefix(prefix));
     try std.testing.expect((try cache.get(allocator, key1)) == null);
     try std.testing.expect((try cache.get(allocator, key2)) == null);
 }
@@ -196,8 +196,8 @@ test "scoped namespaces are isolated" {
     const scoped = scopedCache(namespace);
     const key = "shared-key";
 
-    defer scoped.delete(key) catch {};
-    defer cache.delete(key) catch {};
+    defer _ = scoped.delete(key) catch false;
+    defer _ = cache.delete(key) catch false;
 
     try scoped.put(key, "scoped-value", .{ .ttl = .fromSeconds(30) });
     try cache.put(key, "default-value", .{ .ttl = .fromSeconds(30) });
@@ -219,7 +219,7 @@ test "typed roundtrip" {
     var key_buf: [96]u8 = undefined;
     const key = try uniqueLabel("cache-typed", &key_buf);
 
-    defer cache.delete(key) catch {};
+    defer _ = cache.delete(key) catch false;
 
     try cache.putAs(key, Profile{
         .id = 42,
@@ -242,7 +242,7 @@ test "as returns invalid type on schema mismatch" {
     var key_buf: [96]u8 = undefined;
     const key = try uniqueLabel("cache-typed-mismatch", &key_buf);
 
-    defer cache.delete(key) catch {};
+    defer _ = cache.delete(key) catch false;
 
     try cache.putAs(key, Profile{
         .id = 7,
@@ -264,7 +264,7 @@ test "scoped typed roundtrip" {
     const key = try uniqueLabel("profile", &key_buf);
     const scoped = scopedCache(namespace);
 
-    defer scoped.delete(key) catch {};
+    defer _ = scoped.delete(key) catch false;
 
     try scoped.putAs(key, Profile{
         .id = 99,
@@ -293,7 +293,7 @@ test "expired entries are filtered from get and list" {
     const expired_key = try std.fmt.bufPrint(&expired_key_buf, "{s}-expired", .{prefix});
     const live_key = try std.fmt.bufPrint(&live_key_buf, "{s}-live", .{prefix});
 
-    defer _ = cache.delPrefix(prefix) catch 0;
+    defer _ = cache.deletePrefix(prefix) catch 0;
 
     try cache.put(expired_key, "stale", .{ .ttl = .fromSeconds(0) });
     try cache.put(live_key, "fresh", .{ .ttl = .fromSeconds(30) });
@@ -357,7 +357,7 @@ test "concurrent reads and writes are threadsafe" {
     const scoped = scopedCache(namespace);
 
     defer {
-        _ = scoped.delPrefix("") catch 0;
+        _ = scoped.deletePrefix("") catch 0;
     }
 
     var workers = [_]WorkerContext{

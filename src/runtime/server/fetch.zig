@@ -4,10 +4,9 @@ const Fetch = @import("../core/Fetch.zig");
 const Response = Fetch.Response;
 const Headers = Fetch.Headers;
 const RequestInit = Fetch.RequestInit;
-const FetchError = Fetch.FetchError;
 
 /// Perform an HTTP fetch request using std.http.Client.
-pub fn fetch(allocator: std.mem.Allocator, url: []const u8, init: RequestInit) FetchError!Response {
+pub fn fetch(allocator: std.mem.Allocator, url: []const u8, init: RequestInit) Fetch.Error!Response {
     if (init.method_name) |method_name| return fetchCustomMethod(allocator, url, method_name, init);
 
     // Create HTTP client
@@ -60,7 +59,7 @@ pub fn fetch(allocator: std.mem.Allocator, url: []const u8, init: RequestInit) F
     };
 }
 
-fn fetchCustomMethod(allocator: std.mem.Allocator, url: []const u8, method_name: []const u8, init: RequestInit) FetchError!Response {
+fn fetchCustomMethod(allocator: std.mem.Allocator, url: []const u8, method_name: []const u8, init: RequestInit) Fetch.Error!Response {
     const uri = std.Uri.parse(url) catch return error.InvalidUrl;
 
     var client: std.http.Client = .{ .allocator = allocator, .io = std.Io.Threaded.global_single_threaded.io() };

@@ -606,9 +606,8 @@ pub const websocket = struct {
     const ws = httpz.websocket;
 
     const CloseOptions = WebSocket.CloseOptions;
-    const WebSocketError = WebSocket.WebSocketError;
 
-    /// Backend context stored in WebSocket.backend_ctx
+    /// Backend context stored in WebSocket.userdata
     const BackendContext = struct {
         client: ws.Client,
         read_thread: ?std.Thread,
@@ -716,7 +715,7 @@ pub const websocket = struct {
     }
 
     /// Establish a WebSocket connection
-    pub fn connect(w: *WebSocket) WebSocketError!void {
+    pub fn connect(w: *WebSocket) WebSocket.Error!void {
         const allocator = w._allocator;
 
         // Parse URL
@@ -728,7 +727,7 @@ pub const websocket = struct {
         errdefer ctx.deinit(allocator);
 
         ctx.ws_ptr = w;
-        w._backend_ctx = ctx;
+        w.userdata = ctx;
 
         // Perform handshake
         ctx.client.handshake(url_parts.path, .{}) catch {
@@ -757,8 +756,8 @@ pub const websocket = struct {
     }
 
     /// Send text data
-    pub fn send(w: *WebSocket, data: []const u8) WebSocketError!void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w._backend_ctx orelse return error.NotConnected));
+    pub fn send(w: *WebSocket, data: []const u8) WebSocket.Error!void {
+        const ctx: *BackendContext = @ptrCast(@alignCast(w.userdata orelse return error.NotConnected));
 
         // writeText takes a mutable slice, so we need to copy
         const buf = w._allocator.alloc(u8, data.len) catch return error.SendFailed;
@@ -769,8 +768,8 @@ pub const websocket = struct {
     }
 
     /// Send binary data
-    pub fn sendBinary(w: *WebSocket, data: []const u8) WebSocketError!void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w._backend_ctx orelse return error.NotConnected));
+    pub fn sendBinary(w: *WebSocket, data: []const u8) WebSocket.Error!void {
+        const ctx: *BackendContext = @ptrCast(@alignCast(w.userdata orelse return error.NotConnected));
 
         // writeBin takes a mutable slice, so we need to copy
         const buf = w._allocator.alloc(u8, data.len) catch return error.SendFailed;
@@ -782,7 +781,7 @@ pub const websocket = struct {
 
     /// Close the connection
     pub fn close(w: *WebSocket, options: CloseOptions) void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w._backend_ctx orelse return));
+        const ctx: *BackendContext = @ptrCast(@alignCast(w.userdata orelse return));
 
         w.ready_state = .closing;
         const code = options.code orelse 1000;
@@ -802,10 +801,10 @@ pub const websocket = struct {
 
     /// Clean up resources
     pub fn deinit(w: *WebSocket) void {
-        if (w._backend_ctx) |ptr| {
+        if (w.userdata) |ptr| {
             const ctx: *BackendContext = @ptrCast(@alignCast(ptr));
             ctx.deinit(w._allocator);
-            w._backend_ctx = null;
+            w.userdata = null;
         }
     }
 };

@@ -17,6 +17,10 @@ memory: ?*cachez.Cache(CacheEntry) = null,
 
 pub const PutOptions = Kv.PutOptions;
 
+pub const Error = error{
+    Unavailable,
+};
+
 pub const Config = struct {
     max_size: u32 = 8000,
     segment_count: u16 = 8,
@@ -37,7 +41,7 @@ const StoredEntry = struct {
     payload: []const u8,
 };
 
-pub fn init(io: std.Io, allocator: Allocator, kv: Kv, config: Config) !Cache {
+pub fn init(allocator: Allocator, io: std.Io, kv: Kv, config: Config) !Cache {
     const cachez_config = cachez.Config{
         .max_size = config.max_size,
         .segment_count = config.segment_count,
@@ -87,7 +91,7 @@ fn boundBackend(self: Cache) Kv {
 
 pub fn get(self: Cache, allocator: std.mem.Allocator, key: []const u8) !?[]u8 {
     const io = self.io;
-    const memory = self.memory orelse return error.CacheUnavailable;
+    const memory = self.memory orelse return error.Unavailable;
 
     const scoped_key = try scopedKey(allocator, self.namespace, key);
     defer allocator.free(scoped_key);
@@ -123,7 +127,7 @@ pub fn as(self: Cache, allocator: std.mem.Allocator, key: []const u8, comptime T
 }
 
 pub fn put(self: Cache, key: []const u8, value: []const u8, opts: PutOptions) !void {
-    _ = self.memory orelse return error.CacheUnavailable;
+    _ = self.memory orelse return error.Unavailable;
 
     const io = self.io;
     const allocator = self.allocator;
@@ -138,7 +142,7 @@ pub fn put(self: Cache, key: []const u8, value: []const u8, opts: PutOptions) !v
 }
 
 pub fn putAs(self: Cache, key: []const u8, value: anytype, opts: PutOptions) !void {
-    _ = self.memory orelse return error.CacheUnavailable;
+    _ = self.memory orelse return error.Unavailable;
 
     var writer = std.Io.Writer.Allocating.init(self.allocator);
     defer writer.deinit();
@@ -146,19 +150,25 @@ pub fn putAs(self: Cache, key: []const u8, value: anytype, opts: PutOptions) !vo
     try self.put(key, writer.written(), opts);
 }
 
-pub fn delete(self: Cache, key: []const u8) !void {
-    const memory = self.memory orelse return error.CacheUnavailable;
+/// Returns whether the key existed.
+pub fn delete(self: Cache, key: []const u8) !bool {
+    const memory = self.memory orelse return error.Unavailable;
     const allocator = self.allocator;
+    const backend = self.boundBackend();
+
     const scoped_key = try scopedKey(allocator, self.namespace, key);
     defer allocator.free(scoped_key);
+    const memory_deleted = memory.del(scoped_key);
 
-    _ = memory.del(scoped_key);
-    try self.boundBackend().delete(key);
+    const existing = try backend.get(allocator, key);
+    defer if (existing) |bytes| allocator.free(bytes);
+    try backend.delete(key);
+    return memory_deleted or existing != null;
 }
 
 pub fn list(self: Cache, allocator: std.mem.Allocator, prefix: []const u8) ![][]u8 {
     const io = self.io;
-    const memory = self.memory orelse return error.CacheUnavailable;
+    const memory = self.memory orelse return error.Unavailable;
     const backend = self.boundBackend();
     const keys = try backend.list(allocator, prefix);
     defer {
@@ -192,26 +202,8 @@ pub fn list(self: Cache, allocator: std.mem.Allocator, prefix: []const u8) ![][]
     return live_keys.toOwnedSlice(allocator);
 }
 
-pub fn del(self: Cache, key: []const u8) bool {
-    const memory = self.memory orelse return false;
-    const allocator = self.allocator;
-    const backend = self.boundBackend();
-    const existing = backend.get(allocator, key) catch null;
-    const existed = if (existing) |bytes| blk: {
-        allocator.free(bytes);
-        break :blk true;
-    } else false;
-
-    const scoped_key = scopedKey(allocator, self.namespace, key) catch return existed;
-    defer allocator.free(scoped_key);
-
-    const memory_deleted = memory.del(scoped_key);
-    backend.delete(key) catch {};
-    return existed or memory_deleted;
-}
-
-pub fn delPrefix(self: Cache, prefix: []const u8) !usize {
-    const memory = self.memory orelse return error.CacheUnavailable;
+pub fn deletePrefix(self: Cache, prefix: []const u8) !usize {
+    const memory = self.memory orelse return error.Unavailable;
     const allocator = self.allocator;
     const backend = self.boundBackend();
     const keys = try backend.list(allocator, prefix);
@@ -296,7 +288,7 @@ fn isExpired(io: std.Io, expires_at: ?u64) bool {
 
 fn putMemoryEntryLocked(self: Cache, scoped_key: []const u8, value: []const u8, ttl_seconds: ?u32) !void {
     const io = self.io;
-    const memory = self.memory orelse return error.CacheUnavailable;
+    const memory = self.memory orelse return error.Unavailable;
     const value_copy = try memory.allocator.dupe(u8, value);
     errdefer memory.allocator.free(value_copy);
 

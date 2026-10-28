@@ -214,7 +214,7 @@ fn pendingFromOpaque(ptr: *anyopaque) *reactivity.State(bool) {
 fn onFormActionResponse(
     ctx_ptr: *anyopaque,
     response: ?*@import("../core/Fetch.zig").Response,
-    err: ?@import("../core/Fetch.zig").FetchError,
+    err: ?@import("../core/Fetch.zig").Error,
 ) void {
     const cb_ctx: *FormActionCallbackCtx = @ptrCast(@alignCast(ctx_ptr));
     defer zx.allocator.destroy(cb_ctx);

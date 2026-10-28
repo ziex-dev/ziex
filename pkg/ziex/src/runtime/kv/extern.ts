@@ -82,7 +82,7 @@ function get(
     return maybeThen(b.get(key), (v) => encodeGet(getMemory, allocRef, v, out_ptr));
 }
 
-/** TTL is passed through as is; puts the binding rejects surface as `error.KvPutFailed`. */
+/** TTL is passed through as is; puts the binding rejects surface as `error.PutFailed`. */
 function put(b: KVNamespace, key: string, val: string, ttl: number): number | Promise<number> {
     try {
         const r = b.put(key, val, putOptions(ttl));

@@ -83,12 +83,14 @@ pub const Meta = struct {
     }
 };
 
-pub const KvError = error{
-    KvGetFailed,
-    KvPutFailed,
-    KvDeleteFailed,
+pub const Error = error{
+    GetFailed,
+    PutFailed,
+    DeleteFailed,
     InvalidType,
+    InvalidResponse,
     KeyTooLong,
+    Unavailable,
 };
 
 pub fn get(self: Kv, allocator: std.mem.Allocator, key: []const u8) !?[]u8 {
@@ -138,16 +140,16 @@ pub fn scoped(self: Kv, comptime ns: @EnumLiteral()) Kv {
 }
 
 fn failingGet(_: ?*anyopaque, _: []const u8, _: std.mem.Allocator, _: []const u8) anyerror!?[]u8 {
-    return error.KvUnavailable;
+    return error.Unavailable;
 }
 fn failingPut(_: ?*anyopaque, _: []const u8, _: []const u8, _: []const u8, _: PutOptions) anyerror!void {
-    return error.KvUnavailable;
+    return error.Unavailable;
 }
 fn failingDelete(_: ?*anyopaque, _: []const u8, _: []const u8) anyerror!void {
-    return error.KvUnavailable;
+    return error.Unavailable;
 }
 fn failingList(_: ?*anyopaque, _: []const u8, _: std.mem.Allocator, _: []const u8) anyerror![][]u8 {
-    return error.KvUnavailable;
+    return error.Unavailable;
 }
 
 pub const failing_vtable = VTable{

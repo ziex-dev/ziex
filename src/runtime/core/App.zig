@@ -284,7 +284,7 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
 
             // Feature ==> zx.db (wasm backend, server-side only)
             if (comptime app_opts.feat_sqlite_server) {
-                if (os == .wasi) zx.db = try zx.Db.Wasm.open(null, null, "default", .{});
+                if (os == .wasi) zx.db = try zx.Db.Wasm.open(alloc, inita.io, "default", .{});
             }
 
             // Feature ==> zx.kv (wasm backend)
@@ -314,7 +314,7 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
         const cache_subdir = try std.fs.path.join(alloc, &.{ datadir, "cache" });
         cache_fs = .{ .io = inita.io, .subdir = cache_subdir };
         const cache_kv: zx.Kv = cache_fs.kv();
-        cache = try zx.Cache.init(inita.io, alloc, cache_kv, .{
+        cache = try zx.Cache.init(alloc, inita.io, cache_kv, .{
             .max_size = cfg.cache.max_size,
         });
         zx.cache = cache;

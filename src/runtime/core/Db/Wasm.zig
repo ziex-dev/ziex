@@ -21,12 +21,11 @@ const StatementCtx = struct {
 // --- Constructors --- //
 
 // `allocator`/`io`/`options` exist for parity with other backends; wasm_allocator is always used.
-pub fn open(allocator_unused: ?std.mem.Allocator, io: ?std.Io, filename: []const u8, options: Db.OpenOptions) !Db {
+pub fn open(allocator_unused: std.mem.Allocator, io: std.Io, binding_name: []const u8, options: Db.OpenOptions) !Db {
     _ = allocator_unused;
     _ = io;
     _ = options;
-    const binding_name = filename;
-    if (ext.open(binding_name.ptr, binding_name.len) < 0) return error.DatabaseOpenFailed;
+    if (ext.open(binding_name.ptr, binding_name.len) < 0) return error.OpenFailed;
 
     const allocator = std.heap.wasm_allocator;
     const self = try allocator.create(Wasm);
@@ -40,7 +39,7 @@ pub fn open(allocator_unused: ?std.mem.Allocator, io: ?std.Io, filename: []const
     return self.db();
 }
 
-pub fn deserialize(_: ?std.mem.Allocator, _: ?std.Io, _: []const u8, _: Db.OpenOptions) !Db {
+pub fn deserialize(_: std.mem.Allocator, _: std.Io, _: []const u8, _: Db.OpenOptions) !Db {
     return error.Unsupported;
 }
 
@@ -67,7 +66,7 @@ fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
 
     return .{
         .db = .{ .userdata = ud, .vtable = &database_vtable },
-        .handle = @ptrCast(statement_ctx),
+        .userdata = @ptrCast(statement_ctx),
     };
 }
 
@@ -118,7 +117,7 @@ fn iterate(_: ?*anyopaque, _: Db.Bindings) !Db.Statement.Iterator {
     return error.Unsupported;
 }
 
-fn finalize(ud: ?*anyopaque) void {
+fn deinitStatement(ud: ?*anyopaque) void {
     const statement_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
     const allocator = statement_ctx.allocator;
     statement_ctx.deinit();
@@ -138,7 +137,7 @@ fn columnTypes(_: ?*anyopaque) []const Db.ColumnType {
     return &.{};
 }
 
-fn paramsCount(_: ?*anyopaque) usize {
+fn paramCount(_: ?*anyopaque) usize {
     return 0;
 }
 
@@ -192,27 +191,27 @@ fn callHost(comptime op: HostQuery, binding_name: []const u8, sql: []const u8, b
         bindings_bytes.len,
         &ptr,
     );
-    if (n < 0) return error.DatabaseQueryFailed;
+    if (n < 0) return error.QueryFailed;
     if (n == 0) return null;
     return .{ .bytes = ptr[0..@intCast(n)] };
 }
 
 fn mapWire(err: anyerror) anyerror {
     return switch (err) {
-        error.EndOfStream, error.BadMagic, error.BadKind, error.Unsupported => error.DatabaseQueryFailed,
+        error.EndOfStream, error.BadMagic, error.BadKind, error.Unsupported => error.QueryFailed,
         else => err,
     };
 }
 
 fn runQuery(binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) !Db.RunResult {
     const result = callHost(ext.run, binding_name, sql, bindings) catch |err| switch (err) {
-        error.DatabaseQueryFailed => return error.DatabaseRunFailed,
+        error.QueryFailed => return error.RunFailed,
         else => |e| return e,
     };
-    const payload = result orelse return error.DatabaseRunFailed;
+    const payload = result orelse return error.RunFailed;
     defer payload.free();
 
-    const decoded = Wire.decodePair(payload.bytes) catch return error.DatabaseRunFailed;
+    const decoded = Wire.decodePair(payload.bytes) catch return error.RunFailed;
     return .{ .last_insert_id = decoded.a, .changes = @intCast(decoded.b) };
 }
 
@@ -369,9 +368,9 @@ const database_vtable = Db.VTable{
     .stmtRun = &runStatement,
     .stmtValues = &values,
     .stmtIterate = &iterate,
-    .stmtFinalize = &finalize,
+    .stmtDeinit = &deinitStatement,
     .stmtToString = &toString,
     .stmtColumnNames = &columnNames,
     .stmtColumnTypes = &columnTypes,
-    .stmtParamsCount = &paramsCount,
+    .stmtParamCount = &paramCount,
 };

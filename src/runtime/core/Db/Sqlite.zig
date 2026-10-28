@@ -44,8 +44,8 @@ fn deinitState(self: *Sqlite) void {
 
 fn acquire(self: *Sqlite) !BorrowedConn {
     return switch (self.mode) {
-        .single => .{ .conn = self.conn orelse return Db.DbError.InvalidState, .io = self.io },
-        .pooled => .{ .conn = try (self.pool orelse return Db.DbError.InvalidState).acquire(self.io), .io = self.io, .pool = self.pool },
+        .single => .{ .conn = self.conn orelse return Db.Error.InvalidState, .io = self.io },
+        .pooled => .{ .conn = try (self.pool orelse return Db.Error.InvalidState).acquire(self.io), .io = self.io, .pool = self.pool },
     };
 }
 
@@ -77,7 +77,7 @@ const StatementCtx = struct {
     column_names: [][]const u8,
     column_types: []Db.ColumnType,
     declared_types: []?[]const u8,
-    params_count: usize,
+    param_count: usize,
 
     fn deinit(self: *StatementCtx) void {
         for (self.column_names) |name| self.allocator.free(name);
@@ -114,19 +114,17 @@ const PoolConnectionConfig = struct {
 pub const OpenOptions = struct {
     readonly: bool = false,
     create: bool = true,
-    readwrite: bool = true,
     safe_integers: bool = false,
     strict: bool = false,
     max_pool_size: usize = 5,
     busy_timeout_ms: u32 = 5_000,
     schema: [:0]const u8 = main_schema,
 
-    pub fn fromNeutral(neutral: Db.OpenOptions) OpenOptions {
+    pub fn fromGeneric(generic: Db.OpenOptions) OpenOptions {
         return .{
-            .readonly = neutral.readonly,
-            .create = neutral.create,
-            .readwrite = !neutral.readonly,
-            .max_pool_size = neutral.max_pool_size,
+            .readonly = generic.readonly,
+            .create = generic.create,
+            .max_pool_size = generic.max_pool_size,
         };
     }
 };
@@ -135,13 +133,13 @@ pub const OpenOptions = struct {
 pub fn open(
     allocator: std.mem.Allocator,
     io: std.Io,
-    filename: []const u8,
+    location: []const u8,
     opts: OpenOptions,
 ) !Db {
-    const self = openState(allocator, io, filename, opts) catch |err| {
+    const self = openState(allocator, io, location, opts) catch |err| {
         std.log.err("Failed to open SQLite database: {s}\n Path: {s}", .{
             @errorName(err),
-            filename,
+            location,
         });
         return err;
     };
@@ -159,8 +157,8 @@ pub fn db(self: *Sqlite) Db {
 }
 
 pub fn from(database: Db) !*Sqlite {
-    if (database.vtable != &database_vtable) return Db.DbError.WrongBackend;
-    return @ptrCast(@alignCast(database.userdata orelse return Db.DbError.InvalidState));
+    if (database.vtable != &database_vtable) return Db.Error.WrongBackend;
+    return @ptrCast(@alignCast(database.userdata orelse return Db.Error.InvalidState));
 }
 
 pub const FileControlValue = union(enum) {
@@ -235,7 +233,6 @@ fn deserializeState(allocator: std.mem.Allocator, io: std.Io, bytes: []const u8,
     const deser_flags = openFlags(.{
         .readonly = false,
         .create = true,
-        .readwrite = true,
         .safe_integers = options.safe_integers,
         .strict = options.strict,
         .busy_timeout_ms = options.busy_timeout_ms,
@@ -304,14 +301,14 @@ fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
         .column_names = meta.column_names,
         .column_types = meta.column_types,
         .declared_types = meta.declared_types,
-        .params_count = meta.params_count,
+        .param_count = meta.param_count,
     };
 
     if (db_ctx.mode != .single) prepared.deinit();
 
     return .{
         .db = .{ .userdata = ud, .vtable = &database_vtable },
-        .handle = @ptrCast(stmt_ctx),
+        .userdata = @ptrCast(stmt_ctx),
     };
 }
 
@@ -400,7 +397,7 @@ pub fn serialize(self: *Sqlite, allocator: std.mem.Allocator) ![]u8 {
 /// Load a SQLite run-time loadable extension. SQLite-only; currently
 /// unsupported by this build.
 pub fn loadExtension(_: *Sqlite, _: []const u8, _: ?[]const u8) !void {
-    return Db.DbError.Unsupported;
+    return Db.Error.Unsupported;
 }
 
 /// Invoke `sqlite3_file_control`. SQLite-only.
@@ -492,7 +489,7 @@ fn iterate(ud: ?*anyopaque, bindings: Db.Bindings) !Db.Statement.Iterator {
     };
 }
 
-fn finalize(ud: ?*anyopaque) void {
+fn deinitStatement(ud: ?*anyopaque) void {
     const stmt_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
     const allocator = stmt_ctx.allocator;
     stmt_ctx.deinit();
@@ -514,19 +511,19 @@ fn columnTypes(ud: ?*anyopaque) []const Db.ColumnType {
     return stmt_ctx.column_types;
 }
 
-fn paramsCount(ud: ?*anyopaque) usize {
+fn paramCount(ud: ?*anyopaque) usize {
     const stmt_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-    return stmt_ctx.params_count;
+    return stmt_ctx.param_count;
 }
 
 // --- SQLite-only statement extensions (reached via `Db.Sqlite.fromStatement`) --- //
 
 /// Recover the SQLite statement context from a `Db.Statement`. The statement's
-/// vtable pointer is the type witness - returns `DbError.WrongBackend` if the
+/// vtable pointer is the type witness - returns `Db.Error.WrongBackend` if the
 /// statement was not prepared on a SQLite connection.
 fn fromStatement(statement: Db.Statement) !*StatementCtx {
-    if (statement.db.vtable != &database_vtable) return Db.DbError.WrongBackend;
-    return @ptrCast(@alignCast(statement.handle orelse return Db.DbError.Closed));
+    if (statement.db.vtable != &database_vtable) return Db.Error.WrongBackend;
+    return @ptrCast(@alignCast(statement.userdata orelse return Db.Error.Closed));
 }
 
 /// SQLite's per-column declared type strings (`sqlite3_column_decltype`). This
@@ -570,7 +567,7 @@ const StatementMeta = struct {
     column_names: [][]const u8,
     column_types: []Db.ColumnType,
     declared_types: []?[]const u8,
-    params_count: usize,
+    param_count: usize,
 };
 
 fn collectStatementMeta(allocator: std.mem.Allocator, stmt: zqlite.Stmt) !StatementMeta {
@@ -605,7 +602,7 @@ fn collectStatementMeta(allocator: std.mem.Allocator, stmt: zqlite.Stmt) !Statem
         .column_names = column_names,
         .column_types = column_types,
         .declared_types = declared_types,
-        .params_count = @intCast(c.sqlite3_bind_parameter_count(rawStmtPtr(stmt))),
+        .param_count = @intCast(c.sqlite3_bind_parameter_count(rawStmtPtr(stmt))),
     };
 }
 
@@ -647,7 +644,7 @@ fn bindStatement(stmt: zqlite.Stmt, bindings: Db.Bindings) !void {
         .named => |named_values| {
             for (named_values) |entry| {
                 const param_index = try resolveNamedParam(stmt, entry.name);
-                if (param_index == 0) return Db.DbError.InvalidBindings;
+                if (param_index == 0) return Db.Error.InvalidBindings;
                 try bindValue(rawStmtPtr(stmt).?, param_index, entry.value);
             }
         },
@@ -659,13 +656,13 @@ fn resolveNamedParam(stmt: zqlite.Stmt, name: []const u8) !c_int {
 
     if (name.len > 0 and (name[0] == ':' or name[0] == '@' or name[0] == '$')) {
         const name_z = std.fmt.bufPrintSentinel(&buf, "{s}", .{name}, 0) catch
-            return Db.DbError.InvalidBindings;
+            return Db.Error.InvalidBindings;
         return c.sqlite3_bind_parameter_index(rawStmtPtr(stmt), name_z.ptr);
     }
 
     for ([_]u8{ ':', '@', '$' }) |sigil| {
         const candidate = std.fmt.bufPrintSentinel(&buf, "{c}{s}", .{ sigil, name }, 0) catch
-            return Db.DbError.InvalidBindings;
+            return Db.Error.InvalidBindings;
         const index = c.sqlite3_bind_parameter_index(rawStmtPtr(stmt), candidate.ptr);
         if (index != 0) return index;
     }
@@ -854,17 +851,17 @@ fn openFlags(options: OpenOptions) c_int {
     var flags: c_int = zqlite.OpenFlags.EXResCode | zqlite.OpenFlags.FullMutex;
     if (options.readonly) return flags | zqlite.OpenFlags.ReadOnly;
 
-    if (options.readwrite or !options.readonly) flags |= zqlite.OpenFlags.ReadWrite;
-    if (options.create or !options.readonly) flags |= zqlite.OpenFlags.Create;
+    flags |= zqlite.OpenFlags.ReadWrite;
+    if (options.create) flags |= zqlite.OpenFlags.Create;
     return flags;
 }
 
 fn mapSqliteError(rc: c_int) anyerror {
     return switch (rc) {
-        c.SQLITE_BUSY, c.SQLITE_BUSY_RECOVERY, c.SQLITE_BUSY_SNAPSHOT, c.SQLITE_BUSY_TIMEOUT => Db.DbError.Busy,
-        c.SQLITE_MISUSE => Db.DbError.InvalidState,
-        c.SQLITE_NOTADB, c.SQLITE_CANTOPEN => Db.DbError.InvalidQuery,
-        c.SQLITE_RANGE => Db.DbError.InvalidBindings,
+        c.SQLITE_BUSY, c.SQLITE_BUSY_RECOVERY, c.SQLITE_BUSY_SNAPSHOT, c.SQLITE_BUSY_TIMEOUT => Db.Error.Busy,
+        c.SQLITE_MISUSE => Db.Error.InvalidState,
+        c.SQLITE_NOTADB, c.SQLITE_CANTOPEN => Db.Error.InvalidQuery,
+        c.SQLITE_RANGE => Db.Error.InvalidBindings,
         else => sqliteErrorFromCode(rc),
     };
 }
@@ -987,9 +984,9 @@ const database_vtable = Db.VTable{
     .stmtRun = &runStatement,
     .stmtValues = &values,
     .stmtIterate = &iterate,
-    .stmtFinalize = &finalize,
+    .stmtDeinit = &deinitStatement,
     .stmtToString = &toString,
     .stmtColumnNames = &columnNames,
     .stmtColumnTypes = &columnTypes,
-    .stmtParamsCount = &paramsCount,
+    .stmtParamCount = &paramCount,
 };

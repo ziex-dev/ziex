@@ -7,7 +7,6 @@ const CloseOptions = WebSocket.CloseOptions;
 const MessageEvent = WebSocket.MessageEvent;
 const CloseEvent = WebSocket.CloseEvent;
 const ErrorEvent = WebSocket.ErrorEvent;
-const WebSocketError = WebSocket.WebSocketError;
 
 pub const is_wasm = builtin.cpu.arch == .wasm32 or builtin.cpu.arch == .wasm64;
 
@@ -51,7 +50,7 @@ fn getWebSocketById(ws_id: u64) ?*WebSocket {
     return null;
 }
 
-pub fn connect(ws: *WebSocket) WebSocketError!void {
+pub fn connect(ws: *WebSocket) WebSocket.Error!void {
     const ws_id = next_ws_id;
     next_ws_id +%= 1;
 
@@ -65,7 +64,7 @@ pub fn connect(ws: *WebSocket) WebSocketError!void {
     };
 
     // Store ws_id in backend context (truncate to usize for 32-bit WASM)
-    ws._backend_ctx = @ptrFromInt(@as(usize, @truncate(ws_id)));
+    ws.userdata = @ptrFromInt(@as(usize, @truncate(ws_id)));
 
     // Serialize protocols if any
     var protocols_buf: [1024]u8 = undefined;
@@ -93,12 +92,12 @@ pub fn connect(ws: *WebSocket) WebSocketError!void {
     );
 }
 
-pub fn send(ws: *WebSocket, data: []const u8) WebSocketError!void {
+pub fn send(ws: *WebSocket, data: []const u8) WebSocket.Error!void {
     const ws_id = getWsId(ws) orelse return error.NotConnected;
     ext._wsSend(ws_id, data.ptr, data.len, 0);
 }
 
-pub fn sendBinary(ws: *WebSocket, data: []const u8) WebSocketError!void {
+pub fn sendBinary(ws: *WebSocket, data: []const u8) WebSocket.Error!void {
     const ws_id = getWsId(ws) orelse return error.NotConnected;
     ext._wsSend(ws_id, data.ptr, data.len, 1);
 }
@@ -119,11 +118,11 @@ pub fn deinit(ws: *WebSocket) void {
         ws_slots[idx].ws = null;
     }
 
-    ws._backend_ctx = null;
+    ws.userdata = null;
 }
 
 fn getWsId(ws: *WebSocket) ?u64 {
-    if (ws._backend_ctx) |ptr| {
+    if (ws.userdata) |ptr| {
         return @intFromPtr(ptr);
     }
     return null;

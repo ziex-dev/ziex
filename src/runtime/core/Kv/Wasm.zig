@@ -18,11 +18,11 @@ fn put(_: ?*anyopaque, ns: []const u8, key: []const u8, value: []const u8, opts:
         const secs = d.toSeconds();
         break :blk if (secs <= 0) 0 else @intCast(secs);
     } else 0;
-    if (ext.put(ns.ptr, ns.len, key.ptr, key.len, value.ptr, value.len, ttl) < 0) return error.KvPutFailed;
+    if (ext.put(ns.ptr, ns.len, key.ptr, key.len, value.ptr, value.len, ttl) < 0) return error.PutFailed;
 }
 
 fn delete(_: ?*anyopaque, ns: []const u8, key: []const u8) !void {
-    if (ext.delete(ns.ptr, ns.len, key.ptr, key.len) < 0) return error.KvDeleteFailed;
+    if (ext.delete(ns.ptr, ns.len, key.ptr, key.len) < 0) return error.DeleteFailed;
 }
 
 fn list(_: ?*anyopaque, ns: []const u8, allocator: std.mem.Allocator, prefix: []const u8) ![][]u8 {

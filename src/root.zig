@@ -119,6 +119,3 @@ pub const std_options = opts.std_options;
 // --- Styling --- //
 pub const style = @import("style/root.zig");
 pub const Style = style.Style;
-
-
-// Temp Design 

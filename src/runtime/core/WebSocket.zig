@@ -115,7 +115,7 @@ pub const InitOptions = struct {
     user_data: ?*anyopaque = null,
 };
 
-pub const WebSocketError = error{
+pub const Error = error{
     /// The WebSocket connection failed.
     ConnectionFailed,
     /// The URL is invalid.
@@ -146,13 +146,13 @@ pub const WebSocketError = error{
 
 // TODO: remove these stubs
 const server_impl = if (!is_wasm and @import("app_opts").enable_httpz) @import("App/Server/Httpz.zig").websocket else struct {
-    pub fn connect(_: *WebSocket) WebSocketError!void {
+    pub fn connect(_: *WebSocket) Error!void {
         return error.UnsupportedPlatform;
     }
-    pub fn send(_: *WebSocket, _: []const u8) WebSocketError!void {
+    pub fn send(_: *WebSocket, _: []const u8) Error!void {
         return error.UnsupportedPlatform;
     }
-    pub fn sendBinary(_: *WebSocket, _: []const u8) WebSocketError!void {
+    pub fn sendBinary(_: *WebSocket, _: []const u8) Error!void {
         return error.UnsupportedPlatform;
     }
     pub fn close(_: *WebSocket, _: CloseOptions) void {}
@@ -161,13 +161,13 @@ const server_impl = if (!is_wasm and @import("app_opts").enable_httpz) @import("
 
 // TODO: remove these stubs
 const client_impl = if (is_wasm) @import("../client/websocket.zig") else struct {
-    pub fn connect(_: *WebSocket) WebSocketError!void {
+    pub fn connect(_: *WebSocket) Error!void {
         return error.UnsupportedPlatform;
     }
-    pub fn send(_: *WebSocket, _: []const u8) WebSocketError!void {
+    pub fn send(_: *WebSocket, _: []const u8) Error!void {
         return error.UnsupportedPlatform;
     }
-    pub fn sendBinary(_: *WebSocket, _: []const u8) WebSocketError!void {
+    pub fn sendBinary(_: *WebSocket, _: []const u8) Error!void {
         return error.UnsupportedPlatform;
     }
     pub fn close(_: *WebSocket, _: CloseOptions) void {}
@@ -226,7 +226,7 @@ _user_data: ?*anyopaque = null,
 _requested_protocols: ?[]const []const u8 = null,
 
 /// Backend-specific context (platform implementation data).
-_backend_ctx: ?*anyopaque = null,
+userdata: ?*anyopaque = null,
 
 /// Creates a new WebSocket connection to the specified URL.
 ///
@@ -243,7 +243,7 @@ _backend_ctx: ?*anyopaque = null,
 ///     .protocols = &.{"chat", "superchat"},
 /// });
 /// ```
-pub fn init(allocator: std.mem.Allocator, url: []const u8, options: InitOptions) WebSocketError!WebSocket {
+pub fn init(allocator: std.mem.Allocator, url: []const u8, options: InitOptions) Error!WebSocket {
     const owned_url = allocator.dupe(u8, url) catch return error.OutOfMemory;
 
     return WebSocket{
@@ -266,7 +266,7 @@ pub fn init(allocator: std.mem.Allocator, url: []const u8, options: InitOptions)
 /// try ws.connect();
 /// // Connection is now open (on server) or connecting (on WASM)
 /// ```
-pub fn connect(self: *WebSocket) WebSocketError!void {
+pub fn connect(self: *WebSocket) Error!void {
     if (self.ready_state != .connecting) {
         return error.AlreadyConnected;
     }
@@ -289,7 +289,7 @@ pub fn connect(self: *WebSocket) WebSocketError!void {
 /// ```zig
 /// try ws.send("Hello, Server!");
 /// ```
-pub fn send(self: *WebSocket, data: []const u8) WebSocketError!void {
+pub fn send(self: *WebSocket, data: []const u8) Error!void {
     if (self.ready_state != .open) {
         return if (self.ready_state == .connecting)
             error.NotConnected
@@ -313,7 +313,7 @@ pub fn send(self: *WebSocket, data: []const u8) WebSocketError!void {
 /// ```zig
 /// try ws.sendBinary(&[_]u8{ 0x01, 0x02, 0x03 });
 /// ```
-pub fn sendBinary(self: *WebSocket, data: []const u8) WebSocketError!void {
+pub fn sendBinary(self: *WebSocket, data: []const u8) Error!void {
     if (self.ready_state != .open) {
         return if (self.ready_state == .connecting)
             error.NotConnected

@@ -5,11 +5,10 @@ const zxon = @import("../../../util/zxon.zig");
 const Response = Fetch.Response;
 const Headers = Fetch.Headers;
 const RequestInit = Fetch.RequestInit;
-const FetchError = Fetch.FetchError;
 
 const max_response_bytes = 16 * 1024 * 1024;
 
-pub fn fetch(allocator: std.mem.Allocator, url: []const u8, init: RequestInit) FetchError!Response {
+pub fn fetch(allocator: std.mem.Allocator, url: []const u8, init: RequestInit) Fetch.Error!Response {
     const method = init.methodName();
     const body = init.body orelse "";
 

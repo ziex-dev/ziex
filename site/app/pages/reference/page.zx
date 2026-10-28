@@ -572,9 +572,9 @@ fn CachingSection(allocator: zx.Allocator) zx.Component {
             <CodeBlock code={cache_invalidation_example} />
             <p><strong>Available functions:</strong></p>
             <ul>
-                <li><code>zx.cache.del(key)</code> - Delete a specific cache entry by exact key. Returns <code>true</code> if deleted.</li>
-                <li><code>zx.cache.delPrefix(prefix)</code> - Delete all entries matching a prefix. Returns the count of deleted entries.</li>
-                <li><code>zx.cache.get(key)</code> - Get cached HTML by key. Returns <code>?[]const u8</code>.</li>
+                <li><code>zx.cache.delete(key)</code> - Delete a specific cache entry by exact key. Returns <code>!bool</code>, <code>true</code> if the entry existed.</li>
+                <li><code>zx.cache.deletePrefix(prefix)</code> - Delete all entries matching a prefix. Returns <code>!usize</code>, the count of deleted entries.</li>
+                <li><code>zx.cache.get(allocator, key)</code> - Get cached HTML by key. Returns <code>!?[]u8</code>, owned by <code>allocator</code>.</li>
             </ul>
 
             <h3 id="caching-best-practices">Best Practices</h3>
@@ -583,7 +583,7 @@ fn CachingSection(allocator: zx.Allocator) zx.Component {
                 <li><strong>Use custom keys for related content</strong> - Group related cache entries with a common prefix for easy bulk invalidation.</li>
                 <li><strong>Be careful with user-specific content</strong> - Don't cache components that display user-specific data without including user identity in the cache key.</li>
                 <li><strong>Start with short TTLs</strong> - Begin with shorter cache durations and increase as you verify correctness.</li>
-                <li><strong>Invalidate on data changes</strong> - Call <code>zx.cache.del()</code> or <code>zx.cache.delPrefix()</code> when underlying data changes.</li>
+                <li><strong>Invalidate on data changes</strong> - Call <code>zx.cache.delete()</code> or <code>zx.cache.deletePrefix()</code> when underlying data changes.</li>
             </ul>
 
             <div class="callout tip">

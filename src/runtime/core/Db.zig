@@ -10,7 +10,7 @@ pub const Sqlite = @import("Db/Sqlite.zig");
 pub const Wasm = @import("Db/Wasm.zig");
 pub const Postgres = @import("Db/Postgres.zig");
 
-pub const DbError = error{
+pub const Error = error{
     Unimplemented,
     Closed,
     Busy,
@@ -19,6 +19,9 @@ pub const DbError = error{
     InvalidState,
     Unsupported,
     WrongBackend,
+    OpenFailed,
+    QueryFailed,
+    RunFailed,
 };
 
 pub const OpenOptions = struct {
@@ -59,8 +62,8 @@ pub const Row = struct {
         return null;
     }
 
-    pub fn getTyped(self: Row, comptime T: type, name: []const u8) !T {
-        const value = self.get(name) orelse return DbError.InvalidQuery;
+    pub fn as(self: Row, name: []const u8, comptime T: type) !T {
+        const value = self.get(name) orelse return Error.InvalidQuery;
         return valueToType(T, value);
     }
 
@@ -203,11 +206,11 @@ pub const VTable = struct {
     stmtRun: *const fn (stmt: ?*anyopaque, bindings: Bindings) anyerror!RunResult,
     stmtValues: *const fn (stmt: ?*anyopaque, allocator: std.mem.Allocator, bindings: Bindings) anyerror![]const []const Value,
     stmtIterate: *const fn (stmt: ?*anyopaque, bindings: Bindings) anyerror!Statement.Iterator,
-    stmtFinalize: *const fn (stmt: ?*anyopaque) void,
+    stmtDeinit: *const fn (stmt: ?*anyopaque) void,
     stmtToString: *const fn (stmt: ?*anyopaque, allocator: std.mem.Allocator) anyerror![]u8,
     stmtColumnNames: *const fn (stmt: ?*anyopaque) []const []const u8,
     stmtColumnTypes: *const fn (stmt: ?*anyopaque) []const ColumnType,
-    stmtParamsCount: *const fn (stmt: ?*anyopaque) usize,
+    stmtParamCount: *const fn (stmt: ?*anyopaque) usize,
 };
 
 pub fn prepare(self: Db, sql: []const u8) !Statement {
@@ -254,10 +257,6 @@ pub fn transaction(self: Db, ctx: anytype, comptime cb: fn (@TypeOf(ctx), Db) an
     return self.transactionWith(.deferred, ctx, cb);
 }
 
-pub fn transactionDeferred(self: Db, ctx: anytype, comptime cb: fn (@TypeOf(ctx), Db) anyerror!void) !void {
-    return self.transactionWith(.deferred, ctx, cb);
-}
-
 pub fn transactionWith(self: Db, mode: TransactionMode, ctx: anytype, comptime cb: fn (@TypeOf(ctx), Db) anyerror!void) !void {
     const Ctx = @TypeOf(ctx);
     const Trampoline = struct {
@@ -270,8 +269,9 @@ pub fn transactionWith(self: Db, mode: TransactionMode, ctx: anytype, comptime c
     return self.vtable.transaction(self.userdata, mode, @ptrCast(&ctx_copy), &Trampoline.call);
 }
 
-pub fn close(self: *Db, throw_on_error: bool) !void {
-    return self.vtable.close(self.userdata, throw_on_error);
+/// Like `deinit`, but returns the error if closing fails.
+pub fn close(self: *Db) !void {
+    return self.vtable.close(self.userdata, true);
 }
 
 pub fn deinit(self: *Db) void {
@@ -280,7 +280,7 @@ pub fn deinit(self: *Db) void {
 
 pub const Statement = struct {
     db: Db,
-    handle: ?*anyopaque = null,
+    userdata: ?*anyopaque = null,
 
     pub const Iterator = struct {
         userdata: ?*anyopaque = null,
@@ -368,14 +368,10 @@ pub const Statement = struct {
         return self.db.vtable.stmtIterate(handle, bound.view());
     }
 
-    pub fn finalize(self: *Statement) void {
-        const handle = self.handle orelse return;
-        self.db.vtable.stmtFinalize(handle);
-        self.handle = null;
-    }
-
     pub fn deinit(self: *Statement) void {
-        self.finalize();
+        const handle = self.userdata orelse return;
+        self.db.vtable.stmtDeinit(handle);
+        self.userdata = null;
     }
 
     pub fn toString(self: *Statement, allocator: std.mem.Allocator) ![]u8 {
@@ -393,13 +389,13 @@ pub const Statement = struct {
         return self.db.vtable.stmtColumnTypes(handle);
     }
 
-    pub fn paramsCount(self: *Statement) !usize {
+    pub fn paramCount(self: *Statement) !usize {
         const handle = try self.requireHandle();
-        return self.db.vtable.stmtParamsCount(handle);
+        return self.db.vtable.stmtParamCount(handle);
     }
 
     fn requireHandle(self: *Statement) !*anyopaque {
-        return self.handle orelse DbError.Closed;
+        return self.userdata orelse Error.Closed;
     }
 };
 
@@ -415,7 +411,7 @@ fn rowToType(comptime T: type, source_row: Row) !T {
 
     var value: T = undefined;
     inline for (info.@"struct".field_names, info.@"struct".field_types) |field_name, field_type| {
-        @field(value, field_name) = try source_row.getTyped(field_type, field_name);
+        @field(value, field_name) = try source_row.as(field_name, field_type);
     }
     return value;
 }
@@ -428,8 +424,8 @@ fn rowToTypeIndexed(comptime T: type, source_row: Row, index_of: *const [infoFie
 
     var value: T = undefined;
     inline for (info.@"struct".field_names, info.@"struct".field_types, 0..) |field_name, field_type, fi| {
-        const idx = index_of.*[fi] orelse return DbError.InvalidQuery;
-        if (idx >= source_row.fields.len) return DbError.InvalidQuery;
+        const idx = index_of.*[fi] orelse return Error.InvalidQuery;
+        if (idx >= source_row.fields.len) return Error.InvalidQuery;
         @field(value, field_name) = try valueToType(field_type, source_row.fields[idx].value);
     }
     return value;
@@ -441,68 +437,68 @@ fn valueToType(comptime T: type, value: Value) !T {
             .integer => |v| @as(T, @intCast(v)),
             .float => |v| @as(T, @intFromFloat(v)),
             .boolean => |v| @as(T, if (v) 1 else 0),
-            else => DbError.InvalidQuery,
+            else => Error.InvalidQuery,
         },
         .float, .comptime_float => switch (value) {
             .float => |v| @as(T, @floatCast(v)),
             .integer => |v| @as(T, @floatFromInt(v)),
             .boolean => |v| @as(T, if (v) 1 else 0),
-            else => DbError.InvalidQuery,
+            else => Error.InvalidQuery,
         },
         .bool => switch (value) {
             .boolean => |v| v,
             .integer => |v| v != 0,
             .float => |v| v != 0,
-            else => DbError.InvalidQuery,
+            else => Error.InvalidQuery,
         },
         .pointer => |ptr| blk: {
             if (ptr.size == .slice and ptr.child == u8) {
                 break :blk switch (value) {
                     .text => |v| v,
                     .blob => |v| v,
-                    else => DbError.InvalidQuery,
+                    else => Error.InvalidQuery,
                 };
             }
-            @compileError("Unsupported Db.Row.getTyped target: " ++ @typeName(T));
+            @compileError("Unsupported Db.Row.as target: " ++ @typeName(T));
         },
         .optional => |opt| switch (value) {
             .null => null,
             else => try valueToType(opt.child, value),
         },
-        else => @compileError("Unsupported Db.Row.getTyped target: " ++ @typeName(T)),
+        else => @compileError("Unsupported Db.Row.as target: " ++ @typeName(T)),
     };
 }
 
 fn failingPrepare(_: ?*anyopaque, _: []const u8) anyerror!Statement {
-    return DbError.Closed;
+    return Error.Closed;
 }
 fn failingRun(_: ?*anyopaque, _: []const u8, _: Bindings) anyerror!RunResult {
-    return DbError.Closed;
+    return Error.Closed;
 }
 fn failingTransaction(_: ?*anyopaque, _: TransactionMode, _: *anyopaque, _: TransactionCallback) anyerror!void {
-    return DbError.Closed;
+    return Error.Closed;
 }
 fn failingClose(_: ?*anyopaque, _: bool) anyerror!void {
     return;
 }
 fn failingStmtAll(_: ?*anyopaque, _: std.mem.Allocator, _: Bindings) anyerror![]const Row {
-    return DbError.Closed;
+    return Error.Closed;
 }
 fn failingStmtGet(_: ?*anyopaque, _: std.mem.Allocator, _: Bindings) anyerror!?Row {
-    return DbError.Closed;
+    return Error.Closed;
 }
 fn failingStmtRun(_: ?*anyopaque, _: Bindings) anyerror!RunResult {
-    return DbError.Closed;
+    return Error.Closed;
 }
 fn failingStmtValues(_: ?*anyopaque, _: std.mem.Allocator, _: Bindings) anyerror![]const []const Value {
-    return DbError.Closed;
+    return Error.Closed;
 }
 fn failingStmtIterate(_: ?*anyopaque, _: Bindings) anyerror!Statement.Iterator {
-    return DbError.Closed;
+    return Error.Closed;
 }
-fn failingStmtFinalize(_: ?*anyopaque) void {}
+fn failingStmtDeinit(_: ?*anyopaque) void {}
 fn failingStmtToString(_: ?*anyopaque, _: std.mem.Allocator) anyerror![]u8 {
-    return DbError.Closed;
+    return Error.Closed;
 }
 fn failingStmtColumnNames(_: ?*anyopaque) []const []const u8 {
     return &.{};
@@ -510,7 +506,7 @@ fn failingStmtColumnNames(_: ?*anyopaque) []const []const u8 {
 fn failingStmtColumnTypes(_: ?*anyopaque) []const ColumnType {
     return &.{};
 }
-fn failingStmtParamsCount(_: ?*anyopaque) usize {
+fn failingStmtParamCount(_: ?*anyopaque) usize {
     return 0;
 }
 
@@ -524,11 +520,11 @@ pub const failing_vtable = VTable{
     .stmtRun = &failingStmtRun,
     .stmtValues = &failingStmtValues,
     .stmtIterate = &failingStmtIterate,
-    .stmtFinalize = &failingStmtFinalize,
+    .stmtDeinit = &failingStmtDeinit,
     .stmtToString = &failingStmtToString,
     .stmtColumnNames = &failingStmtColumnNames,
     .stmtColumnTypes = &failingStmtColumnTypes,
-    .stmtParamsCount = &failingStmtParamsCount,
+    .stmtParamCount = &failingStmtParamCount,
 };
 
 pub const failing = Db{ .vtable = &failing_vtable };

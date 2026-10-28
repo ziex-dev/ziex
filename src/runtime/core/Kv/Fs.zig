@@ -4,7 +4,6 @@ const std = @import("std");
 const Kv = @import("../Kv.zig");
 
 io: std.Io,
-namespace: []const u8 = "default",
 subdir: []const u8,
 
 /// Each file is a `Kv.Meta.Expiry` line followed by the raw value.
@@ -30,7 +29,7 @@ fn get(userdata: ?*anyopaque, ns: []const u8, allocator: std.mem.Allocator, key:
         @memcpy(value, entry.rest);
     } else {
         const n = file.readPositionalAll(f.io, value, offset) catch return null;
-        if (n != value.len) return error.KvGetFailed;
+        if (n != value.len) return error.GetFailed;
     }
     return value;
 }

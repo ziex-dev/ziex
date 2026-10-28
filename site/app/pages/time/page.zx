@@ -4,7 +4,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
 
     if (visit_count == 3) {
         visit_count = 0;
-        _ = zx.cache.delPrefix("cmp:time") catch 0;
+        _ = zx.cache.deletePrefix("cmp:time") catch 0;
     } else {
         visit_count += 1;
     }

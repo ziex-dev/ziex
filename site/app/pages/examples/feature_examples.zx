@@ -901,11 +901,11 @@ pub const RefLayout__options = zx.LayoutOptions{
 // --- Reference Inline: cache invalidation ---
 pub fn unwrap__ref_cache_invalidation() void {
     // Delete a specific cache entry by key
-    _ = zx.cache.del("cmp:user-profile");
+    _ = zx.cache.delete("cmp:user-profile") catch false;
 
     // Delete all entries matching a prefix
     // Useful for invalidating related content
-    _ = zx.cache.delPrefix("cmp:user") catch 0;
+    _ = zx.cache.deletePrefix("cmp:user") catch 0;
 }
 
 // --- Learn: state management ---
