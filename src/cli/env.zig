@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const zx_info = @import("zx_info");
 
 const context = @import("shared/context.zig");
+const zx_module = @import("shared/zx_module.zig");
 const cli_args = @import("root.zig");
 
 const CommandContext = context.CommandContext;
@@ -38,10 +39,16 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         std.process.executablePathAlloc(ctx.app.io, ctx.allocator) catch null;
     defer if (zx_exe) |p| ctx.allocator.free(p);
 
+    const resolved_module_path: ?[]u8 = if (environ_map.get("ZIEX_MODULE_PATH") != null)
+        null
+    else
+        zx_module.resolve(ctx.app.io, ctx.allocator, environ_map, ".");
+    defer if (resolved_module_path) |p| ctx.allocator.free(p);
+
     const info: Info = .{
         .zx_exe = zx_exe,
         .version = zx_info.version,
-        .zx_module_path = environ_map.get("ZIEX_MODULE_PATH"),
+        .zx_module_path = environ_map.get("ZIEX_MODULE_PATH") orelse resolved_module_path,
         .env = .{
             .ZIEX_MODULE_PATH = environ_map.get("ZIEX_MODULE_PATH"),
             .ZIEX_ZIG_PATH = environ_map.get("ZIEX_ZIG_PATH"),

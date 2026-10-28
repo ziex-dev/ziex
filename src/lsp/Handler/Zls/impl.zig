@@ -4,6 +4,7 @@ const zls = @import("zls");
 const lsp = @import("lsp");
 const Handler = @import("../../Handler.zig");
 const Zls = @import("../Zls.zig");
+const zx_module = @import("../../../cli/shared/zx_module.zig");
 
 const request_methods = [_][]const u8{
     "initialize",
@@ -46,6 +47,7 @@ const Impl = struct {
     allocator: std.mem.Allocator,
     server: *zls.Server,
     config_manager: *zls.configuration.Manager,
+    environ_map: *const std.process.Environ.Map,
     global_cache_path: ?[]const u8,
     zx_module_path: ?[]const u8,
     active_build_file: ?[]const u8 = null,
@@ -103,6 +105,7 @@ pub fn create(options: Zls.CreateOptions) Zls.CreateError!Zls.Backing {
         .allocator = allocator,
         .server = server,
         .config_manager = config_manager,
+        .environ_map = options.environ_map,
         .global_cache_path = global_cache_path,
         .zx_module_path = owned_zx_module_path,
     };
@@ -147,6 +150,16 @@ fn syncModulesFor(impl: *Impl, arena: std.mem.Allocator, document_uri: []const u
 
     const uri = zls.Uri.parse(arena, document_uri) catch return;
     const doc_path = uri.toFsPath(arena) catch return;
+
+    // Resolve `zx` from build.zig.zon so it works before (or without) the build runner.
+    if (impl.zx_module_path == null) {
+        if (std.fs.path.dirname(doc_path)) |doc_dir| {
+            if (zx_module.resolve(io, impl.allocator, impl.environ_map, doc_dir)) |path| {
+                impl.zx_module_path = path;
+                try applyModules(impl, &.{.{ .name = "zx", .path = path }});
+            }
+        }
+    }
 
     // Makes ZLS load every ancestor `build.zig` and start their build runners.
     if (store.getHandle(uri)) |handle| {
