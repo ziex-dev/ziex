@@ -423,9 +423,12 @@ test "io > default is shared and usable" {
     const io_b = zx.Io.default();
     try std.testing.expectEqual(io_a.userdata, io_b.userdata);
 
+    // Windows sleeps on the system timer tick (~15.6 ms) and may wake up to a tick
+    // early, so sleep well past one tick and allow that much slack.
     const start = std.Io.Clock.awake.now(io_a);
-    try io_a.sleep(.fromMilliseconds(5), .awake);
-    try std.testing.expect(start.durationTo(std.Io.Clock.awake.now(io_a)).nanoseconds >= 5 * std.time.ns_per_ms);
+    try io_a.sleep(.fromMilliseconds(50), .awake);
+    const elapsed = start.durationTo(std.Io.Clock.awake.now(io_a)).nanoseconds;
+    try std.testing.expect(elapsed >= 30 * std.time.ns_per_ms);
 
     var bytes: [32]u8 = @splat(0);
     io_a.random(&bytes);
