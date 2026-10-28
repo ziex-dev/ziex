@@ -79,6 +79,11 @@ jobs:
               echo "$raw"
               return
             fi
+            # Map X.Y.Z.N (untagged base + commit count) -> X.Y.N
+            if echo "$raw" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "$raw" | sed -E 's/^([0-9]+\.[0-9]+)\.[0-9]+\.([0-9]+)$/\1.\2/'
+              return
+            fi
             # Map 0.1.0-dev.N (+meta) -> 0.1.N (VS Code rejects prerelease tags)
             local n
             n=$(echo "${raw%%+*}" | grep -oE '[a-zA-Z]+\.([0-9]+)$' | grep -oE '[0-9]+$' || true)

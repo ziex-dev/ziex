@@ -27,6 +27,10 @@ to_vscode_version() {
     echo "$raw"
     return
   fi
+  if echo "$raw" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "$raw" | sed -E 's/^([0-9]+\.[0-9]+)\.[0-9]+\.([0-9]+)$/\1.\2/'
+    return
+  fi
   local n
   n=$(echo "${raw%%+*}" | grep -oE '[a-zA-Z]+\.([0-9]+)$' | grep -oE '[0-9]+$' || true)
   if [ -n "$n" ]; then

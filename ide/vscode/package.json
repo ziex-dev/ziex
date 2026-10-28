@@ -2,7 +2,7 @@
   "name": "ziex",
   "displayName": "Ziex",
   "description": "Ziex - full-stack web framework for Zig",
-  "version": "0.1.1259",
+  "version": "0.1.0",
   "publisher": "ziex",
   "icon": "images/logo.png",
   "private": true,
