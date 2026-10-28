@@ -14,6 +14,9 @@ const STATIC_TEMPLATES = [
   { value: 'starter', label: 'Starter', hint: 'Ziex starter app' },
   { value: 'cloudflare', label: 'Cloudflare', hint: 'Ziex on Cloudflare' },
   { value: 'vercel', label: 'Vercel', hint: 'Ziex on Vercel' },
+  { value: 'node', label: 'Node', hint: 'Ziex with npm scripts' },
+  { value: 'railway', label: 'Railway', hint: 'Ziex on Railway' },
+  { value: 'render', label: 'Render', hint: 'Ziex on Render' },
 ];
 
 function starterOrder(topics = []) {

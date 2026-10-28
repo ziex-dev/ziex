@@ -79,7 +79,7 @@ pub fn create(options: Zls.CreateOptions) Zls.CreateError!Zls.Backing {
 
     const zx_module_path: ?[]const u8 = blk: {
         if (options.zx_module) |p| if (p.len > 0) break :blk p;
-        if (options.environ_map.get("ZX_MODULE_PATH")) |p| if (p.len > 0) break :blk p;
+        if (options.environ_map.get("ZIEX_MODULE_PATH")) |p| if (p.len > 0) break :blk p;
         break :blk null;
     };
     try setFrontendConfig(config_manager, global_cache_path, if (zx_module_path) |path| &.{

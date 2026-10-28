@@ -116,7 +116,7 @@ async function getLspCommand(context: ExtensionContext, file: string): Promise<L
   const projectDir = zig ? await findZxProjectDir(zig, file) : undefined;
   const cwd = projectDir ?? workspaceDir;
 
-  // Prefer installed `zx lsp`. Only then resolve ZX_MODULE_PATH via
+  // Prefer installed `zx lsp`. Only then resolve ZIEX_MODULE_PATH via
   // `zig build zx -- env` so we can pass --zx-module.
   const zx = await findZxExecutable(cwd);
   if (zx) {
@@ -132,7 +132,7 @@ async function getLspCommand(context: ExtensionContext, file: string): Promise<L
       args,
       cwd,
       env: zxModulePath || zigEnv
-        ? { ...zigEnv, ...(zxModulePath ? { ZX_MODULE_PATH: zxModulePath } : {}) }
+        ? { ...zigEnv, ...(zxModulePath ? { ZIEX_MODULE_PATH: zxModulePath } : {}) }
         : undefined,
       zig,
     };

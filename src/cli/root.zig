@@ -15,9 +15,9 @@ pub const init: Command = .{
     .help_short = "Initialize a new ZX project in the current directory",
     .named_args = &.{
         Argument.init(.template, []const u8, .{
-            .default_value = "default",
+            .default_value = "starter",
             .short = 't',
-            .help = "Template to use: a builtin (default, docker) or any github:ziex-dev/template-<name> (e.g. cloudflare, vercel)",
+            .help = "Template to use: a builtin (starter, docker) or any github:ziex-dev/template-<name> (cloudflare, vercel, node, railway, render)",
         }),
         Argument.init(.force, bool, .{
             .default_value = false,
@@ -300,7 +300,7 @@ pub const env: Command = .{
     \\(same style as `zig env` when --format=zon).
     \\
     \\When run via `zig build zx -- env`, the build step injects project-local
-    \\paths (such as ZX_MODULE_PATH and ZIEX_ZIG_PATH) into the process environment.
+    \\paths (such as ZIEX_MODULE_PATH and ZIEX_ZIG_PATH) into the process environment.
     \\
     ,
     .named_args = &.{
@@ -321,7 +321,7 @@ pub const lsp: Command = .{
     \\NDJSON responses, then exit.
     \\
     \\The zx module path for `@import("zx")` is resolved from `--zx-module`,
-    \\falling back to the ZX_MODULE_PATH environment variable.
+    \\falling back to the ZIEX_MODULE_PATH environment variable.
     \\
     ,
     .named_args = &.{
@@ -333,7 +333,7 @@ pub const lsp: Command = .{
         }),
         Argument.init(.@"zx-module", []const u8, .{
             .default_value = "",
-            .help = "Path to the zx module root (src/root.zig); overrides ZX_MODULE_PATH",
+            .help = "Path to the zx module root (src/root.zig); overrides ZIEX_MODULE_PATH",
         }),
     },
 };

@@ -10,8 +10,11 @@ pub const command = cli_args.env;
 
 const Format = cli_args.EnvFormat;
 
+// Internal, set by `zx dev` and wasm hosts; not user config:
+// ZIEX_INNER_PORT, ZIEX_OUTER_PORT, ZIEX_STOP_ON_EOF,
+// ZIEX_DEV_EVENT, ZIEX_DEV_BUILD_MS, ZIEX_DEV_FIRST, ZIEX_DEV_RESOLVED, ZIEX_DEV_URL.
 const EnvVars = struct {
-    ZX_MODULE_PATH: ?[]const u8 = null,
+    ZIEX_MODULE_PATH: ?[]const u8 = null,
     ZIEX_ZIG_PATH: ?[]const u8 = null,
     ZIEX_ROOT_DIR: ?[]const u8 = null,
     ZIEX_DATA_DIR: ?[]const u8 = null,
@@ -38,9 +41,9 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const info: Info = .{
         .zx_exe = zx_exe,
         .version = zx_info.version,
-        .zx_module_path = environ_map.get("ZX_MODULE_PATH"),
+        .zx_module_path = environ_map.get("ZIEX_MODULE_PATH"),
         .env = .{
-            .ZX_MODULE_PATH = environ_map.get("ZX_MODULE_PATH"),
+            .ZIEX_MODULE_PATH = environ_map.get("ZIEX_MODULE_PATH"),
             .ZIEX_ZIG_PATH = environ_map.get("ZIEX_ZIG_PATH"),
             .ZIEX_ROOT_DIR = environ_map.get("ZIEX_ROOT_DIR"),
             .ZIEX_DATA_DIR = environ_map.get("ZIEX_DATA_DIR"),

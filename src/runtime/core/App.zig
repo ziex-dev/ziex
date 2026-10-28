@@ -241,6 +241,7 @@ const Resolved = struct {
     db_url: ?[]const u8 = null,
     kv_subdir: ?[]const u8 = null,
     cache_subdir: ?[]const u8 = null,
+    host: ?[]const u8 = null,
 };
 
 var resolved: Resolved = .{};
@@ -255,6 +256,7 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
     const datadir_env = envVar(alloc, inita, "ZIEX_DATA_DIR");
     const staticdir_env = envVar(alloc, inita, "ZIEX_STATIC_DIR");
     const port_env = envVar(alloc, inita, "PORT");
+    const host_env = envVar(alloc, inita, "HOST");
     if (envVar(alloc, inita, "ZIEX_STOP_ON_EOF")) |s| {
         alloc.free(s);
         stop_on_eof = true;
@@ -273,6 +275,10 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
     cfg.datadir = datadir;
     cfg.staticdir = staticdir;
     cfg.server.port = port;
+    if (host_env) |h| {
+        cfg.server.address = h;
+        resolved.host = h;
+    }
 
     switch (platform.os) {
         .freestanding, .wasi => |os| {
@@ -342,6 +348,8 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
 }
 
 fn freeResolved(alloc: std.mem.Allocator) void {
+    if (resolved.host) |s| alloc.free(s);
+    resolved.host = null;
     if (resolved.datadir == null) return;
 
     // Feature ==> zx.db (sqlite backend)

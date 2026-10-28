@@ -533,8 +533,8 @@ pub fn Backend(comptime H: type) type {
         }
 
         fn applyServerDefaults(self: *Self) void {
-            const port = (if (app_opts.server_port != null) app_opts.server_port else serverPort(&self.inner.config)) orelse Pipeline.defaults.port;
-            const address = app_opts.server_address orelse self.config.server.address orelse Pipeline.defaults.address;
+            const port = serverPort(&self.inner.config) orelse app_opts.server_port orelse Pipeline.defaults.port;
+            const address = self.config.server.address orelse app_opts.server_address orelse Pipeline.defaults.address;
 
             setServerAddress(&self.inner.config, address, port);
             // Config already carries ziex form defaults; keep httpz in sync if

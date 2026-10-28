@@ -2,7 +2,7 @@ const base = "_base/";
 const docker = "_docker/";
 
 pub const TemplateFile = struct {
-    pub const Name = enum { default, docker };
+    pub const Name = enum { starter, docker };
 
     name: ?Name = null,
     path: []const u8,

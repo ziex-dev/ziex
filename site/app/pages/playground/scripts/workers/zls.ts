@@ -70,7 +70,7 @@ async function instantiateLsp(
     url: string,
     fds: Fd[],
 ): Promise<LspInstance> {
-    const wasii = new WASI([name], ["ZX_MODULE_PATH=/zx/src/root.zig"], fds, { debug: false });
+    const wasii = new WASI([name], ["ZIEX_MODULE_PATH=/zx/src/root.zig"], fds, { debug: false });
     const response = await fetchWithCache(url);
     const { instance } = await WebAssembly.instantiateStreaming(response, {
         wasi_snapshot_preview1: wasii.wasiImport,

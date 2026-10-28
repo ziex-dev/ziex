@@ -17,7 +17,7 @@ incremental: bool = false,
 prerender: bool = false,
 /// Default server port, overridden by the `PORT` env var.
 port: ?u16 = null,
-/// Default server address, overridden by the `ADDRESS` env var.
+/// Default server address, overridden by the `HOST` env var.
 address: ?[]const u8 = null,
 
 /// The `-Dziex-config=<zon>` argument for this config.
