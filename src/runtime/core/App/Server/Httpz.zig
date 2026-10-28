@@ -815,7 +815,7 @@ pub const websocket = struct {
 /// then runs cache / Router / render / static / WebSocket orchestration.
 fn Handler(comptime Ctx: type) type {
     const is_dev = App.mode == .dev;
-    const is_export = App.mode == .@"export";
+    const is_static = App.mode == .static;
     const feat_cache = app_opts.feat_cache_server;
 
     return struct {
@@ -946,9 +946,9 @@ fn Handler(comptime Ctx: type) type {
                 if (try self.devtool(req, res)) return;
             }
 
-            // Export-only early outs
-            if (comptime is_export) {
-                if (req.header("x-zx-export-notfound")) |_| {
+            // Static-only early outs
+            if (comptime is_static) {
+                if (req.header("x-zx-static-notfound")) |_| {
                     return self.notFound(req, res);
                 }
                 if (req.route_data) |rd| {
@@ -960,7 +960,7 @@ fn Handler(comptime Ctx: type) type {
                         return;
                     }
 
-                    if (route.skipsExport(req.header("x-zx-prerendered-only") != null)) {
+                    if (route.skipsStatic(req.header("x-zx-prerendered-only") != null)) {
                         res.header("x-zx-dynamic", "true");
                         try std.zon.stringify.serialize(.{ .dynamic = true }, .{ .whitespace = true }, res.writer());
                         return;

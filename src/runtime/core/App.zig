@@ -61,7 +61,7 @@ pub fn init(inita: zx.Init, process_io: anytype, alloc: std.mem.Allocator, confi
                             Server.Std;
                         const instance = try Transport.Backend(H).init(self.io, self.alloc, self.config, self.app_ctx, self.inita);
                         const transport = instance.server();
-                        if (App.mode != .@"export") transport.info();
+                        if (App.mode != .static) transport.info();
                         return transport;
                     }
 
@@ -198,7 +198,7 @@ var stop_fn: ?*const fn (ctx: *anyopaque) void = null;
 fn onSignal(_: std.posix.SIG) void {
     if (stopping.swap(true, .acq_rel)) return;
     if (stop_fn) |f| if (stop_ctx) |ctx| {
-        if (App.mode != .dev and App.mode != .@"export") std.debug.print("\nShutting down...\n", .{});
+        if (App.mode != .dev and App.mode != .static) std.debug.print("\nShutting down...\n", .{});
         f(ctx);
     };
 }
@@ -390,4 +390,4 @@ pub const Route = struct {
     proxy: ?type = null,
 };
 
-pub const Mode = enum { dev, serve, @"export", @"--" };
+pub const Mode = enum { dev, serve, static, @"--" };

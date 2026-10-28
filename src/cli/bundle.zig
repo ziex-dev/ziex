@@ -13,7 +13,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const app = ctx.app;
     const io = app.io;
     const outdir = args.outdir;
-    const binpath = args.binpath;
+    const binpath = args.@"bin-path";
     const install_prefix = args.@"install-prefix";
 
     const program_path = util.resolveExePath(io, ctx.allocator, install_prefix, binpath) catch |err| {

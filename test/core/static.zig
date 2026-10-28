@@ -62,8 +62,8 @@ test "dynamic > true from rendering" {
 
 test "prerender > default route exported only in full static builds" {
     const route = emptyRoute("/about");
-    try std.testing.expect(!route.skipsExport(false));
-    try std.testing.expect(route.skipsExport(true));
+    try std.testing.expect(!route.skipsStatic(false));
+    try std.testing.expect(route.skipsStatic(true));
 }
 
 test "prerender > prerendered rendering exported in prerender builds" {
@@ -71,8 +71,8 @@ test "prerender > prerendered rendering exported in prerender builds" {
         .path = "/about",
         .rendering = .prerendered,
     };
-    try std.testing.expect(!route.skipsExport(false));
-    try std.testing.expect(!route.skipsExport(true));
+    try std.testing.expect(!route.skipsStatic(false));
+    try std.testing.expect(!route.skipsStatic(true));
 }
 
 test "prerender > request rendering never exported" {
@@ -80,8 +80,8 @@ test "prerender > request rendering never exported" {
         .path = "/dashboard",
         .rendering = .request,
     };
-    try std.testing.expect(route.skipsExport(false));
-    try std.testing.expect(route.skipsExport(true));
+    try std.testing.expect(route.skipsStatic(false));
+    try std.testing.expect(route.skipsStatic(true));
 }
 
 test "static params > null when no static fn" {

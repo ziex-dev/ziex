@@ -11,11 +11,11 @@ pub const command = cli_args.update;
 pub fn run(ctx: CommandContext, args: anytype) !void {
     const app = ctx.app;
     const version = args.version;
-    const dev = args.dev;
+    const canary = args.canary;
 
     const ref = if (!std.mem.eql(u8, version, "latest"))
         try std.fmt.allocPrint(ctx.allocator, "#v{s}", .{version})
-    else if (dev)
+    else if (canary)
         try ctx.allocator.dupe(u8, "")
     else blk: {
         const tag = try fetchLatestReleaseTag(app.io, ctx.allocator, app.environ_map);

@@ -49,7 +49,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         },
     };
 
-    const fmt: Format = args.fmt;
+    const fmt: Format = args.format;
     switch (fmt) {
         .zon => {
             try std.zon.stringify.serialize(info, .{ .whitespace = true }, ctx.writer);

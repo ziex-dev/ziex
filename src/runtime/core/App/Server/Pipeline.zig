@@ -33,14 +33,14 @@ pub fn meta() *Meta {
 
 pub const Opts = struct {
     is_dev: bool,
-    is_export: bool = false,
+    is_static: bool = false,
     base_path: ?[]const u8 = null,
 };
 
 /// Default pipeline options from the current App mode / base path.
 pub const opts: Opts = .{
     .is_dev = App.mode == .dev,
-    .is_export = App.mode == .@"export",
+    .is_static = App.mode == .static,
     .base_path = App.base_path,
 };
 
@@ -155,8 +155,8 @@ pub fn dispatch(
     const handlers = if (matched) |r| r.route else null;
     const sock = socket(http, handlers);
 
-    if (comptime o.is_export) {
-        if (try handleExportProbes(ctx, backend, http, pathname, req_obj, res_obj, matched, transport)) {
+    if (comptime o.is_static) {
+        if (try handleStaticProbes(ctx, backend, http, pathname, req_obj, res_obj, matched, transport)) {
             return .{};
         }
     }
@@ -344,7 +344,7 @@ fn respondDevtoolComponents(
     try transport.write(transport.ptr, backend, aw.written());
 }
 
-fn handleExportProbes(
+fn handleStaticProbes(
     ctx: Ctx,
     backend: *Conn,
     http: zx.Http,
@@ -354,7 +354,7 @@ fn handleExportProbes(
     matched: ?*const Meta.Route,
     transport: Transport,
 ) !bool {
-    if (http.reqHeaderHas("x-zx-export-notfound")) {
+    if (http.reqHeaderHas("x-zx-static-notfound")) {
         if (core_handler.prepareNotFound(http, pathname, req_obj, res_obj, ctx.arena, ctx.io, matched)) |cmp| {
             var page = cmp;
             if (http.resHeaderGet("Content-Type") == null) backend.setContentTypeStr("text/html");
@@ -378,7 +378,7 @@ fn handleExportProbes(
             return true;
         }
 
-        if (route.skipsExport(http.reqHeaderHas("x-zx-prerendered-only"))) {
+        if (route.skipsStatic(http.reqHeaderHas("x-zx-prerendered-only"))) {
             http.resHeaderSet("x-zx-dynamic", "true");
             var aw: std.Io.Writer.Allocating = .init(ctx.arena);
             try std.zon.stringify.serialize(.{ .dynamic = true }, .{ .whitespace = true }, &aw.writer);

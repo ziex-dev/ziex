@@ -14,7 +14,7 @@ const CommandContext = context.CommandContext;
 const log = std.log.scoped(.cli);
 
 /// Builds the app for the host, runs it and crawls every route into `args.outdir`.
-pub fn exportSite(ctx: CommandContext, args: anytype) !void {
+pub fn buildStatic(ctx: CommandContext, args: anytype) !void {
     const app = ctx.app;
     const io = app.io;
     const outdir = args.outdir;
@@ -26,9 +26,13 @@ pub fn exportSite(ctx: CommandContext, args: anytype) !void {
 
     var build_argv = std.ArrayList([]const u8).empty;
     defer build_argv.deinit(ctx.allocator);
-    const config_arg = try (BuildConfig{ .command = .@"export" }).arg(ctx.allocator);
+    const config_arg = try (BuildConfig{ .command = .static }).arg(ctx.allocator);
     defer ctx.allocator.free(config_arg);
     try build_argv.appendSlice(ctx.allocator, &.{ args.@"zig-path", "build", config_arg });
+
+    const release_arg = try std.fmt.allocPrint(ctx.allocator, "--release={s}", .{args.release});
+    defer ctx.allocator.free(release_arg);
+    try build_argv.append(ctx.allocator, release_arg);
 
     var i_build_args = std.mem.splitSequence(u8, args.@"build-args", " ");
     while (i_build_args.next()) |arg| {
@@ -44,11 +48,11 @@ pub fn exportSite(ctx: CommandContext, args: anytype) !void {
     });
     switch (try build_proc.wait(io)) {
         .exited => |code| if (code != 0) {
-            try ctx.writer.print("Failed to build the ZX executable for export (exit {d})!\n", .{code});
+            try ctx.writer.print("Failed to build the app for static export (exit {d})!\n", .{code});
             return;
         },
         else => {
-            try ctx.writer.print("Failed to build the ZX executable for export!\n", .{});
+            try ctx.writer.print("Failed to build the app for static export!\n", .{});
             return;
         },
     }
@@ -80,7 +84,7 @@ pub fn exportSite(ctx: CommandContext, args: anytype) !void {
         return;
     };
 
-    const binpath_flag = args.binpath;
+    const binpath_flag = args.@"bin-path";
     const exe_path = util.resolveExePath(io, ctx.allocator, install_prefix, binpath_flag) catch {
         std.log.err("Run \x1b[34mzig build\x1b[0m to build the app first!\n", .{});
         return;
@@ -332,7 +336,7 @@ fn processRoute(
     var extra_headers: [2]std.http.Header = undefined;
     var header_count: usize = 0;
     if (export_type == .notfound) {
-        extra_headers[header_count] = .{ .name = "x-zx-export-notfound", .value = "true" };
+        extra_headers[header_count] = .{ .name = "x-zx-static-notfound", .value = "true" };
         header_count += 1;
     }
     if (prerendered_only) {

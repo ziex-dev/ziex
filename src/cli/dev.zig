@@ -165,7 +165,7 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
     defer Process.terminal.release();
 
     const allocator = ctx.allocator;
-    const binpath = args.binpath;
+    const binpath = args.@"bin-path";
     const install_prefix = args.@"install-prefix";
     const preferred_port = DevServer.resolvePreferredPort(args.port, env_map, constants.default_port);
     const build_args_str = args.@"build-args";

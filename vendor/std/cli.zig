@@ -56,6 +56,8 @@ pub const Command = struct {
     help: [:0]const u8 = "",
     /// The single-line help sentence for subcommands.
     help_short: [:0]const u8 = "",
+    /// Omitted from generated help. Still parsed normally.
+    hidden: bool = false,
 };
 
 pub const Argument = struct {
@@ -71,6 +73,8 @@ pub const Argument = struct {
     /// Example: `git commit -m "std.cli"` and `git commit --message "std.cli"` parse results are identical.
     /// Has no effect for positional arguments.
     short: ?u8,
+    /// Omitted from generated help. Still parsed normally.
+    hidden: bool,
 
     pub const Count = enum {
         /// If the argument is provided multiple times, the last instance is the result.
@@ -106,6 +110,7 @@ pub const Argument = struct {
             /// Optionals types (like ?i32) may only have default value null. This allows determining if a user provided argument or not. Example: `git branch dev/std.cli` has optional `?[]const u8` positional argument.
             default_value: ?T = null,
             short: ?u8 = null,
+            hidden: bool = false,
         },
     ) Argument {
         switch (options.count) {
@@ -134,6 +139,7 @@ pub const Argument = struct {
             .count = options.count,
             .help = options.help,
             .short = options.short,
+            .hidden = options.hidden,
         };
     }
 
@@ -658,6 +664,7 @@ pub fn writeCommandGeneratedHelp(
     try out.writeAll("  -h, --help\n");
     try out.writeAll("    Print this help and exit.\n");
     inline for (command.named_args) |named| {
+        if (named.hidden) continue;
         try out.writeAll("\n");
         const Value = switch (named.count) {
             .one => named.type,
@@ -686,6 +693,7 @@ pub fn writeCommandGeneratedHelp(
         try out.writeAll("\n");
         try out.writeAll("SUBCOMMANDS");
         inline for (command.subcommands) |subcommand| {
+            if (subcommand.hidden) continue;
             try out.writeAll("\n");
             try out.print("  {s}\n", .{@tagName(subcommand.name)});
             try writeIndented(subcommand.help_short, 4, out);

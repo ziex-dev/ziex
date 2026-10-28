@@ -40,7 +40,7 @@ pub const dev: Command = .{
     .name = .dev,
     .help_short = "Start the app in development mode with rebuild on change",
     .named_args = &.{
-        flags.binpath,
+        flags.bin_path,
         flags.build_args,
         flags.zig_path,
         flags.install_prefix,
@@ -89,13 +89,11 @@ pub const serve: Command = .{
             .short = 'p',
             .help = "Port to listen on (sets PORT; default: PORT env, or 3000)",
         }),
-        flags.binpath,
+        flags.bin_path,
         flags.zig_path,
-        Argument.init(.@"build-args", []const u8, .{
-            .default_value = "--release=fast",
-            .short = 'a',
-            .help = "Additional build arguments to pass to zig build",
-        }),
+        flags.install_prefix,
+        flags.release("fast", "Release mode passed to zig build as --release=<mode> (fast, safe, small; empty for debug)"),
+        flags.build_args,
     },
 };
 
@@ -105,31 +103,29 @@ pub const build: Command = .{
     .named_args = &.{
         flags.build_args,
         flags.zig_path,
-        flags.binpath,
+        flags.bin_path,
+        flags.install_prefix,
         Argument.init(.target, []const u8, .{
             .default_value = "",
-            .short = 't',
             .help = "Zig target triple to build for (e.g. wasm32-wasi, x86_64-linux-musl)",
         }),
-        Argument.init(.release, []const u8, .{
-            .default_value = "",
-            .help = "Release mode passed to zig build as --release=<mode> (fast, safe, small)",
-        }),
+        flags.release("", "Release mode passed to zig build as --release=<mode> (fast, safe, small). Default: debug, or small with --static"),
         Argument.init(.prerender, bool, .{
             .default_value = false,
             .help = "Also pre-render routes with `.rendering = .prerendered` into <install-prefix>/static next to the app",
         }),
         Argument.init(.static, bool, .{
             .default_value = false,
-            .help = "Pre-render every route to static HTML in --outdir instead of building a server",
+            .help = "Pre-render every route to static HTML in --outdir instead of building a server (can't be combined with --target)",
         }),
         Argument.init(.outdir, []const u8, .{
             .default_value = "dist",
             .short = 'o',
-            .help = "Output directory for --static",
+            .help = "Output directory (requires --static)",
         }),
         Argument.init(.@"prerendered-only", bool, .{
             .default_value = false,
+            .hidden = true,
             .help = "With --static, only pre-render routes with `rendering.prerender` (used by --prerender)",
         }),
     },
@@ -146,6 +142,7 @@ pub const @"app.asset": Command = .{
         }),
         Argument.init(.@"href-stem", []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "Public URL stem (required when updating a manifest)",
         }),
         Argument.init(.manifest, []const u8, .{
@@ -154,6 +151,7 @@ pub const @"app.asset": Command = .{
         }),
         Argument.init(.@"manifest-out", []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "Output app manifest path (required with --manifest)",
         }),
         Argument.init(.@"file-stem", []const u8, .{
@@ -172,9 +170,9 @@ pub const @"app.asset": Command = .{
             .default_value = false,
             .help = "Delete the output directory before installing",
         }),
-        Argument.init(.@"no-hash", bool, .{
-            .default_value = false,
-            .help = "Skip content hashing (stable filenames for dev rebuilds)",
+        Argument.init(.hash, bool, .{
+            .default_value = true,
+            .help = "Content-hash the installed filename (--no-hash for stable filenames in dev rebuilds)",
         }),
     },
     .positional_args = &.{
@@ -212,14 +210,17 @@ pub const transpile: Command = .{
         }),
         Argument.init(.@"dep-file", []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "Write a Make-format dependency file listing all transpiled input files",
         }),
         Argument.init(.@"cache-dir", []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "Persistent transpile cache directory (mtime + Transpile.shape; survives zig-cache invalidation)",
         }),
         Argument.init(.roots, []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "File listing route files (one per line, relative to the path) to transpile from; default: scan pages/ and routes/",
         }),
         Argument.init(.@"base-path", []const u8, .{
@@ -228,18 +229,22 @@ pub const transpile: Command = .{
         }),
         Argument.init(.manifest, []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "Centralized app manifest path (zig-out/manifest/app.zon)",
         }),
         Argument.init(.@"build-injections", []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "Build-managed injections to merge into the app manifest",
         }),
         Argument.init(.@"exe-path", []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "Path to the executable",
         }),
         Argument.init(.@"client-dir", []const u8, .{
             .default_value = "",
+            .hidden = true,
             .help = "Directory of module client component lists",
         }),
     },
@@ -254,17 +259,13 @@ pub const fmt: Command = .{
     .name = .fmt,
     .help_short = "Format .zx files or directories.",
     .named_args = &.{
-        Argument.init(.stdio, bool, .{
+        Argument.init(.stdin, bool, .{
             .default_value = false,
             .help = "Read from stdin and write formatted output to stdout",
         }),
         Argument.init(.stdout, bool, .{
             .default_value = false,
             .help = "Write formatted output to stdout instead of disk",
-        }),
-        Argument.init(.@"error", bool, .{
-            .default_value = false,
-            .help = "Read zig build error output from stdin and pretty-print it (e.g. zig build 2>&1 | zx fmt --error)",
         }),
     },
     .positional_args = &.{
@@ -276,6 +277,19 @@ pub const fmt: Command = .{
     },
 };
 
+pub const diagnose: Command = .{
+    .name = .diagnose,
+    .help_short = "Pretty-print zig build errors read from stdin",
+    .help =
+    \\Reads `zig build` error output from stdin, remaps generated `.zig`
+    \\locations back to their `.zx` sources and pretty-prints them.
+    \\
+    \\Example: zig build 2>&1 | zx diagnose
+    \\
+    ,
+    .hidden = true,
+};
+
 pub const EnvFormat = enum { zon, json };
 
 pub const env: Command = .{
@@ -283,14 +297,14 @@ pub const env: Command = .{
     .help_short = "Print Ziex environment information",
     .help =
     \\Prints resolved Ziex paths and environment values for the current process
-    \\(same style as `zig env` when --fmt=zon).
+    \\(same style as `zig env` when --format=zon).
     \\
     \\When run via `zig build zx -- env`, the build step injects project-local
     \\paths (such as ZX_MODULE_PATH and ZIEX_ZIG_PATH) into the process environment.
     \\
     ,
     .named_args = &.{
-        Argument.init(.fmt, EnvFormat, .{
+        Argument.init(.format, EnvFormat, .{
             .default_value = .zon,
             .help = "Output format: zon (default) or json",
         }),
@@ -333,7 +347,7 @@ pub const bundle: Command = .{
             .short = 'o',
             .help = "Output directory",
         }),
-        flags.binpath,
+        flags.bin_path,
         flags.install_prefix,
     },
 };
@@ -344,10 +358,9 @@ pub const update: Command = .{
     .named_args = &.{
         Argument.init(.version, []const u8, .{
             .default_value = "latest",
-            .short = 'v',
             .help = "Version to update to",
         }),
-        Argument.init(.dev, bool, .{
+        Argument.init(.canary, bool, .{
             .default_value = false,
             .help = "Update to the latest commit on the main branch instead of the latest release",
         }),
@@ -361,8 +374,7 @@ pub const upgrade: Command = .{
     .named_args = &.{
         Argument.init(.version, []const u8, .{
             .default_value = "latest",
-            .short = 'v',
-            .help = "Version to update to",
+            .help = "Version to upgrade to",
         }),
     },
 };
@@ -376,6 +388,7 @@ pub const commands: []const Command = &.{
     build,
     transpile,
     fmt,
+    diagnose,
     env,
     lsp,
     bundle,
@@ -384,7 +397,7 @@ pub const commands: []const Command = &.{
 };
 
 const os_commands: []const Command = switch (builtin.os.tag) {
-    .wasi, .freestanding => &.{ version, dev, transpile, fmt, lsp },
+    .wasi, .freestanding => &.{ version, dev, transpile, fmt, diagnose, lsp },
     else => commands,
 };
 
@@ -395,5 +408,12 @@ pub const root_command: Command = .{
     \\
     ,
     .help_short = "Ziex framework CLI",
+    .named_args = &.{
+        Argument.init(.version, bool, .{
+            .default_value = false,
+            .short = 'V',
+            .help = "Print the CLI version and exit",
+        }),
+    },
     .subcommands = os_commands,
 };

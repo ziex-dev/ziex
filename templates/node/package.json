@@ -3,7 +3,7 @@
     "dev": "zx dev",
     "build": "zig build",
     "serve": "zx serve",
-    "export": "zx export",
+    "static": "zx build --static",
     "bundle": "zx bundle",
     "fmt": "zx fmt"
   },

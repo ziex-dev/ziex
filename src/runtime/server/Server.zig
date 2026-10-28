@@ -672,14 +672,14 @@ pub const ServerApp = struct {
             return null;
         }
 
-        /// True when export should skip static generation for this route.
+        /// True when a static build should skip this route.
         pub fn isDynamic(self: *const Route) bool {
             return self.rendering.dynamic;
         }
 
-        /// Whether export should skip this route. With `prerendered_only`, only routes
-        /// with `rendering.prerender` are exported.
-        pub fn skipsExport(self: *const Route, prerendered_only: bool) bool {
+        /// Whether a static build should skip this route. With `prerendered_only`, only routes
+        /// with `rendering.prerender` are written.
+        pub fn skipsStatic(self: *const Route, prerendered_only: bool) bool {
             if (self.rendering.dynamic) return true;
             return prerendered_only and !self.rendering.prerender;
         }

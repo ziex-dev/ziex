@@ -32,8 +32,8 @@ pub const CliOptions = struct {
         dev: ?[]const u8 = null,
         /// Step name for running the site in production build without hot-reload (default: "serve")
         serve: ?[]const u8 = null,
-        /// Step name for exporting static site (default: null/disabled)
-        @"export": ?[]const u8 = null,
+        /// Step name for building a static site, runs `zx build --static` (default: null/disabled)
+        static: ?[]const u8 = null,
         /// Step name for bundling the website (default: null/disabled)
         bundle: ?[]const u8 = null,
 

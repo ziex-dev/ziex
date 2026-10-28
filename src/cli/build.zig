@@ -8,7 +8,7 @@ const Builder = @import("dev/Builder.zig");
 const Diagnostics = @import("dev/Diagnostics.zig");
 const tui = @import("../tui/main.zig");
 const cli_args = @import("root.zig");
-const export_cmd = @import("export.zig");
+const static_cmd = @import("static.zig");
 
 const CommandContext = context.CommandContext;
 const Colors = tui.Colors;
@@ -20,25 +20,24 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const allocator = ctx.allocator;
 
     if (args.static) {
-        // Export runs the built app on this machine, so it can't be cross-compiled.
+        // Static builds run the built app on this machine, so they can't be cross-compiled.
         if (args.target.len > 0 and !std.mem.eql(u8, args.target, "native")) {
             try ctx.writer.print("{s}error:{s} --static builds for this machine and can't be combined with --target={s}\n", .{ Colors.red, Colors.reset, args.target });
             std.process.exit(1);
         }
-        const release = try std.fmt.allocPrint(allocator, "--release={s}", .{if (args.release.len > 0) args.release else "small"});
-        defer allocator.free(release);
-        return export_cmd.exportSite(ctx, .{
+        return static_cmd.buildStatic(ctx, .{
             .outdir = args.outdir,
-            .binpath = args.binpath,
+            .@"bin-path" = args.@"bin-path",
             .@"zig-path" = args.@"zig-path",
-            .@"build-args" = if (args.@"build-args".len > 0) args.@"build-args" else release,
+            .release = if (args.release.len > 0) args.release else "small",
+            .@"build-args" = args.@"build-args",
             .@"prerendered-only" = args.@"prerendered-only",
         });
     }
 
     var build_args = std.ArrayList([]const u8).empty;
     defer build_args.deinit(allocator);
-    try build_args.appendSlice(allocator, &.{ args.@"zig-path", "build" });
+    try build_args.appendSlice(allocator, &.{ args.@"zig-path", "build", "--prefix", args.@"install-prefix" });
 
     const target_arg = if (args.target.len > 0) try std.fmt.allocPrint(allocator, "-Dtarget={s}", .{args.target}) else null;
     defer if (target_arg) |t| allocator.free(t);

@@ -27,7 +27,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const file_ext = args.ext;
     const injection_kind = args.kind;
     const clean_dest = args.clean;
-    const no_hash = args.@"no-hash";
+    const no_hash = !args.hash;
 
     const manifest_in = nonEmpty(args.manifest);
     const manifest_out = nonEmpty(args.@"manifest-out");

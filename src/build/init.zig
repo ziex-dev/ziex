@@ -485,7 +485,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     b.default_step.dependOn(&install_manifest.step);
 
     // --- Prerender --- //
-    // Exports static pages from a host build of the app into the same static dir
+    // Pre-renders static pages from a host build of the app into the same static dir
     // the edge host serves, so prerendered routes skip the worker entirely.
     if (config.prerender and config.command == null) {
         const prerender_cmd = cliRun(b, zx_cli, opts);
@@ -535,14 +535,14 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         dev_cmd.addPassthruArgs();
     }
 
-    // --- Steps: Export --- //
-    if (opts.steps.@"export") |export_step_name| {
-        const export_cmd = cliRun(b, zx_cli, opts);
-        export_cmd.addArgs(&.{ "build", "--static" });
-        export_cmd.addArgs(&.{ "--zig-path", opts.zig_path });
-        const export_step = b.step(export_step_name, "Export the Ziex app for static hosting");
-        export_step.dependOn(&export_cmd.step);
-        export_cmd.addPassthruArgs();
+    // --- Steps: Static --- //
+    if (opts.steps.static) |static_step_name| {
+        const static_cmd = cliRun(b, zx_cli, opts);
+        static_cmd.addArgs(&.{ "build", "--static" });
+        static_cmd.addArgs(&.{ "--zig-path", opts.zig_path });
+        const static_step = b.step(static_step_name, "Build the Ziex app as a static site");
+        static_step.dependOn(&static_cmd.step);
+        static_cmd.addPassthruArgs();
     }
 
     // --- Steps: Bundle --- //

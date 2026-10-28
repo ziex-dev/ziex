@@ -13,6 +13,7 @@ const build_cmd = @import("build.zig");
 const transpile = @import("transpile.zig");
 const app_cmd = @import("app.zig");
 const fmt = @import("fmt.zig");
+const diagnose = @import("diagnose.zig");
 const env = @import("env.zig");
 const lsp = @import("lsp.zig");
 const bundle = @import("bundle.zig");
@@ -33,8 +34,8 @@ const use_debug_allocator = builtin.optimize == .debug and switch (builtin.os.ta
 };
 
 const os_modules = switch (builtin.os.tag) {
-    .wasi, .freestanding => .{ version, dev, transpile, fmt, lsp },
-    else => .{ version, init, app_cmd, dev, serve, build_cmd, transpile, fmt, env, lsp, bundle, update, upgrade },
+    .wasi, .freestanding => .{ version, dev, transpile, fmt, diagnose, lsp },
+    else => .{ version, init, app_cmd, dev, serve, build_cmd, transpile, fmt, diagnose, env, lsp, bundle, update, upgrade },
 };
 
 pub fn main(init_process: std.process.Init) !void {
@@ -94,6 +95,11 @@ pub fn run(
         .exit_help = true,
         .render_help = .generated,
     });
+
+    if (parsed.subcommand == null and parsed.kind == .args and parsed.kind.args.version) {
+        try writer.print("{s}\n", .{@import("zx_info").version});
+        return;
+    }
 
     if (parsed.kind == .help or parsed.subcommand == null) {
         try std_cli.writeHelpGenerated(root_command, args[0], parsed, writer);

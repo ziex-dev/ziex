@@ -9,18 +9,21 @@ const CommandContext = context.CommandContext;
 const log = std.log.scoped(.cli);
 pub const command = cli_args.serve;
 
-const DEFAULT_INSTALL_PREFIX = "zig-out";
-
 pub fn run(ctx: CommandContext, args: anytype) !void {
     const app = ctx.app;
     const io = app.io;
     const port = args.port;
+    const install_prefix = args.@"install-prefix";
 
     var build_argv = std.ArrayList([]const u8).empty;
     defer build_argv.deinit(ctx.allocator);
     const config_arg = try (BuildConfig{ .command = .serve }).arg(ctx.allocator);
     defer ctx.allocator.free(config_arg);
-    try build_argv.appendSlice(ctx.allocator, &.{ args.@"zig-path", "build", config_arg });
+    try build_argv.appendSlice(ctx.allocator, &.{ args.@"zig-path", "build", config_arg, "--prefix", install_prefix });
+
+    const release_arg = if (args.release.len > 0) try std.fmt.allocPrint(ctx.allocator, "--release={s}", .{args.release}) else null;
+    defer if (release_arg) |r| ctx.allocator.free(r);
+    if (release_arg) |r| try build_argv.append(ctx.allocator, r);
 
     var i_build_args = std.mem.splitSequence(u8, args.@"build-args", " ");
     while (i_build_args.next()) |arg| {
@@ -44,21 +47,20 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         },
     }
 
-    const binpath_flag = args.binpath;
-    const exe_path = util.resolveExePath(io, ctx.allocator, DEFAULT_INSTALL_PREFIX, binpath_flag) catch {
+    const exe_path = util.resolveExePath(io, ctx.allocator, install_prefix, args.@"bin-path") catch {
         try ctx.writer.print("Run \x1b[34mzig build\x1b[0m to build the ZX executable first!\n", .{});
         return;
     };
     defer ctx.allocator.free(exe_path);
 
     const environ_map = app.environ_map;
-    try environ_map.put("ZIEX_ROOT_DIR", DEFAULT_INSTALL_PREFIX);
+    try environ_map.put("ZIEX_ROOT_DIR", install_prefix);
 
     const port_str = if (port != 0) try std.fmt.allocPrint(ctx.allocator, "{d}", .{port}) else null;
     defer if (port_str) |s| ctx.allocator.free(s);
     if (port_str) |s| try environ_map.put("PORT", s);
 
-    log.debug("Spawning serve exe={s} rootdir={s}", .{ exe_path, DEFAULT_INSTALL_PREFIX });
+    log.debug("Spawning serve exe={s} rootdir={s}", .{ exe_path, install_prefix });
 
     var app_child = try std.process.spawn(io, .{
         .argv = &.{exe_path},

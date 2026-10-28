@@ -170,7 +170,7 @@ pub fn resolveTranspileDir(
     return try allocator.dupe(u8, CliConstant.default_transpile_dir);
 }
 
-/// Resolve the installed app executable from `manifest/app.zon`, or `--binpath`.
+/// Resolve the installed app executable from `manifest/app.zon`, or `--bin-path`.
 pub fn resolveExePath(
     io: std.Io,
     allocator: std.mem.Allocator,
