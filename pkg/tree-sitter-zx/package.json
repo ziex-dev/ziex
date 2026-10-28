@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-zx",
-  "version": "0.1.0-dev",
+  "version": "0.1.0",
   "description": "ZX grammar for Ziex.",
   "repository": "https://github.com/ziex-dev/ziex",
   "license": "MIT",

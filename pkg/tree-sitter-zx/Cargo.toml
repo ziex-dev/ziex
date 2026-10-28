@@ -1,7 +1,7 @@
 [package]
 name = "tree-sitter-zx"
 description = "ZX grammar for Ziex."
-version = "0.1.0-dev"
+version = "0.1.0"
 authors = ["Nurul Huda (Apon) <me@nurulhudaapon.com>"]
 license = "MIT"
 readme = "README.md"

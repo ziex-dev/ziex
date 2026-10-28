@@ -1,6 +1,6 @@
 {
   "name": "@ziex/cli-linux-arm64",
-  "version": "0.1.0-dev.928",
+  "version": "0.1.0",
   "description": "ziex CLI binary for Linux ARM64",
   "os": [
     "linux"

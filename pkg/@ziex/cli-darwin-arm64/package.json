@@ -1,6 +1,6 @@
 {
   "name": "@ziex/cli-darwin-arm64",
-  "version": "0.1.0-dev.928",
+  "version": "0.1.0",
   "description": "ziex CLI binary for macOS ARM64 (Apple Silicon)",
   "os": [
     "darwin"

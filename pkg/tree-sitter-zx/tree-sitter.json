@@ -14,7 +14,7 @@
     }
   ],
   "metadata": {
-    "version": "0.1.0-dev",
+    "version": "0.1.0",
     "license": "MIT",
     "description": "ZX grammar for Ziex.",
     "authors": [

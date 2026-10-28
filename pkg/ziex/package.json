@@ -1,6 +1,6 @@
 {
   "name": "ziex",
-  "version": "0.1.0-dev",
+  "version": "0.1.0",
   "private": true,
   "description": "Ziex is a framework for building web applications with Zig.",
   "main": "src/index.ts",
@@ -45,6 +45,6 @@
     "publish": "zig build -p dist -Dfrom-source=true && cd dist && npm publish"
   },
   "dependencies": {
-    "@ziex/cli": "0.1.0-dev.1252"
+    "@ziex/cli": "0.1.0"
   }
 }

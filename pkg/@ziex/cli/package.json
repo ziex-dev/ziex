@@ -1,6 +1,6 @@
 {
   "name": "@ziex/cli",
-  "version": "0.1.0-dev.928",
+  "version": "0.1.0",
   "description": "Ziex is a framework for building web applications with Zig.",
   "type": "module",
   "bin": {
@@ -13,11 +13,11 @@
   "license": "MIT",
   "preferUnplugged": true,
   "optionalDependencies": {
-    "@ziex/cli-darwin-arm64": "0.1.0-dev.928",
-    "@ziex/cli-darwin-x64": "0.1.0-dev.928",
-    "@ziex/cli-linux-x64": "0.1.0-dev.928",
-    "@ziex/cli-linux-arm64": "0.1.0-dev.928",
-    "@ziex/cli-win32-x64": "0.1.0-dev.928",
-    "@ziex/cli-win32-arm64": "0.1.0-dev.928"
+    "@ziex/cli-darwin-arm64": "0.1.0",
+    "@ziex/cli-darwin-x64": "0.1.0",
+    "@ziex/cli-linux-x64": "0.1.0",
+    "@ziex/cli-linux-arm64": "0.1.0",
+    "@ziex/cli-win32-x64": "0.1.0",
+    "@ziex/cli-win32-arm64": "0.1.0"
   }
 }

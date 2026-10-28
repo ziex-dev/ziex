@@ -309,7 +309,7 @@ test "build --static rejects a cross-compile target" {
     try test_cmd(.{
         .args = &.{ "build", "--static", "--target=wasm32-wasi" },
         .expected_exit_code = 1,
-        .expected_stdout_strings = &.{"can't be combined with --target=wasm32-wasi"},
+        .expected_stderr_strings = &.{"can't be combined with --target=wasm32-wasi"},
     });
 }
 
@@ -417,7 +417,7 @@ test "upgrade" {
         .expected_exit_code = 0,
         .expected_stdout_strings = &.{
             "was installed successfully",
-            // "0.1.0-dev",
+            // "0.1.0",
         },
         .expected_files = &.{},
         // .debug = true,

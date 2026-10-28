@@ -1,6 +1,6 @@
 [package]
 name = "zed_ziex"
-version = "0.1.0-dev.278"
+version = "0.1.0"
 edition = "2021"
 publish = false
 license = "MIT"

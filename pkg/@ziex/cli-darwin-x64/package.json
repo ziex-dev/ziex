@@ -1,6 +1,6 @@
 {
   "name": "@ziex/cli-darwin-x64",
-  "version": "0.1.0-dev.928",
+  "version": "0.1.0",
   "description": "ziex CLI binary for macOS x64 (Intel)",
   "os": [
     "darwin"

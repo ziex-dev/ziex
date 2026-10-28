@@ -1,6 +1,6 @@
 .{
     .name = .ziex,
-    .version = "0.1.0-dev",
+    .version = "0.1.0",
     .description = "Ziex is a framework for building web applications with Zig.",
     .repository = "https://github.com/ziex-dev/ziex",
     .homepage = "https://ziex.dev",
