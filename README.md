@@ -174,7 +174,7 @@ const zx = @import("zx");
 | Zig      | Ziex                                                                              | Branch     | Status      |
 | -------- | --------------------------------------------------------------------------------- | ---------- | ----------- |
 | `0.17.x` |                                                                                   | `main`     | Development |
-| `0.17.x` | [`0.1.0-rc.4`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0-rc.4)         |            | **Latest**  |
+| `0.17.x` | [`0.1.0`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0)         |            | **Latest**  |
 | `0.16.x` | [`0.1.0-dev.1259`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0-dev.1259) | `zig-0.16` | Outdated    |
 | `0.15.x` | [`0.1.0-dev-1050`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0-dev.1050) | `zig-0.15` | Outdated    |
 
