@@ -32,42 +32,30 @@ pub fn ensureFetched(allocator: std.mem.Allocator) void {
     const url = api.routesMetaUrl(allocator) orelse return;
     fetched = true;
     connection.markLoading();
-    _ = zx.fetch(.wasm(&onFetchText), allocator, url, .{ .method = .GET }) catch {
-        connection.markUnavailable("Could not start request to the app.");
-        return;
-    };
+    var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = allocator };
+    client.fetchThen(.{ .url = url }, {}, onFetchText);
 }
 
-fn onFetchText(res: ?*zx.Fetch.Response, err: ?zx.Fetch.FetchError) void {
+fn onFetchText(_: void, result: zx.http.Client.Error!zx.http.Client.Result) void {
+    defer zx.client.rerender();
     const allocator = data_allocator orelse return;
-    if (res) |r| {
-        defer r.deinit();
-        if (r.status >= 400) {
-            connection.markUnavailable(if (r.status == 502)
-                "No app is running on this host (dev server returned 502)."
-            else
-                "App returned an error while loading routes.");
-            zx.client.rerender();
-            return;
-        }
-        if (r.text()) |p| {
-            routes = zx.util.zxon.parse([]const AppRoute, allocator, p, .{}) catch {
-                connection.markUnavailable("App responded, but the routes payload was invalid.");
-                zx.client.rerender();
-                return;
-            };
-            if (selected_path.len == 0 and routes.len > 0) {
-                selected_path = routes[0].path;
-            }
-            connection.markConnected();
-        } else |_| {
-            connection.markUnavailable("Empty response from the app.");
-        }
-    } else {
-        _ = err;
+    const r = result catch {
         connection.markUnavailable(connection.defaultUnavailableReason(allocator));
+        return;
+    };
+    const status: u16 = @backingInt(r.status);
+    if (status >= 400) return connection.markUnavailable(if (status == 502)
+        "No app is running on this host (dev server returned 502)."
+    else
+        "App returned an error while loading routes.");
+    if (r.body.len == 0) return connection.markUnavailable("Empty response from the app.");
+
+    routes = zx.util.zxon.parse([]const AppRoute, allocator, r.body, .{}) catch
+        return connection.markUnavailable("App responded, but the routes payload was invalid.");
+    if (selected_path.len == 0 and routes.len > 0) {
+        selected_path = routes[0].path;
     }
-    zx.client.rerender();
+    connection.markConnected();
 }
 
 pub fn setSearch(value: ?[]const u8) void {

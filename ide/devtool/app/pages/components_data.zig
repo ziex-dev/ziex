@@ -33,43 +33,28 @@ pub fn ensureFetched(allocator: std.mem.Allocator) void {
     }) orelse return;
     fetched = true;
     connection.markLoading();
-    _ = zx.fetch(.wasm(&onFetchText), allocator, url, .{ .method = .GET }) catch {
-        connection.markUnavailable("Could not start request to the app.");
-        return;
-    };
+    var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = allocator };
+    client.fetchThen(.{ .url = url }, {}, onFetchText);
 }
 
-fn onFetchText(res: ?*zx.Fetch.Response, err: ?zx.Fetch.FetchError) void {
+fn onFetchText(_: void, result: zx.http.Client.Error!zx.http.Client.Result) void {
+    defer zx.client.rerender();
     const allocator = data_allocator orelse return;
-    if (res) |r| {
-        defer r.deinit();
-        if (r.status >= 400) {
-            connection.markUnavailable(unavailableReason(allocator, r.status));
-            zx.client.rerender();
-            return;
-        }
-        if (r.text()) |p| {
-            const parsed = zx.util.zxon.parse(zx.util.devtool.ComponentSerializable, allocator, p, .{}) catch {
-                connection.markUnavailable("App responded, but the component payload was invalid.");
-                zx.client.rerender();
-                return;
-            };
-            const mapped = data.fromSerializableRoot(allocator, parsed) catch {
-                connection.markUnavailable("Failed to map component tree.");
-                zx.client.rerender();
-                return;
-            };
-            std.log.info("Fetched {d} root components", .{mapped.len});
-            components = mapped;
-            connection.markConnected();
-        } else |_| {
-            connection.markUnavailable("Empty response from the app.");
-        }
-    } else {
-        _ = err;
+    const r = result catch {
         connection.markUnavailable(connection.defaultUnavailableReason(allocator));
-    }
-    zx.client.rerender();
+        return;
+    };
+    const status: u16 = @backingInt(r.status);
+    if (status >= 400) return connection.markUnavailable(unavailableReason(allocator, status));
+    if (r.body.len == 0) return connection.markUnavailable("Empty response from the app.");
+
+    const parsed = zx.util.zxon.parse(zx.util.devtool.ComponentSerializable, allocator, r.body, .{}) catch
+        return connection.markUnavailable("App responded, but the component payload was invalid.");
+    const mapped = data.fromSerializableRoot(allocator, parsed) catch
+        return connection.markUnavailable("Failed to map component tree.");
+    std.log.info("Fetched {d} root components", .{mapped.len});
+    components = mapped;
+    connection.markConnected();
 }
 
 fn unavailableReason(allocator: std.mem.Allocator, status_code: u16) []const u8 {

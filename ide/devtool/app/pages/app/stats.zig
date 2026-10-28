@@ -87,10 +87,8 @@ fn fetchComponentsCount(allocator: std.mem.Allocator) void {
     const url = api.componentsUrl(allocator, .{ .include_native = false }) orelse return;
     components_fetch_started = true;
     connection.markLoading();
-    _ = zx.fetch(.wasm(&onFetchComponentsCount), allocator, url, .{ .method = .GET }) catch {
-        connection.markUnavailable("Could not start request to the app.");
-        return;
-    };
+    var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = allocator };
+    client.fetchThen(.{ .url = url }, {}, onFetchComponentsCount);
 }
 
 fn fetchAppInfo(allocator: std.mem.Allocator) void {
@@ -98,7 +96,8 @@ fn fetchAppInfo(allocator: std.mem.Allocator) void {
     if (app_info_fetch_started) return;
     const url = api.appInfoUrl(allocator) orelse return;
     app_info_fetch_started = true;
-    _ = zx.fetch(.wasm(&onFetchAppInfo), allocator, url, .{ .method = .GET }) catch return;
+    var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = allocator };
+    client.fetchThen(.{ .url = url }, {}, onFetchAppInfo);
 }
 
 fn fetchRuntimeInfo(allocator: std.mem.Allocator) void {
@@ -106,98 +105,66 @@ fn fetchRuntimeInfo(allocator: std.mem.Allocator) void {
     if (runtime_info_fetch_started) return;
     const url = api.runtimeInfoUrl(allocator) orelse return;
     runtime_info_fetch_started = true;
-    _ = zx.fetch(.wasm(&onFetchRuntimeInfo), allocator, url, .{ .method = .GET }) catch return;
+    var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = allocator };
+    client.fetchThen(.{ .url = url }, {}, onFetchRuntimeInfo);
 }
 
-fn onFetchComponentsCount(res: ?*zx.Fetch.Response, err: ?zx.Fetch.FetchError) void {
+fn onFetchComponentsCount(_: void, result: zx.http.Client.Error!zx.http.Client.Result) void {
+    defer zx.client.rerender();
     const allocator = data_allocator orelse return;
-    if (res) |r| {
-        defer r.deinit();
-        if (r.status >= 400) {
-            connection.markUnavailable(if (r.status == 502)
-                "No app is running on this host (dev server returned 502)."
-            else
-                "App returned an error while loading components.");
-            zx.client.rerender();
-            return;
-        }
-        if (r.text()) |p| {
-            const parsed = zx.util.zxon.parse(zx.util.devtool.ComponentSerializable, allocator, p, .{}) catch {
-                connection.markUnavailable("App responded, but the component payload was invalid.");
-                zx.client.rerender();
-                return;
-            };
-            component_count = api.countSerializable(&parsed, 0);
-            connection.markConnected();
-        } else |_| {
-            connection.markUnavailable("Empty response from the app.");
+    const r = result catch {
+        connection.markUnavailable(connection.defaultUnavailableReason(allocator));
+        return;
+    };
+    const status: u16 = @backingInt(r.status);
+    if (status >= 400) return connection.markUnavailable(if (status == 502)
+        "No app is running on this host (dev server returned 502)."
+    else
+        "App returned an error while loading components.");
+    if (r.body.len == 0) return connection.markUnavailable("Empty response from the app.");
+
+    const parsed = zx.util.zxon.parse(zx.util.devtool.ComponentSerializable, allocator, r.body, .{}) catch
+        return connection.markUnavailable("App responded, but the component payload was invalid.");
+    component_count = api.countSerializable(&parsed, 0);
+    connection.markConnected();
+}
+
+fn onFetchAppInfo(_: void, result: zx.http.Client.Error!zx.http.Client.Result) void {
+    defer zx.client.rerender();
+    const r = result catch return;
+    if (@backingInt(r.status) >= 400) return;
+
+    const parsed = r.json(DevAppInfo, zx.allocator) catch return;
+    defer parsed.deinit();
+    const info = parsed.value;
+    outer_port = info.outer_port;
+    inner_port = info.inner_port;
+    route_count = info.route_count;
+    injection_count = info.injection_count;
+    adopt(&install_prefix_owned, &install_prefix, info.install_prefix);
+    adopt(&exe_path_owned, &exe_path, info.exe_path);
+    if (info.injections.len > 0) {
+        const joined = std.mem.join(zx.allocator, ", ", info.injections) catch null;
+        if (joined) |label| {
+            if (injections_label_owned) |prev| zx.allocator.free(prev);
+            injections_label_owned = label;
+            injections_label = label;
         }
     } else {
-        _ = err;
-        connection.markUnavailable(connection.defaultUnavailableReason(allocator));
+        adopt(&injections_label_owned, &injections_label, null);
     }
-    zx.client.rerender();
 }
 
-fn onFetchAppInfo(res: ?*zx.Fetch.Response, err: ?zx.Fetch.FetchError) void {
-    _ = err;
-    if (res) |r| {
-        defer r.deinit();
-        if (r.status >= 400) {
-            zx.client.rerender();
-            return;
-        }
-        if (r.text()) |p| {
-            const parsed = std.json.parseFromSlice(DevAppInfo, zx.allocator, p, .{
-                .ignore_unknown_fields = true,
-                .allocate = .alloc_always,
-            }) catch {
-                zx.client.rerender();
-                return;
-            };
-            defer parsed.deinit();
-            const info = parsed.value;
-            outer_port = info.outer_port;
-            inner_port = info.inner_port;
-            route_count = info.route_count;
-            injection_count = info.injection_count;
-            adopt(&install_prefix_owned, &install_prefix, info.install_prefix);
-            adopt(&exe_path_owned, &exe_path, info.exe_path);
-            if (info.injections.len > 0) {
-                const joined = std.mem.join(zx.allocator, ", ", info.injections) catch null;
-                if (joined) |label| {
-                    if (injections_label_owned) |prev| zx.allocator.free(prev);
-                    injections_label_owned = label;
-                    injections_label = label;
-                }
-            } else {
-                adopt(&injections_label_owned, &injections_label, null);
-            }
-        } else |_| {}
-    }
-    zx.client.rerender();
-}
-
-fn onFetchRuntimeInfo(res: ?*zx.Fetch.Response, err: ?zx.Fetch.FetchError) void {
-    _ = err;
+fn onFetchRuntimeInfo(_: void, result: zx.http.Client.Error!zx.http.Client.Result) void {
+    defer zx.client.rerender();
     const allocator = data_allocator orelse return;
-    if (res) |r| {
-        defer r.deinit();
-        if (r.status >= 400) {
-            zx.client.rerender();
-            return;
-        }
-        if (r.text()) |p| {
-            const parsed = zx.util.zxon.parse(RuntimeInfo, allocator, p, .{}) catch {
-                zx.client.rerender();
-                return;
-            };
-            adopt(&app_version_owned, &app_version, parsed.version);
-            if (parsed.route_count > 0) route_count = parsed.route_count;
-            if (!connection.isUnavailable()) connection.markConnected();
-        } else |_| {}
-    }
-    zx.client.rerender();
+    const r = result catch return;
+    if (@backingInt(r.status) >= 400) return;
+
+    const parsed = zx.util.zxon.parse(RuntimeInfo, allocator, r.body, .{}) catch return;
+    adopt(&app_version_owned, &app_version, parsed.version);
+    if (parsed.route_count > 0) route_count = parsed.route_count;
+    if (!connection.isUnavailable()) connection.markConnected();
 }
 
 pub fn componentCountLabel(allocator: std.mem.Allocator) []const u8 {
