@@ -6,8 +6,8 @@
     .dependencies = .{
         .prebuilt = .{
             // TODO: publish to github packages and use from there instead
-            .url = "https://registry.npmjs.org/ziex/-/ziex-0.1.0-rc.6.tgz",
-            .hash = "ziex_js-0.1.0-dev-v1W0GXOBBQBe84OLXBuqvc9bHPe9i1Q00EtPxaeoBmMw",
+            .url = "https://registry.npmjs.org/ziex/-/ziex-0.1.0.tgz",
+            .hash = "ziex_js-0.1.0-v1W0GWWBBQAGh3oThNXzvMNAH0eGXbTSoA0FLHlxak8b",
             .lazy = true,
         },
         .esbuild = .{ .path = "../plugin-esbuild" },
