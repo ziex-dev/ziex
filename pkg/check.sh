@@ -57,7 +57,7 @@ EOF
 if [ -z "${CI:-}" ]; then
   echo "==> Starting local registry..."
   rm -rf "$VERDACCIO_DIR/.verdaccio-storage"
-  npx --yes verdaccio --config "$VERDACCIO_DIR/verdaccio.yaml" --listen 4873 &
+  npx --yes verdaccio@6 --config "$VERDACCIO_DIR/verdaccio.yaml" --listen 4873 &
   VERDACCIO_PID=$!
 
   for i in $(seq 1 120); do

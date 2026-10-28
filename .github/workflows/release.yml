@@ -275,7 +275,7 @@ jobs:
         env:
           CI: true
         run: |
-          npm install -g verdaccio
+          npm install -g verdaccio@6
           verdaccio --config pkg/@ziex/verdaccio.yaml --listen 4873 &
           # Wait until the registry responds (up to 30s)
           for i in $(seq 1 60); do
