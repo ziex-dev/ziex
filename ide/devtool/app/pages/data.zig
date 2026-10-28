@@ -33,7 +33,7 @@ pub const path_storage_key = "zx-devtool-path-v1";
 const theme_storage_key = "zx-devtool-theme-dark";
 
 var _show_native_elements_loaded = false;
-pub var show_native_elements: bool = true;
+pub var show_native_elements: bool = false;
 pub var include_props: bool = true;
 pub var include_attributes: bool = true;
 pub var tree_collapsed: bool = false;
@@ -88,7 +88,7 @@ pub fn setPath(new: []const u8) void {
 
 pub fn loadSettings() bool {
     if (_show_native_elements_loaded) return true;
-    show_native_elements = lsGetBool(storage_key, true);
+    show_native_elements = lsGetBool(storage_key, false);
     include_props = lsGetBool(include_props_key, true);
     include_attributes = lsGetBool(include_attributes_key, true);
     tree_collapsed = lsGetBool(tree_collapsed_key, false);

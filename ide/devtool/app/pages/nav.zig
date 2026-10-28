@@ -22,7 +22,7 @@ pub fn isActive(url: []const u8, match: []const u8) bool {
 }
 
 pub fn buildUrl(allocator: std.mem.Allocator, path: []const u8) []const u8 {
-    if (options.platform == .chromium) {
+    if (options.platform == .extension) {
         if (std.mem.eql(u8, path, "/")) {
             return "index.html";
         }

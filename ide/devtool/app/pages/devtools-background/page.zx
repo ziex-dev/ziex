@@ -1,9 +1,0 @@
-pub fn Page(ctx: zx.PageContext) zx.Component {
-    return (
-        <div @allocator={ctx.arena} class="devtools-container">
-            <script src="../src/devtools-background.js"></script>
-        </div>
-    );
-}
-
-const zx = @import("zx");

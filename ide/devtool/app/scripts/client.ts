@@ -1,10 +1,14 @@
 import { get, put, del, list } from "../../../../pkg/ziex/src/runtime/kv/localstorage";
 import { init } from "../../../../pkg/ziex/src/wasm";
+import { reportErrors, type EvalRequest, type EvalResponse, type PanelNavigationMessage } from "../../extension/shared";
 
 const HOST_STORAGE_KEY = "zx-devtool-host-v2";
 const PATH_STORAGE_KEY = "zx-devtool-path-v1";
 
 const kvBindings = { default: { get, put, del, list } };
+
+// Inside the extension, surface panel errors in the background worker's console.
+if ((globalThis as any).chrome?.runtime?.id) reportErrors("panel");
 const defaultKV = kvBindings.default;
 
 function persistLocation(origin: string, pathname: string): boolean {
@@ -23,34 +27,17 @@ function persistLocation(origin: string, pathname: string): boolean {
 }
 
 async function syncInspectedPageLocation(): Promise<boolean> {
-    const chromeApi = (globalThis as any).chrome;
-    if (!defaultKV || !chromeApi?.devtools?.inspectedWindow?.eval) return false;
-
-    return await new Promise<boolean>((resolve) => {
-        chromeApi.devtools.inspectedWindow.eval(
-            `(() => {
-                const hook = window.__ZIEX_DEVTOOLS_GLOBAL_HOOK__;
-                return hook ? hook.location : null;
-            })()`,
-            async (
-                location: { origin?: unknown; pathname?: unknown } | null,
-                exceptionInfo: { isException?: boolean } | undefined
-            ) => {
-                if (exceptionInfo?.isException || !location) {
-                    resolve(false);
-                    return;
-                }
-
-                try {
-                    const origin = typeof location.origin === "string" ? location.origin : "";
-                    const pathname = typeof location.pathname === "string" ? location.pathname : "/";
-                    resolve(await persistLocation(origin, pathname));
-                } catch {
-                    resolve(false);
-                }
-            }
-        );
-    });
+    if (!defaultKV) return false;
+    const location = await evalInInspectedWindow<{ origin?: unknown; pathname?: unknown } | null>(
+        `(() => {
+            const hook = window.__ZIEX_DEVTOOLS_GLOBAL_HOOK__;
+            return hook ? hook.location : null;
+        })()`
+    );
+    if (!location) return false;
+    const origin = typeof location.origin === "string" ? location.origin : "";
+    const pathname = typeof location.pathname === "string" ? location.pathname : "/";
+    return persistLocation(origin, pathname);
 }
 
 async function syncLocationFromUrl(href: string): Promise<boolean> {
@@ -73,22 +60,18 @@ async function refreshFromNavigation(href?: string): Promise<void> {
     await window.__zx_dev_reinit?.();
 }
 
+// Relayed through the devtools page (extension/devtools.ts); Safari kills a panel
+// that calls devtools APIs itself.
 function evalInInspectedWindow<T = unknown>(expression: string): Promise<T | undefined> {
     const chromeApi = (globalThis as any).chrome;
-    if (!chromeApi?.devtools?.inspectedWindow?.eval) return Promise.resolve(undefined);
+    const tabId = chromeApi?.devtools?.inspectedWindow?.tabId;
+    if (typeof tabId !== 'number' || !chromeApi?.runtime?.sendMessage) return Promise.resolve(undefined);
 
-    return new Promise<T | undefined>((resolve) => {
-        chromeApi.devtools.inspectedWindow.eval(
-            expression,
-            (result: T | undefined, exceptionInfo: { isException?: boolean } | undefined) => {
-                if (exceptionInfo?.isException) {
-                    resolve(undefined);
-                    return;
-                }
-                resolve(result);
-            }
-        );
-    });
+    const request: EvalRequest = { type: 'zx-eval', tabId, expression };
+    return chromeApi.runtime
+        .sendMessage(request)
+        .then((response?: EvalResponse) => (response && !response.error ? (response.result as T) : undefined))
+        .catch(() => undefined);
 }
 
 /**
@@ -156,12 +139,30 @@ function inspectedHighlightScript(selector: string | null, occurrence: number): 
     })()`;
 }
 
+// Hovering fires faster than evals round-trip through the devtools page, so only
+// the latest highlight is sent; intermediate ones are dropped.
+let pendingHighlight: string | null = null;
+let highlightInFlight: Promise<void> | null = null;
+
+function queueHighlight(script: string): Promise<void> {
+    pendingHighlight = script;
+    highlightInFlight ??= (async () => {
+        while (pendingHighlight !== null) {
+            const next = pendingHighlight;
+            pendingHighlight = null;
+            await evalInInspectedWindow(next);
+        }
+        highlightInFlight = null;
+    })();
+    return highlightInFlight;
+}
+
 async function highlightInspectedComponent(selector: string, occurrence: number): Promise<void> {
-    await evalInInspectedWindow(inspectedHighlightScript(selector, occurrence));
+    await queueHighlight(inspectedHighlightScript(selector, occurrence));
 }
 
 async function clearInspectedComponentHighlight(): Promise<void> {
-    await evalInInspectedWindow(inspectedHighlightScript(null, 0));
+    await queueHighlight(inspectedHighlightScript(null, 0));
 }
 
 /**
@@ -556,12 +557,14 @@ function applyUrlConfig(): boolean {
 }
 
 main();
+// Full and SPA navigations of the inspected page, forwarded by extension/devtools.ts.
 const chromeApi = (globalThis as any).chrome;
-if (chromeApi?.devtools?.network?.onNavigated) {
-    chromeApi.devtools.network.onNavigated.addListener(async (href: string) => {
-        await refreshFromNavigation(href);
-    });
-}
+const inspectedTabId = chromeApi?.devtools?.inspectedWindow?.tabId;
+chromeApi?.runtime?.onMessage?.addListener((msg: PanelNavigationMessage) => {
+    if (msg?.type === 'zx-panel-navigation' && msg.tabId === inspectedTabId) {
+        void refreshFromNavigation(msg.href);
+    }
+});
 
 // Intercept clicks on route links and navigate the inspected page instead of
 // opening a new tab, when running inside the Chrome DevTools extension.
@@ -569,23 +572,11 @@ document.addEventListener('click', (e: MouseEvent) => {
     const anchor = (e.target as Element)?.closest?.('[data-route-navigate]') as HTMLElement | null;
     if (!anchor) return;
 
-    const chromeApi = (globalThis as any).chrome;
-    if (!chromeApi?.devtools?.inspectedWindow?.eval) return;
+    if (typeof inspectedTabId !== 'number') return;
 
     e.preventDefault();
     const path = anchor.getAttribute('data-route-navigate') || '/';
-    chromeApi.devtools.inspectedWindow.eval(
-        `window.location.pathname = ${JSON.stringify(path)}`
-    );
-});
-
-// Listen for SPA navigation events forwarded from the content script
-// via devtools-background.js.
-window.addEventListener('zx-navigation', async (e: Event) => {
-    const href = (e as CustomEvent).detail?.href;
-    if (typeof href === 'string') {
-        await refreshFromNavigation(href);
-    }
+    void evalInInspectedWindow(`window.location.pathname = ${JSON.stringify(path)}`);
 });
 
 document.addEventListener('mouseover', async (e: MouseEvent) => {
@@ -648,12 +639,22 @@ function hostWsBase(): string {
     return hostHttpBase().replace(/^http/, 'ws');
 }
 
+// DevServer endpoints only exist on local `zx dev` hosts (also all the extension CSP allows).
+function isLocalHost(): boolean {
+    try {
+        const { hostname } = new URL(hostHttpBase());
+        return hostname === 'localhost' || hostname === '127.0.0.1';
+    } catch {
+        return false;
+    }
+}
+
 // Open selected component source in the developer's editor via DevServer.
 document.addEventListener('click', (e: MouseEvent) => {
     const btn = (e.target as Element)?.closest?.('[data-open-file]') as HTMLElement | null;
     if (!btn) return;
     const file = btn.getAttribute('data-open-file');
-    if (!file) return;
+    if (!file || !isLocalHost()) return;
     e.preventDefault();
     const line = btn.getAttribute('data-open-line') || '1';
     const url = `${hostHttpBase()}/.well-known/_zx/open-in-editor?file=${encodeURIComponent(file)}&line=${encodeURIComponent(line)}&col=1`;
@@ -690,6 +691,7 @@ function connectDevSocket() {
     }
     disconnectDevSocket();
     devSocketHost = host;
+    if (!isLocalHost()) return;
     let ws: WebSocket;
     try {
         ws = new WebSocket(`${hostWsBase()}/.well-known/_zx/devsocket`);

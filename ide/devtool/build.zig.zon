@@ -15,5 +15,6 @@
         "build.zig",
         "build.zig.zon",
         "app",
+        "extension",
     },
 }

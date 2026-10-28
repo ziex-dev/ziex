@@ -556,7 +556,11 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
         );
     }
 
-    const source = await WebAssembly.instantiateStreaming(fetch(url), importObject);
+    // Streaming requires `application/wasm`, which some hosts (e.g. Safari extension pages) don't send
+    const response = await fetch(url);
+    const source = response.headers.get("content-type")?.startsWith("application/wasm")
+        ? await WebAssembly.instantiateStreaming(response, importObject)
+        : await WebAssembly.instantiate(await response.arrayBuffer(), importObject);
     const { instance } = source;
 
     wasmMemory = instance.exports.memory as WebAssembly.Memory;
