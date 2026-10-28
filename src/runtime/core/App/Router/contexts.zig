@@ -166,11 +166,11 @@ pub fn ComponentCtx(comptime PropsType: type) type {
                     fn (*ActionContext) void => actionBind(handler, alloc, self),
 
                     // Client stubs
-                    fn (*ClientEvent) void => zx.EventHandler.clientStub(true),
-                    fn (*ClientEvent.Stateful) void => zx.EventHandler.clientStub(true),
-                    fn (*ClientActionContext.Stateful) void => zx.EventHandler.clientStub(true),
-                    fn (*ClientActionContext) void => zx.EventHandler.clientStub(true),
-                    fn (ClientActionContext) void => zx.EventHandler.clientStub(true),
+                    fn (*ClientEvent) void => zx.EventHandler.clientStub(),
+                    fn (*ClientEvent.Stateful) void => zx.EventHandler.clientStub(),
+                    fn (*ClientActionContext.Stateful) void => zx.EventHandler.clientStub(),
+                    fn (*ClientActionContext) void => zx.EventHandler.clientStub(),
+                    fn (ClientActionContext) void => zx.EventHandler.clientStub(),
                     else => bindServerFallback(handler, alloc, self, HandlerType, params),
                 },
                 .client => switch (FnType) {
@@ -198,7 +198,7 @@ pub fn ComponentCtx(comptime PropsType: type) type {
 
 fn bindServerFallback(comptime handler: anytype, alloc: Allocator, ctx: anytype, comptime HandlerType: type, comptime params: []const ?type) zx.EventHandler {
     if (comptime isClientOnlyHandler(params)) {
-        return zx.EventHandler.clientStub(true);
+        return zx.EventHandler.clientStub();
     }
 
     if (comptime isServerEventHandler(params)) {

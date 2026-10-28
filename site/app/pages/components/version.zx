@@ -119,7 +119,7 @@ fn fetchLatestRelease(allocator: zx.Allocator) ?GhRelease {
         .timeout_ms = 3_000,
     };
 
-    const response = fetchWithTimeout(allocator, options) orelse return null;
+    const response = fetchOk(allocator, options) orelse return null;
     defer response.deinit(allocator);
 
     const parsed = response.json(GithubRelease, allocator) catch return null;
@@ -137,47 +137,6 @@ fn fetchLatestRelease(allocator: zx.Allocator) ?GhRelease {
     return .{
         .version = allocator.dupe(u8, version) catch return null,
         .url = allocator.dupe(u8, html_url) catch return null,
-    };
-}
-
-/// The timeout is enforced by the host on wasm and raced against a timer natively.
-fn fetchWithTimeout(allocator: zx.Allocator, options: zx.http.Client.FetchOptions) ?zx.http.Client.Result {
-    if (comptime zx.platform.isWasm()) return fetchOk(allocator, options);
-
-    const io = zx.Io.default();
-
-    const Branch = union(enum) {
-        response: ?zx.http.Client.Result,
-        timer: void,
-    };
-
-    const FetchTask = struct {
-        fn run(a: zx.Allocator, fetch_opts: zx.http.Client.FetchOptions) ?zx.http.Client.Result {
-            return fetchOk(a, fetch_opts);
-        }
-    };
-
-    const Timer = struct {
-        fn run(t_io: std.Io, ms: u32) void {
-            t_io.sleep(.fromMilliseconds(ms), .awake) catch {};
-        }
-    };
-
-    var buffer: [2]Branch = undefined;
-    var selector = std.Io.Select(Branch).init(io, &buffer);
-
-    selector.async(.response, FetchTask.run, .{ allocator, options });
-    selector.async(.timer, Timer.run, .{ io, options.timeout_ms });
-
-    const winner = selector.await() catch {
-        zx.log.warn("version fetch timed out or was cancelled", .{});
-        return null;
-    };
-    while (selector.cancel()) |_| {}
-
-    return switch (winner) {
-        .response => |r| r,
-        .timer => null,
     };
 }
 

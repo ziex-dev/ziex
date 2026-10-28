@@ -1,8 +1,8 @@
 //! `std.Io` for the browser. Clocks, entropy and sleep go to the page's JS;
 //! everything else fails like `std.Io.failing`.
 //!
-//! `sleep` suspends through JSPI, so like a blocking `Client.fetch` it must run in
-//! a handler that may suspend. Without JSPI it busy-waits.
+//! `sleep` suspends the calling handler through JSPI, like a blocking `Client.fetch`.
+//! Without JSPI it busy-waits.
 const Web = @This();
 
 const std = @import("std");

@@ -39,6 +39,7 @@ pub const Error = error{
     InvalidResponse,
     TooManyPendingRequests,
     OutOfMemory,
+    Canceled,
 };
 
 pub const Redirect = enum {
@@ -57,7 +58,8 @@ pub const FetchOptions = struct {
     headers: []const Header = &.{},
     payload: ?[]const u8 = null,
     redirect: Redirect = .follow,
-    /// 0 disables the timeout. Only enforced on wasm for now.
+    /// 0 disables the timeout. Natively the request races `io.sleep`, which needs
+    /// an Io with concurrency; without it the request runs untimed.
     timeout_ms: u32 = 30_000,
 
     pub fn methodName(self: FetchOptions) []const u8 {
@@ -173,6 +175,42 @@ fn stdClient(client: *Client) Error!*std.http.Client {
 }
 
 fn fetchNative(client: *Client, options: FetchOptions) Error!Result {
+    if (options.timeout_ms == 0) return client.fetchUntimed(options);
+
+    const Branch = union(enum) {
+        fetched: Error!Result,
+        expired: std.Io.Cancelable!void,
+    };
+    var buffer: [2]Branch = undefined;
+    var select: std.Io.Select(Branch) = .init(client.io, &buffer);
+
+    select.concurrent(.expired, std.Io.sleep, .{ client.io, .fromMilliseconds(options.timeout_ms), .awake }) catch
+        return client.fetchUntimed(options);
+    select.concurrent(.fetched, fetchUntimed, .{ client, options }) catch {
+        select.cancelDiscard();
+        return client.fetchUntimed(options);
+    };
+
+    const first = select.await() catch |err| {
+        client.discard(&select);
+        return err;
+    };
+    client.discard(&select);
+    return switch (first) {
+        .fetched => |result| result,
+        .expired => error.Timeout,
+    };
+}
+
+/// Cancels whatever is still running, freeing a response that finished too late.
+fn discard(client: *Client, select: anytype) void {
+    while (select.cancel()) |late| switch (late) {
+        .fetched => |result| if (result) |res| res.deinit(client.allocator) else |_| {},
+        .expired => {},
+    };
+}
+
+fn fetchUntimed(client: *Client, options: FetchOptions) Error!Result {
     const uri = std.Uri.parse(options.url) catch return error.InvalidUrl;
     const sc = try client.stdClient();
     if (options.method_name) |name| return client.fetchCustomMethod(sc, uri, name, options);
@@ -273,6 +311,7 @@ fn writeHead(
 fn mapError(err: anyerror) Error {
     return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
+        error.Canceled => error.Canceled,
         error.UnsupportedUriScheme, error.UriMissingHost, error.UriHostTooLong => error.InvalidUrl,
         error.HttpHeadersInvalid, error.HttpChunkInvalid, error.HttpContentEncodingUnsupported => error.InvalidResponse,
         else => error.NetworkError,

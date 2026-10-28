@@ -41,6 +41,7 @@
   "scripts": {
     "build": "zig build -p dist -Dfrom-source=true",
     "test": "bun test src/runtime/wire.test.ts",
+    "test:jspi": "node --experimental-wasm-jspi --test src/runtime/jspi.test.ts",
     "publish": "zig build -p dist -Dfrom-source=true && cd dist && npm publish"
   },
   "dependencies": {

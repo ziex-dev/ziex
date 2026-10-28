@@ -37,12 +37,12 @@ pub extern "__zx" fn _formReset(vnode_id: u64) void;
 /// Forward a log message to the JS console. level: 0=error, 1=warn, 2=info, 3=debug
 pub extern "__zx" fn _log(level: u8, ptr: [*]const u8, len: usize) void;
 
-// Event handler metadata
-/// Register whether a delegated event handler for a vnode may suspend.
-pub extern "__zx" fn _setEventHandlerMode(vnode_id: u64, event_type_id: u8, may_suspend: u8) void;
+// Event handlers
+/// Register a delegated event handler for a vnode.
+pub extern "__zx" fn _registerEventHandler(vnode_id: u64, event_type_id: u8) void;
 
-/// Clear all delegated event handler metadata for a vnode.
-pub extern "__zx" fn _clearEventHandlerModes(vnode_id: u64) void;
+/// Clear all delegated event handlers for a vnode.
+pub extern "__zx" fn _clearEventHandlers(vnode_id: u64) void;
 
 // Fetch
 pub extern "__zx" fn _fetchAsync(

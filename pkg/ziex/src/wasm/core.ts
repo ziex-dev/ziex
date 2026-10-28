@@ -1,6 +1,7 @@
 import { ZigJS } from "../../../../vendor/jsz/js/src";
 import { createFetchImports, fetchMeta, performFetch } from "../runtime/fetch";
 import { createIoImports } from "../runtime/io";
+import { createSuspendGate, type SuspendGate } from "../runtime/jspi";
 import {
     CallbackType_Event,
     CallbackType_FetchSuccess,
@@ -110,11 +111,18 @@ export function writeBytes(ptr: number, data: Uint8Array): void {
     view.set(data, start);
 }
 
+let gate: SuspendGate | null = null;
+
+/** Starts the gate for a new wasm instance. Call it before building that instance's imports. */
+export function resetSuspendGate(): SuspendGate | null {
+    gate = createSuspendGate();
+    return gate;
+}
+
+/** Lets `fn` suspend (JSPI), ordered by the instance's `SuspendGate`. */
 export function wrapPromisingExport<F extends (...args: any[]) => any>(fn: F | undefined): F | undefined {
     if (!fn) return undefined;
-    const promising = (WebAssembly as any).promising;
-    if (typeof promising !== "function") return fn;
-    return promising(fn) as F;
+    return gate ? (gate.promising(fn) as unknown as F) : fn;
 }
 
 export function invokeWasmExport<F extends (...args: any[]) => any>(
@@ -275,16 +283,17 @@ export class ZxBridgeCore {
      * to additionally include DOM and WebSocket bindings.
      */
     static createImportObject(bridgeRef: [ZxBridgeCore | null]): WebAssembly.Imports {
+        const gate = resetSuspendGate();
         return {
             ...jsz.importObject(),
             __zx_io: createIoImports(() => {
                 if (!jsz.memory) throw new Error("WASM memory is not ready");
                 return jsz.memory;
-            }) as WebAssembly.ModuleImports,
+            }, gate) as WebAssembly.ModuleImports,
             __zx_net: createFetchImports(() => {
                 if (!jsz.memory) throw new Error("WASM memory is not ready");
                 return jsz.memory;
-            }) as WebAssembly.ModuleImports,
+            }, gate) as WebAssembly.ModuleImports,
             __zx: {
                 _log: (level: number, ptr: number, len: number) => ZxBridgeCore.log(level, ptr, len),
                 _fetchAsync: (

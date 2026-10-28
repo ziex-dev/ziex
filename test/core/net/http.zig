@@ -264,6 +264,29 @@ test "fetch > reuses the client across requests" {
     }.run);
 }
 
+test "fetch > timeout cancels a slow request" {
+    try forEachBackend(struct {
+        fn run(client: *Client, base: []const u8) !void {
+            var buf: [64]u8 = undefined;
+            const start = std.Io.Clock.awake.now(io);
+            try std.testing.expectError(error.Timeout, client.fetch(.{ .url = try url(&buf, base, "/slow?ms=400"), .timeout_ms = 50 }));
+            const elapsed = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+            try std.testing.expect(elapsed < 300 * std.time.ns_per_ms);
+        }
+    }.run);
+}
+
+test "fetch > response within the timeout" {
+    try forEachBackend(struct {
+        fn run(client: *Client, base: []const u8) !void {
+            var buf: [64]u8 = undefined;
+            const res = try client.fetch(.{ .url = try url(&buf, base, "/slow?ms=10"), .timeout_ms = 2_000 });
+            defer res.deinit(gpa);
+            try std.testing.expectEqualStrings("slow", res.body);
+        }
+    }.run);
+}
+
 test "fetch > invalid url" {
     var client: Client = .{ .io = io, .allocator = gpa };
     defer client.deinit();

@@ -33,6 +33,7 @@ import {
     loadValueFromRef,
     releaseValueRef,
     wrapPromisingExport,
+    resetSuspendGate,
     invokeWasmExport,
     readString,
     writeBytes,
@@ -63,15 +64,13 @@ import { HIGH_FREQ_EVENT_BITS } from "./generated/event_bits";
 export class ZxBridge extends ZxBridgeCore {
     #websockets: Map<bigint, WebSocket> = new Map();
 
+    // Every handler may suspend (fetch, sleep); the gate keeps suspended handlers safe.
     readonly #eventbridge: ((velementId: bigint, eventTypeId: number, eventRef: bigint) => void) | undefined;
-    readonly #eventbridgeAsync: ((velementId: bigint, eventTypeId: number, eventRef: bigint) => void) | undefined;
 
     constructor(exports: WebAssembly.Exports) {
         super(exports);
-        this.#eventbridge = exports.__zx_eventbridge as ((velementId: bigint, eventTypeId: number, eventRef: bigint) => void) | undefined;
-        this.#eventbridgeAsync = wrapPromisingExport(
-            (exports.__zx_eventbridge_async ?? exports.__zx_eventbridge) as
-                ((velementId: bigint, eventTypeId: number, eventRef: bigint) => void) | undefined
+        this.#eventbridge = wrapPromisingExport(
+            exports.__zx_eventbridge as ((velementId: bigint, eventTypeId: number, eventRef: bigint) => void) | undefined
         );
     }
 
@@ -79,25 +78,15 @@ export class ZxBridge extends ZxBridgeCore {
         return !!((eventHandlersPresent.get(velementId) ?? 0) & (1 << eventTypeId));
     }
 
-    eventMaySuspend(velementId: number, eventTypeId: number): boolean {
-        return !!((eventHandlersSuspend.get(velementId) ?? 0) & (1 << eventTypeId));
-    }
-
-    setEventHandlerMode(velementId: number, eventTypeId: number, maySuspend: boolean): void {
-        const bit = 1 << eventTypeId;
-        const present = (eventHandlersPresent.get(velementId) ?? 0) | bit;
+    registerEventHandler(velementId: number, eventTypeId: number): void {
+        const present = (eventHandlersPresent.get(velementId) ?? 0) | (1 << eventTypeId);
         eventHandlersPresent.set(velementId, present);
-        const suspendBits = eventHandlersSuspend.get(velementId) ?? 0;
-        const nextSuspend = maySuspend ? (suspendBits | bit) : (suspendBits & ~bit);
-        if (nextSuspend === 0) eventHandlersSuspend.delete(velementId);
-        else eventHandlersSuspend.set(velementId, nextSuspend);
         ensureDelegatedListener(eventTypeId);
     }
 
-    clearEventHandlerModes(velementId: number): void {
+    clearEventHandlers(velementId: number): void {
         const present = eventHandlersPresent.get(velementId) ?? 0;
         eventHandlersPresent.delete(velementId);
-        eventHandlersSuspend.delete(velementId);
         // Drop high-freq listeners when no vnode still needs them.
         // Drop high-freq listeners when no vnode still needs them.
         for (let bits = present & HIGH_FREQ_EVENT_BITS; bits !== 0; bits &= bits - 1) {
@@ -214,7 +203,6 @@ export class ZxBridge extends ZxBridgeCore {
     override dispose(): void {
         super.dispose();
         eventHandlersPresent.clear();
-        eventHandlersSuspend.clear();
         for (const ws of this.#websockets.values()) {
             try {
                 ws.close();
@@ -230,32 +218,33 @@ export class ZxBridge extends ZxBridgeCore {
      * (store once per bubble, release after sync/async work completes).
      */
     eventbridge(velementId: number, eventTypeId: number, eventRef: bigint): void | Promise<void> {
-        const id = BigInt(velementId >>> 0);
-        if (this.eventMaySuspend(velementId, eventTypeId)) {
-            return invokeWasmExport(this.#eventbridgeAsync, id, eventTypeId, eventRef) as void | Promise<void>;
-        }
-        invokeWasmExport(this.#eventbridge, id, eventTypeId, eventRef);
+        const run = this.#eventbridge;
+        if (!run) return;
+        const result = run(BigInt(velementId >>> 0), eventTypeId, eventRef) as void | Promise<void>;
+        // Returned so the caller keeps `eventRef` alive until a suspended handler finishes.
+        return result?.catch((error) => console.error(error));
     }
 
     /** Create the full browser import object for WASM instantiation (includes DOM + WebSocket). */
     static override createImportObject(bridgeRef: [ZxBridge | null]): WebAssembly.Imports {
+        const gate = resetSuspendGate();
         return {
             ...jsz.importObject(),
             __zx_io: createIoImports(() => {
                 if (!jsz.memory) throw new Error("WASM memory is not ready");
                 return jsz.memory;
-            }) as WebAssembly.ModuleImports,
+            }, gate) as WebAssembly.ModuleImports,
             __zx_net: createFetchImports(() => {
                 if (!jsz.memory) throw new Error("WASM memory is not ready");
                 return jsz.memory;
-            }) as WebAssembly.ModuleImports,
+            }, gate) as WebAssembly.ModuleImports,
             __zx: {
                 _log: (level: number, ptr: number, len: number) => ZxBridgeCore.log(level, ptr, len),
-                _setEventHandlerMode: (vnodeId: bigint, eventTypeId: number, maySuspend: number) => {
-                    bridgeRef[0]?.setEventHandlerMode(Number(vnodeId), eventTypeId, maySuspend !== 0);
+                _registerEventHandler: (vnodeId: bigint, eventTypeId: number) => {
+                    bridgeRef[0]?.registerEventHandler(Number(vnodeId), eventTypeId);
                 },
-                _clearEventHandlerModes: (vnodeId: bigint) => {
-                    bridgeRef[0]?.clearEventHandlerModes(Number(vnodeId));
+                _clearEventHandlers: (vnodeId: bigint) => {
+                    bridgeRef[0]?.clearEventHandlers(Number(vnodeId));
                 },
                 _fetchAsync: (
                     urlPtr: number,
@@ -366,8 +355,6 @@ const domNodes = new Map<number, Node>();
 
 /** Bitset: which event types have a handler for each vnode. */
 const eventHandlersPresent = new Map<number, number>();
-/** Bitset: which handlers may suspend (JSPI). */
-const eventHandlersSuspend = new Map<number, number>();
 
 /** Remove a detached DOM subtree from domNodes + handler bitsets */
 function cleanupDomNodes(node: Node): void {
@@ -381,7 +368,6 @@ function cleanupDomNodes(node: Node): void {
             if (present !== undefined) {
                 highFreqBits |= present;
                 eventHandlersPresent.delete(ref);
-                eventHandlersSuspend.delete(ref);
             }
             domNodes.delete(ref);
         }

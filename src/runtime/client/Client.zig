@@ -340,7 +340,7 @@ pub fn registerHandler(self: *Client, velement_id: u64, event_type: EventType, h
     const cur = self.handler_bits.get(velement_id) orelse 0;
     self.handler_bits.put(velement_id, cur | bit) catch {};
     if (zx.platform.role == .client) {
-        window.ext._setEventHandlerMode(velement_id, @backingInt(event_type), if (handler.may_suspend) 1 else 0);
+        window.ext._registerEventHandler(velement_id, @backingInt(event_type));
     }
 }
 
@@ -349,8 +349,8 @@ pub fn getHandler(self: *Client, velement_id: u64, event_type: EventType) ?zx.Ev
     return self.handler_registry.get(key);
 }
 
-/// `clear_js_modes == false` when JS already cleaned via `_rc`/`_rpc`.
-pub fn unregisterVElement(self: *Client, velement: *vtree_mod.VElement, clear_js_modes: bool) void {
+/// `clear_js == false` when JS already dropped the handlers via `_rc`/`_rpc`.
+pub fn unregisterVElement(self: *Client, velement: *vtree_mod.VElement, clear_js: bool) void {
     _ = self.id_to_velement.remove(velement.id);
 
     if (self.handler_bits.fetchRemove(velement.id)) |entry| {
@@ -366,12 +366,12 @@ pub fn unregisterVElement(self: *Client, velement: *vtree_mod.VElement, clear_js
         }
     }
 
-    if (clear_js_modes and zx.platform.role == .client) {
-        window.ext._clearEventHandlerModes(velement.id);
+    if (clear_js and zx.platform.role == .client) {
+        window.ext._clearEventHandlers(velement.id);
     }
 
     for (velement.children.items) |child| {
-        self.unregisterVElement(child, clear_js_modes);
+        self.unregisterVElement(child, clear_js);
     }
 }
 
@@ -400,10 +400,6 @@ export fn __zx_eventbridge(velement_id: u64, event_type_id: u8, event_ref: u64) 
         const event_type: EventType = @fromBackingInt(@intCast(event_type_id));
         _ = client.dispatchEvent(velement_id, event_type, event_ref);
     }
-}
-
-export fn __zx_eventbridge_async(velement_id: u64, event_type_id: u8, event_ref: u64) void {
-    __zx_eventbridge(velement_id, event_type_id, event_ref);
 }
 
 /// Browser `std.log` sink via `__zx._log`.

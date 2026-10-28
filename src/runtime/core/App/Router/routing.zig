@@ -343,7 +343,7 @@ pub fn Fetch(comptime Ctx: type) type {
             return .{ .io = self.io, .allocator = allocator };
         }
 
-        /// In the browser this suspends, so call it from a handler that may suspend, or use `fetchThen`.
+        /// In the browser this suspends the calling handler (JSPI) until the response arrives.
         pub fn fetch(self: *const Ctx, options: Client.FetchOptions) Client.Error!Client.Result {
             var c = client(self);
             defer c.deinit();

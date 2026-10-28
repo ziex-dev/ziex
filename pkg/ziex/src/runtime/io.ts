@@ -1,7 +1,10 @@
-import { Suspending } from "./jspi";
+import { Suspending, type SuspendGate } from "./jspi";
 
 /** `__zx_io` imports backing `zx.Io.Web`: clocks, entropy and sleep. */
-export function createIoImports(getMemory: () => WebAssembly.Memory): WebAssembly.ModuleImports {
+export function createIoImports(
+    getMemory: () => WebAssembly.Memory,
+    gate: SuspendGate | null = null,
+): WebAssembly.ModuleImports {
     // `getRandomValues` fills at most 64 KiB per call.
     const maxRandomChunk = 65536;
     let warnedSleep = false;
@@ -16,6 +19,9 @@ export function createIoImports(getMemory: () => WebAssembly.Memory): WebAssembl
         while (performance.now() < end) { /* busy-wait */ }
     };
 
+    const sleepAsync = (ms: number): Promise<void> =>
+        new Promise((resolve) => { if (ms >= 0) setTimeout(resolve, ms); });
+
     return {
         now: (source: number): bigint => {
             const ms = source === 0 ? performance.timeOrigin + performance.now() : performance.now();
@@ -23,10 +29,7 @@ export function createIoImports(getMemory: () => WebAssembly.Memory): WebAssembl
             return BigInt(whole) * 1_000_000n + BigInt(Math.round((ms - whole) * 1e6));
         },
         resolution: (): bigint => ((globalThis as any).crossOriginIsolated ? 5_000n : 100_000n),
-        sleep: Suspending
-            ? new Suspending((ms: number): Promise<void> =>
-                new Promise((resolve) => { if (ms >= 0) setTimeout(resolve, ms); }))
-            : sleepSync,
+        sleep: gate ? gate.suspending(sleepAsync) : Suspending ? new Suspending(sleepAsync) : sleepSync,
         random: (ptr: number, len: number): number => {
             const bytes = new Uint8Array(getMemory().buffer, ptr >>> 0, len >>> 0);
             const crypto = globalThis.crypto;

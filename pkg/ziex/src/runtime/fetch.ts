@@ -1,4 +1,4 @@
-import { Suspending } from "./jspi";
+import { Suspending, type SuspendGate } from "./jspi";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -83,6 +83,7 @@ export function fetchMeta(status: number, headLen: number): bigint {
  */
 export function createFetchImports(
     getMemory: () => WebAssembly.Memory,
+    gate: SuspendGate | null = null,
 ): WebAssembly.ModuleImports {
     const held = new Map<number, Uint8Array>();
     let nextHandle = 1;
@@ -140,5 +141,5 @@ export function createFetchImports(
         return { fetch: (): number => -1, take };
     }
 
-    return { fetch: new Suspending(doFetch), take };
+    return { fetch: gate ? gate.suspending(doFetch) : new Suspending(doFetch), take };
 }
