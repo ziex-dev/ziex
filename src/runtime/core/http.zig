@@ -50,8 +50,8 @@ pub const CookieOptions = struct {
     path: []const u8 = "",
     /// Specifies allowed hosts to receive the cookie.
     domain: []const u8 = "",
-    /// Indicates the maximum lifetime of the cookie in seconds.
-    max_age: ?i32 = null,
+    /// The cookie's lifetime, sent as whole seconds. Zero or negative expires it now.
+    max_age: ?std.Io.Duration = null,
     /// Indicates that the cookie is sent only over HTTPS.
     secure: bool = false,
     /// Forbids JavaScript from accessing the cookie.
@@ -60,6 +60,11 @@ pub const CookieOptions = struct {
     partitioned: bool = false,
     /// Controls whether the cookie is sent with cross-site requests.
     same_site: ?SameSite = null,
+
+    pub fn maxAgeSeconds(self: CookieOptions) ?i32 {
+        const age = self.max_age orelse return null;
+        return std.math.lossyCast(i32, age.toSeconds());
+    }
 
     pub const SameSite = enum {
         lax,

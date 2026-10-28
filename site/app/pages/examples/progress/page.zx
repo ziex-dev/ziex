@@ -50,7 +50,7 @@ fn start(_: zx.client.Event) void {
     if (interval_id != null) return;
     progress.set(0);
     fetch();
-    interval_id = zx.client.setInterval(&fetch, 1200);
+    interval_id = zx.client.setInterval(&fetch, .fromMilliseconds(1200));
 }
 
 fn stop(_: zx.client.Event) void {

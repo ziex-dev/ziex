@@ -58,9 +58,10 @@ pub const FetchOptions = struct {
     headers: []const Header = &.{},
     payload: ?[]const u8 = null,
     redirect: Redirect = .follow,
-    /// 0 disables the timeout. Natively the request races `io.sleep`, which needs
-    /// an Io with concurrency; without it the request runs untimed.
-    timeout_ms: u32 = 30_000,
+    /// How long to wait for the response, as in `std.http.Client`. Natively the
+    /// request races `io.sleep`, which needs an Io with concurrency; without it the
+    /// request runs untimed.
+    timeout: std.Io.Timeout = .none,
 
     pub fn methodName(self: FetchOptions) []const u8 {
         return self.method_name orelse @tagName(self.method);
@@ -125,7 +126,7 @@ pub fn deinit(client: *Client) void {
 /// Sends the request and waits for the response. The caller owns the result.
 /// In the browser this suspends the calling handler, so it needs JSPI.
 pub fn fetch(client: *Client, options: FetchOptions) Error!Result {
-    if (comptime is_wasm) return host.fetch(client.allocator, options);
+    if (comptime is_wasm) return host.fetch(client.allocator, options, try client.timeoutMillis(options.timeout));
     return client.fetchNative(options);
 }
 
@@ -159,7 +160,10 @@ pub const Callback = *const fn (context: *anyopaque, result: Error!Result) void;
 
 /// `fetchThen` with a type-erased context, for callers that store callbacks.
 pub fn fetchThenErased(client: *Client, options: FetchOptions, context: *anyopaque, callback: Callback) void {
-    if (comptime is_browser) return @import("../../client/fetch.zig").fetchThen(client.allocator, options, context, callback);
+    if (comptime is_browser) {
+        const timeout_ms = client.timeoutMillis(options.timeout) catch |err| return callback(context, err);
+        return @import("../../client/fetch.zig").fetchThen(client.allocator, options, timeout_ms, context, callback);
+    }
 
     const result = client.fetch(options);
     callback(context, result);
@@ -174,8 +178,16 @@ fn stdClient(client: *Client) Error!*std.http.Client {
     return sc;
 }
 
+/// The timeout for the host's `fetch`: 0 for none, or `error.Timeout` if the deadline has passed.
+pub fn timeoutMillis(client: *const Client, timeout: std.Io.Timeout) Error!u32 {
+    const remaining = timeout.toDurationFromNow(client.io) orelse return 0;
+    const ms = remaining.raw.toMilliseconds();
+    if (ms <= 0) return error.Timeout;
+    return std.math.lossyCast(u32, ms);
+}
+
 fn fetchNative(client: *Client, options: FetchOptions) Error!Result {
-    if (options.timeout_ms == 0) return client.fetchUntimed(options);
+    if (options.timeout == .none) return client.fetchUntimed(options);
 
     const Branch = union(enum) {
         fetched: Error!Result,
@@ -184,7 +196,7 @@ fn fetchNative(client: *Client, options: FetchOptions) Error!Result {
     var buffer: [2]Branch = undefined;
     var select: std.Io.Select(Branch) = .init(client.io, &buffer);
 
-    select.concurrent(.expired, std.Io.sleep, .{ client.io, .fromMilliseconds(options.timeout_ms), .awake }) catch
+    select.concurrent(.expired, std.Io.Timeout.sleep, .{ options.timeout, client.io }) catch
         return client.fetchUntimed(options);
     select.concurrent(.fetched, fetchUntimed, .{ client, options }) catch {
         select.cancelDiscard();
@@ -334,7 +346,7 @@ pub fn writeHeadersJson(w: *std.Io.Writer, headers: []const Header) std.Io.Write
 
 /// Blocking fetch through the host (edge runtime, or the browser via JSPI).
 const host = struct {
-    fn fetch(gpa: std.mem.Allocator, options: FetchOptions) Error!Result {
+    fn fetch(gpa: std.mem.Allocator, options: FetchOptions, timeout_ms: u32) Error!Result {
         const method = options.methodName();
         const payload = options.payload orelse "";
 
@@ -355,8 +367,8 @@ const host = struct {
             headers.len,
             payload.ptr,
             payload.len,
-            options.timeout_ms,
-            @intFromEnum(options.redirect),
+            timeout_ms,
+            @backingInt(options.redirect),
             &status,
             &head_len,
             &handle,
@@ -366,7 +378,7 @@ const host = struct {
 
         const bytes = try gpa.alloc(u8, @intCast(n));
         ext.take(handle, bytes.ptr);
-        return Result.parse(gpa, @enumFromInt(status), bytes, head_len);
+        return Result.parse(gpa, @fromBackingInt(@intCast(status)), bytes, head_len);
     }
 
     const ext = struct {

@@ -269,7 +269,7 @@ test "fetch > timeout cancels a slow request" {
         fn run(client: *Client, base: []const u8) !void {
             var buf: [64]u8 = undefined;
             const start = std.Io.Clock.awake.now(io);
-            try std.testing.expectError(error.Timeout, client.fetch(.{ .url = try url(&buf, base, "/slow?ms=400"), .timeout_ms = 50 }));
+            try std.testing.expectError(error.Timeout, client.fetch(.{ .url = try url(&buf, base, "/slow?ms=400"), .timeout = after(50) }));
             const elapsed = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
             try std.testing.expect(elapsed < 300 * std.time.ns_per_ms);
         }
@@ -280,11 +280,38 @@ test "fetch > response within the timeout" {
     try forEachBackend(struct {
         fn run(client: *Client, base: []const u8) !void {
             var buf: [64]u8 = undefined;
-            const res = try client.fetch(.{ .url = try url(&buf, base, "/slow?ms=10"), .timeout_ms = 2_000 });
+            const res = try client.fetch(.{ .url = try url(&buf, base, "/slow?ms=10"), .timeout = after(2_000) });
             defer res.deinit(gpa);
             try std.testing.expectEqualStrings("slow", res.body);
         }
     }.run);
+}
+
+test "fetch > deadline" {
+    try forEachBackend(struct {
+        fn run(client: *Client, base: []const u8) !void {
+            var buf: [64]u8 = undefined;
+            const soon = std.Io.Clock.Timestamp.fromNow(io, .{ .raw = .fromMilliseconds(50), .clock = .awake });
+            try std.testing.expectError(error.Timeout, client.fetch(.{ .url = try url(&buf, base, "/slow?ms=400"), .timeout = .{ .deadline = soon } }));
+
+            const later = std.Io.Clock.Timestamp.fromNow(io, .{ .raw = .fromSeconds(2), .clock = .awake });
+            const res = try client.fetch(.{ .url = try url(&buf, base, "/slow?ms=10"), .timeout = .{ .deadline = later } });
+            defer res.deinit(gpa);
+            try std.testing.expectEqualStrings("slow", res.body);
+        }
+    }.run);
+}
+
+test "fetch > timeout to wasm millis" {
+    var client: Client = .{ .io = io, .allocator = gpa };
+    try std.testing.expectEqual(@as(u32, 0), try client.timeoutMillis(.none));
+    try std.testing.expectEqual(@as(u32, 1500), try client.timeoutMillis(after(1500)));
+    const past = std.Io.Clock.Timestamp.fromNow(io, .{ .raw = .fromMilliseconds(-1), .clock = .awake });
+    try std.testing.expectError(error.Timeout, client.timeoutMillis(.{ .deadline = past }));
+}
+
+fn after(ms: i64) std.Io.Timeout {
+    return .{ .duration = .{ .raw = .fromMilliseconds(ms), .clock = .awake } };
 }
 
 test "fetch > invalid url" {

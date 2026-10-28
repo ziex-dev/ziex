@@ -277,7 +277,7 @@ fn resSetCookie(userdata: ?*anyopaque, name: []const u8, value: []const u8, opts
     try cookie_buf.writer.print("{s}={s}", .{ name, value });
     if (opts.path.len > 0) try cookie_buf.writer.print("; Path={s}", .{opts.path});
     if (opts.domain.len > 0) try cookie_buf.writer.print("; Domain={s}", .{opts.domain});
-    if (opts.max_age) |max_age| try cookie_buf.writer.print("; Max-Age={d}", .{max_age});
+    if (opts.maxAgeSeconds()) |max_age| try cookie_buf.writer.print("; Max-Age={d}", .{max_age});
     if (opts.secure) try cookie_buf.writer.writeAll("; Secure");
     if (opts.http_only) try cookie_buf.writer.writeAll("; HttpOnly");
     if (opts.same_site) |ss| try cookie_buf.writer.print("; SameSite={s}", .{switch (ss) {

@@ -125,7 +125,7 @@ pub const CookieJar = struct {
     /// Deletes a cookie by setting it with an expired max-age.
     pub fn delete(self: *const CookieJar, name: []const u8, options: ?CookieOptions) void {
         var opts = options orelse CookieOptions{};
-        opts.max_age = 0;
+        opts.max_age = .zero;
         self.set(name, "", opts);
     }
 };

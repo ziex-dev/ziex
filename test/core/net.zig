@@ -284,7 +284,7 @@ test "cookie opts > all values" {
     const opts = Response.CookieOptions{
         .path = "/api",
         .domain = "example.com",
-        .max_age = 3600,
+        .max_age = .fromSeconds(3600),
         .secure = true,
         .http_only = true,
         .partitioned = true,
@@ -292,7 +292,7 @@ test "cookie opts > all values" {
     };
     try std.testing.expectEqualStrings("/api", opts.path);
     try std.testing.expectEqualStrings("example.com", opts.domain);
-    try std.testing.expectEqual(@as(?i32, 3600), opts.max_age);
+    try std.testing.expectEqual(@as(?i32, 3600), opts.maxAgeSeconds());
     try std.testing.expect(opts.secure);
     try std.testing.expect(opts.http_only);
     try std.testing.expect(opts.partitioned);

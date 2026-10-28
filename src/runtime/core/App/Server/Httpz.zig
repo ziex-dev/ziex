@@ -243,7 +243,7 @@ pub const HttpzCtx = struct {
         const httpz_opts: httpz.response.CookieOpts = .{
             .path = opts.path,
             .domain = opts.domain,
-            .max_age = opts.max_age,
+            .max_age = opts.maxAgeSeconds(),
             .secure = opts.secure,
             .http_only = opts.http_only,
             .partitioned = opts.partitioned,
@@ -562,7 +562,10 @@ pub fn mapStruct(comptime T: type, src: anytype) T {
             // separately while httpz expects a tagged union
         } else if (@hasField(S, field_name)) {
             const sv = @field(src, field_name);
-            switch (@typeInfo(field_type)) {
+            if (comptime @TypeOf(sv) == ?std.Io.Duration) {
+                // httpz takes whole seconds.
+                @field(out, field_name) = if (sv) |d| std.math.lossyCast(@typeInfo(field_type).optional.child, @max(0, d.toSeconds())) else null;
+            } else switch (@typeInfo(field_type)) {
                 .@"struct" => @field(out, field_name) = mapStruct(field_type, sv),
                 else => @field(out, field_name) = sv,
             }

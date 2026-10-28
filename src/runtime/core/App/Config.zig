@@ -6,7 +6,7 @@ staticdir: ?[]const u8 = null,
 
 pub const CacheConfig = struct {
     max_size: u32 = 1000,
-    default_ttl: u32 = 10,
+    default_ttl: std.Io.Duration = .fromSeconds(10),
 };
 
 pub const ServerConfig = struct {
@@ -55,8 +55,9 @@ pub const ServerConfig = struct {
     };
 
     pub const Timeout = struct {
-        request: ?u32 = null,
-        keepalive: ?u32 = null,
+        /// Whole seconds are used; httpz has no finer resolution.
+        request: ?std.Io.Duration = null,
+        keepalive: ?std.Io.Duration = null,
         request_count: ?usize = null,
     };
 
@@ -71,3 +72,5 @@ pub const ServerConfig = struct {
         compression_write_treshold: ?usize = null,
     };
 };
+
+const std = @import("std");

@@ -37,7 +37,7 @@ pub fn AsyncDemo(ctx: *zx.ComponentContext) zx.Component {
 fn startTimeout(_: zx.client.Event) void {
     status.set("Waiting for timeout");
     std.log.info("setTimeout started (2 seconds)...", .{});
-    _ = zx.client.setTimeout(&onTimeoutFired, 2000);
+    _ = zx.client.setTimeout(&onTimeoutFired, .fromSeconds(2));
 }
 
 fn toggleInterval(_: zx.client.Event) void {
@@ -48,7 +48,7 @@ fn toggleInterval(_: zx.client.Event) void {
         std.log.info("Interval stopped", .{});
     } else {
         interval_count.set(0);
-        interval_id = zx.client.setInterval(&onIntervalTick, 1000);
+        interval_id = zx.client.setInterval(&onIntervalTick, .fromSeconds(1));
         status.set("Interval running");
         std.log.info("Interval started (every 1 second)", .{});
     }

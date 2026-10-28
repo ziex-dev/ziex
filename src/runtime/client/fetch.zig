@@ -19,7 +19,7 @@ const Pending = struct {
 var pending: [max_pending]?Pending = @splat(null);
 var next_fetch_id: u64 = 1;
 
-pub fn fetchThen(allocator: std.mem.Allocator, options: Client.FetchOptions, context: *anyopaque, callback: Client.Callback) void {
+pub fn fetchThen(allocator: std.mem.Allocator, options: Client.FetchOptions, timeout_ms: u32, context: *anyopaque, callback: Client.Callback) void {
     const fetch_id = register(allocator, context, callback) orelse return;
 
     var headers_json: std.Io.Writer.Allocating = .init(allocator);
@@ -41,7 +41,7 @@ pub fn fetchThen(allocator: std.mem.Allocator, options: Client.FetchOptions, con
         headers.len,
         payload.ptr,
         payload.len,
-        options.timeout_ms,
+        timeout_ms,
         @intFromEnum(options.redirect),
         fetch_id,
     );

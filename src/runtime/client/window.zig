@@ -126,25 +126,25 @@ pub const IntervalCallback = *const fn () void;
 const MAX_CALLBACKS = 64;
 
 const TimerApi = struct {
-    pub fn setTimeout(callback: TimeoutCallback, delay_ms: u32) ?u64 {
+    pub fn setTimeout(callback: TimeoutCallback, delay: std.Io.Duration) ?u64 {
         const id = registerCallback(.{
             .callback_type = .timeout,
             .timeout_fn = callback,
             .active = true,
         }) orelse return null;
 
-        ext._setTimeout(id, delay_ms);
+        ext._setTimeout(id, millis(delay));
         return id;
     }
 
-    pub fn setInterval(callback: IntervalCallback, interval_ms: u32) ?u64 {
+    pub fn setInterval(callback: IntervalCallback, interval: std.Io.Duration) ?u64 {
         const id = registerCallback(.{
             .callback_type = .interval,
             .interval_fn = callback,
             .active = true,
         }) orelse return null;
 
-        ext._setInterval(id, interval_ms);
+        ext._setInterval(id, millis(interval));
         return id;
     }
 
@@ -196,16 +196,21 @@ fn registerCallback(entry: CallbackEntry) ?u64 {
     return id;
 }
 
-/// Set a timeout that calls the callback after delay_ms milliseconds
-pub fn setTimeout(callback: TimeoutCallback, delay_ms: u32) ?u64 {
+/// Calls `callback` once after `delay`.
+pub fn setTimeout(callback: TimeoutCallback, delay: std.Io.Duration) ?u64 {
     if (!is_wasm) return null;
-    return TimerApi.setTimeout(callback, delay_ms);
+    return TimerApi.setTimeout(callback, delay);
 }
 
-/// Set an interval that calls the callback every interval_ms milliseconds
-pub fn setInterval(callback: IntervalCallback, interval_ms: u32) ?u64 {
+/// Calls `callback` every `interval`.
+pub fn setInterval(callback: IntervalCallback, interval: std.Io.Duration) ?u64 {
     if (!is_wasm) return null;
-    return TimerApi.setInterval(callback, interval_ms);
+    return TimerApi.setInterval(callback, interval);
+}
+
+/// JS timers take whole milliseconds.
+fn millis(duration: std.Io.Duration) u32 {
+    return std.math.lossyCast(u32, @max(0, duration.toMilliseconds()));
 }
 
 /// Clear an interval by its ID

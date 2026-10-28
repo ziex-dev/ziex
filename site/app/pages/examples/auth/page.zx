@@ -46,7 +46,7 @@ fn handleAction(ctx: zx.PageContext) void {
         if (username.len > 0) {
             ctx.response.cookies.set("session", username, .{
                 .path = "/",
-                .max_age = 3600, // 1 hour
+                .max_age = .fromSeconds(60 * 60),
             });
         }
     } else if (std.mem.eql(u8, action, "Logout")) {

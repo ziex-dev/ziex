@@ -117,8 +117,13 @@ pub const OpenOptions = struct {
     safe_integers: bool = false,
     strict: bool = false,
     max_pool_size: usize = 5,
-    busy_timeout_ms: u32 = 5_000,
+    /// How long a statement waits for a lock before failing with `SQLITE_BUSY`.
+    busy_timeout: std.Io.Duration = .fromSeconds(5),
     schema: [:0]const u8 = main_schema,
+
+    fn busyTimeoutMs(options: OpenOptions) c_int {
+        return std.math.lossyCast(c_int, @max(0, options.busy_timeout.toMilliseconds()));
+    }
 
     pub fn fromGeneric(generic: Db.OpenOptions) OpenOptions {
         return .{
@@ -186,7 +191,7 @@ fn openState(allocator: std.mem.Allocator, io: std.Io, filename: ?[]const u8, op
         .mode = if (shouldPool(path, options)) .pooled else .single,
         .path = path_copy,
         .flags = flags,
-        .busy_timeout_ms = @intCast(options.busy_timeout_ms),
+        .busy_timeout_ms = options.busyTimeoutMs(),
         .schema = options.schema,
     };
     errdefer self.deinitState();
@@ -197,7 +202,7 @@ fn openState(allocator: std.mem.Allocator, io: std.Io, filename: ?[]const u8, op
 
         const pool_config = try allocator.create(PoolConnectionConfig);
         errdefer allocator.destroy(pool_config);
-        pool_config.* = .{ .busy_timeout_ms = @intCast(options.busy_timeout_ms) };
+        pool_config.* = .{ .busy_timeout_ms = options.busyTimeoutMs() };
 
         self.pool = try zqlite.Pool.init(allocator, .{
             .size = @max(options.max_pool_size, 1),
@@ -235,7 +240,7 @@ fn deserializeState(allocator: std.mem.Allocator, io: std.Io, bytes: []const u8,
         .create = true,
         .safe_integers = options.safe_integers,
         .strict = options.strict,
-        .busy_timeout_ms = options.busy_timeout_ms,
+        .busy_timeout = options.busy_timeout,
     });
 
     self.* = .{
@@ -244,7 +249,7 @@ fn deserializeState(allocator: std.mem.Allocator, io: std.Io, bytes: []const u8,
         .mode = .single,
         .path = path_copy,
         .flags = deser_flags,
-        .busy_timeout_ms = @intCast(options.busy_timeout_ms),
+        .busy_timeout_ms = options.busyTimeoutMs(),
         .conn = try zqlite.open(path_z, deser_flags),
     };
     errdefer self.deinitState();

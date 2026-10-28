@@ -116,7 +116,7 @@ fn fetchLatestRelease(allocator: zx.Allocator) ?GhRelease {
             .{ .name = "Accept", .value = "application/vnd.github+json" },
             .{ .name = "User-Agent", .value = "ziex-site" },
         },
-        .timeout_ms = 3_000,
+        .timeout = .{ .duration = .{ .raw = .fromSeconds(3), .clock = .awake } },
     };
 
     const response = fetchOk(allocator, options) orelse return null;
