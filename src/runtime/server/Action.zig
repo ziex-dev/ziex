@@ -78,12 +78,7 @@ pub const Stateful = struct {
     }
 
     pub fn fmt(self: Stateful, comptime format: []const u8, args: anytype) ![]u8 {
-        var aw: std.Io.Writer.Allocating = .init(self.inner._internal.state_ctx.?.arena);
-        defer aw.deinit();
-        aw.writer.print(format, args) catch |err| switch (err) {
-            error.WriteFailed => return error.OutOfMemory,
-        };
-        return aw.toOwnedSlice();
+        return self.inner._internal.state_ctx.?.arena.print(format, args);
     }
 };
 

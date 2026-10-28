@@ -65,7 +65,7 @@ pub const BaseContext = struct {
     }
 
     pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
-        return fmtInner(self.arena, format, args);
+        return self.arena.print(format, args);
     }
 
     pub const fetch = Fetch(Self).fetch;
@@ -251,7 +251,7 @@ pub const RouteContext = struct {
     }
 
     pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
-        return fmtInner(self.arena, format, args);
+        return self.arena.print(format, args);
     }
 
     pub const fetch = Fetch(Self).fetch;
@@ -280,7 +280,7 @@ pub fn SocketCtx(comptime DataType: type) type {
         const Self = @This();
 
         pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
-            return fmtInner(self.arena, format, args);
+            return self.arena.print(format, args);
         }
     };
 }
@@ -304,7 +304,7 @@ pub fn SocketOpenCtx(comptime DataType: type) type {
         const Self = @This();
 
         pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
-            return fmtInner(self.arena, format, args);
+            return self.arena.print(format, args);
         }
     };
 }
@@ -329,7 +329,7 @@ pub fn SocketCloseCtx(comptime DataType: type) type {
         const Self = @This();
 
         pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
-            return fmtInner(self.arena, format, args);
+            return self.arena.print(format, args);
         }
     };
 }
@@ -356,13 +356,4 @@ pub fn Fetch(comptime Ctx: type) type {
             c.fetchThen(options, context, callback);
         }
     };
-}
-
-inline fn fmtInner(allocator: std.mem.Allocator, comptime format: []const u8, args: anytype) ![]u8 {
-    var aw: std.Io.Writer.Allocating = .init(allocator);
-    defer aw.deinit();
-    aw.writer.print(format, args) catch |err| switch (err) {
-        error.WriteFailed => return error.OutOfMemory,
-    };
-    return aw.toOwnedSlice();
 }

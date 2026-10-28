@@ -74,11 +74,6 @@ pub const StateContext = struct {
     }
 
     pub fn fmt(self: StateContext, comptime format: []const u8, args: anytype) ![]u8 {
-        var aw: std.Io.Writer.Allocating = .init(self.arena);
-        defer aw.deinit();
-        aw.writer.print(format, args) catch |err| switch (err) {
-            error.WriteFailed => return error.OutOfMemory,
-        };
-        return aw.toOwnedSlice();
+        return self.arena.print(format, args);
     }
 };
