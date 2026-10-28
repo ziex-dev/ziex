@@ -38,7 +38,7 @@ pub fn deinit(self: *Printer) void {
 
 pub const FilePathKind = enum {
     /// Statically exported file
-    @"static",
+    static,
     /// Dynamic page skipped during export (no static HTML)
     dynamic,
     /// Dynamic route pattern that expands via static params
@@ -48,7 +48,7 @@ pub const FilePathKind = enum {
 
     fn marker(self: FilePathKind) []const u8 {
         return switch (self) {
-            .@"static", .param_child => "+",
+            .static, .param_child => "+",
             .dynamic => if (emoji("∞").len == 0) "~" else emoji("∞"),
             .param_route => "*",
         };
@@ -64,7 +64,7 @@ pub const FilePathKind = enum {
 };
 
 pub fn filepath(self: *Printer, file_path: []const u8) void {
-    self.filepathKind(file_path, .@"static");
+    self.filepathKind(file_path, .static);
 }
 
 pub fn filepathKind(self: *Printer, file_path: []const u8, kind: FilePathKind) void {

@@ -112,7 +112,7 @@ pub const Language = opaque {
     /// Check if the node type for the given numerical id is visible (as opposed to a hidden node type).
     pub fn nodeKindIsVisible(self: *const Language, symbol: u16) bool {
         const symbol_type = ts_language_symbol_type(self, symbol);
-        return @intFromEnum(symbol_type) <= @intFromEnum(SymbolType.anonymous);
+        return @backingInt(symbol_type) <= @backingInt(SymbolType.anonymous);
     }
 
     /// Check if the node for the given numerical ID is a supertype.

@@ -42,7 +42,7 @@ pub fn fetchThen(allocator: std.mem.Allocator, options: Client.FetchOptions, tim
         payload.ptr,
         payload.len,
         timeout_ms,
-        @intFromEnum(options.redirect),
+        @backingInt(options.redirect),
         fetch_id,
     );
 }
@@ -72,7 +72,7 @@ pub fn onFetchComplete(fetch_id: u64, meta: u64, bytes: []const u8, is_error: bo
     const status: u16 = @truncate(meta);
     const head_len: usize = @intCast(meta >> 16);
     const owned = entry.allocator.dupe(u8, bytes) catch return call(entry, error.OutOfMemory);
-    const result = Client.Result.parse(entry.allocator, @enumFromInt(status), owned, head_len);
+    const result = Client.Result.parse(entry.allocator, @fromBackingInt(@intCast(status)), owned, head_len);
     call(entry, result);
     if (result) |res| res.deinit(entry.allocator) else |_| {}
 }

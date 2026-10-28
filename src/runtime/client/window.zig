@@ -65,7 +65,7 @@ pub const Event = struct {
 
     /// Create an Event from a u64 NaN-boxed reference (passed from JS via jsz)
     pub fn fromRef(event_ref: u64) Event {
-        const event_value: js.Value = @enumFromInt(event_ref);
+        const event_value: js.Value = @fromBackingInt(@intCast(event_ref));
         const event_obj = js.Object{ .value = event_value };
 
         return .{

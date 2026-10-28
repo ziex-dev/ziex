@@ -4,15 +4,17 @@ const Wire = zx.Wire;
 
 test "wire module surface" {
     try std.testing.expectEqual(@as(u32, 0x3142445a), Wire.magic);
-    try std.testing.expectEqual(@as(u8, 5), @intFromEnum(Wire.Kind.strings));
+    try std.testing.expectEqual(@as(u8, 5), @backingInt(Wire.Kind.strings));
 }
 
 test "wire pair roundtrip and golden" {
     const expected = [_]u8{
         0x5a, 0x44, 0x42, 0x31,
-        0x02,
-        0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x02, 0x2a, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x03, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00,
     };
     var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();

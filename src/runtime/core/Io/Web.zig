@@ -53,7 +53,7 @@ fn checkCancel(_: ?*anyopaque) Io.Cancelable!void {}
 
 fn now(_: ?*anyopaque, clock: Io.Clock) Io.Timestamp {
     const src = source(clock) orelse return .zero;
-    return .{ .nanoseconds = ext.now(@intFromEnum(src)) };
+    return .{ .nanoseconds = ext.now(@backingInt(src)) };
 }
 
 fn clockResolution(_: ?*anyopaque, clock: Io.Clock) Io.Clock.ResolutionError!Io.Duration {

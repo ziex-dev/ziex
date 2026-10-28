@@ -127,7 +127,7 @@ pub const DomCmdBuffer = struct {
         const start = self.bytes.items.len;
         try self.bytes.resize(self.allocator, start + RECORD_SIZE);
         const rec = self.bytes.items[start..][0..RECORD_SIZE];
-        rec[0] = @intFromEnum(op);
+        rec[0] = @backingInt(op);
         rec[1] = 0;
         std.mem.writeInt(u16, rec[2..4], 0, .little);
         std.mem.writeInt(u32, rec[4..8], p0, .little);

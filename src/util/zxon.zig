@@ -58,7 +58,7 @@ fn writeValue(comptime T: type, value: T, w: *std.Io.Writer) anyerror!void {
         .int, .comptime_int => try w.print("{d}", .{value}),
         .float, .comptime_float => try w.print("{d}", .{value}),
         .bool => try w.writeAll(if (value) "true" else "false"),
-        .@"enum" => try w.print("{d}", .{@intFromEnum(value)}),
+        .@"enum" => try w.print("{d}", .{@backingInt(value)}),
         else => try w.writeAll("null"),
     }
 }
@@ -163,7 +163,7 @@ fn readValue(comptime T: type, allocator: std.mem.Allocator, d: []const u8, p: *
             if (literal(d, p, "false")) return false;
             return false;
         },
-        .@"enum" => |e| return @enumFromInt(readInt(e.tag_type, d, p) catch 0),
+        .@"enum" => |e| return @fromBackingInt(@intCast(readInt(e.tag_type, d, p) catch 0)),
         else => return error.UnsupportedType,
     }
 }

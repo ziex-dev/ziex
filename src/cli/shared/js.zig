@@ -364,7 +364,7 @@ pub fn transform(
             .jsx_enabled = if (opts.jsx_enabled) 1 else 0,
             .jsx_development = if (opts.jsx_development) 1 else 0,
             .typescript_enabled = if (opts.typescript_enabled) 1 else 0,
-            .helper_loader_mode = @intFromEnum(opts.helper_loader_mode),
+            .helper_loader_mode = @backingInt(opts.helper_loader_mode),
             .target = if (target_z) |tz| tz.ptr else null,
         };
     }
@@ -439,7 +439,7 @@ pub fn transformWithError(
             .jsx_enabled = if (opts.jsx_enabled) 1 else 0,
             .jsx_development = if (opts.jsx_development) 1 else 0,
             .typescript_enabled = if (opts.typescript_enabled) 1 else 0,
-            .helper_loader_mode = @intFromEnum(opts.helper_loader_mode),
+            .helper_loader_mode = @backingInt(opts.helper_loader_mode),
             .target = if (target_z) |tz| tz.ptr else null,
         };
     }

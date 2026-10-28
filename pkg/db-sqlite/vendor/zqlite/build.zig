@@ -19,19 +19,16 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("src/zqlite.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{
-            .{
-                .name = "c",
-                .module = translate_c.createModule(),
-            }
-        },
+        .imports = &.{.{
+            .name = "c",
+            .module = translate_c.createModule(),
+        }},
     });
 
     const mod_sqlite = b.createModule(.{
         .target = target,
         .optimize = optimize,
         .link_libc = true,
-
     });
     mod_sqlite.addIncludePath(lib_path);
     mod_sqlite.addCSourceFile(.{

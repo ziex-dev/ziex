@@ -30,7 +30,7 @@ fn hostBytes(addr: u64, len: usize) []const u8 {
 }
 
 fn hostCb(msg_type: u8, id: u64, a: u64, b: u64, c: u64) callconv(.c) void {
-    const msg: HostMsg = @enumFromInt(msg_type);
+    const msg: HostMsg = @fromBackingInt(@intCast(msg_type));
     switch (msg) {
         .fetch_success, .fetch_error => {
             fetch.onFetchComplete(id, a, hostBytes(b, @truncate(c)), msg == .fetch_error);
@@ -43,7 +43,7 @@ fn hostCb(msg_type: u8, id: u64, a: u64, b: u64, c: u64) callconv(.c) void {
 fn dispatchClient(msg: HostMsg, id: u64, a: u64, b: u64, c: u64) void {
     switch (msg) {
         .timeout, .interval, .event => {
-            const cb_type: window.CallbackType = @enumFromInt(@intFromEnum(msg));
+            const cb_type: window.CallbackType = @fromBackingInt(@intCast(@backingInt(msg)));
             _ = window.dispatchCallback(cb_type, id, a, std.heap.wasm_allocator);
         },
         .ws_open => {

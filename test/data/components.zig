@@ -1,5 +1,4 @@
 pub const components = [_]zx.client.ComponentMeta{
-
     .{
         .type = .client,
         .id = "c8fee6a",
