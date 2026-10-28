@@ -62,10 +62,6 @@ pub const BaseContext = struct {
         };
     }
 
-    pub fn deinit(self: *Self) void {
-        self.allocator.destroy(self);
-    }
-
     pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
         return fmtInner(self.arena, format, args);
     }
@@ -101,10 +97,6 @@ pub const ErrorContext = struct {
             .err = err,
             .data = PageData.init(request.arena),
         };
-    }
-
-    pub fn deinit(self: *ErrorContext) void {
-        self.allocator.destroy(self);
     }
 };
 

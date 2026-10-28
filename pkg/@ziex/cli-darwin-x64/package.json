@@ -9,8 +9,7 @@
     "x64"
   ],
   "bin": {
-    "zx": "bin/zx",
-    "ziex": "bin/zx"
+    "zx": "bin/zx"
   },
   "repository": {
     "type": "git",

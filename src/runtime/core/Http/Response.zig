@@ -9,36 +9,6 @@ pub const CookieOptions = common.CookieOptions;
 pub const ContentType = common.ContentType;
 pub const HttpStatus = common.HttpStatus;
 
-/// The type of the response.
-///
-/// **Values:**
-/// - `basic`: Normal, same origin response, with all headers exposed except "Set-Cookie".
-/// - `cors`: Response was received from a valid cross-origin request.
-/// - `default`: Default response type (used when response type is not explicitly set).
-/// - `error`: Network error. No useful information describing the error is available.
-/// - `opaque`: Response for "no-cors" request to cross-origin resource.
-/// - `opaqueredirect`: The fetch request was made with redirect: "manual".
-///
-/// MDN: [Response.type](https://developer.mozilla.org/en-US/docs/Web/API/Response/type)
-pub const ResponseType = enum {
-    basic,
-    cors,
-    default,
-    @"error",
-    @"opaque",
-    opaqueredirect,
-};
-
-/// A ReadableStream of the body contents.
-///
-/// MDN: [Response.body](https://developer.mozilla.org/en-US/docs/Web/API/Response/body)
-body: []const u8 = "",
-
-/// Stores a boolean value that declares whether the body has been used in a response yet.
-///
-/// MDN: [Response.bodyUsed](https://developer.mozilla.org/en-US/docs/Web/API/Response/bodyUsed)
-bodyUsed: bool = false,
-
 /// The Headers object associated with the response.
 ///
 /// MDN: [Response.headers](https://developer.mozilla.org/en-US/docs/Web/API/Response/headers)
@@ -46,37 +16,6 @@ headers: Headers = .{},
 
 /// Cookie accessor for setting/deleting cookies.
 cookies: ResponseCookies = .{},
-
-/// A boolean indicating whether the response was successful (status in the range 200–299) or not.
-///
-/// MDN: [Response.ok](https://developer.mozilla.org/en-US/docs/Web/API/Response/ok)
-ok: bool = true,
-
-/// Indicates whether or not the response is the result of a redirect
-/// (that is, its URL list has more than one entry).
-///
-/// MDN: [Response.redirected](https://developer.mozilla.org/en-US/docs/Web/API/Response/redirected)
-redirected: bool = false,
-
-/// The status code of the response (e.g., 200 for a success).
-///
-/// MDN: [Response.status](https://developer.mozilla.org/en-US/docs/Web/API/Response/status)
-status: u16 = 200,
-
-/// The status message corresponding to the status code (e.g., "OK" for 200).
-///
-/// MDN: [Response.statusText](https://developer.mozilla.org/en-US/docs/Web/API/Response/statusText)
-statusText: []const u8 = "OK",
-
-/// The type of the response (e.g., basic, cors).
-///
-/// MDN: [Response.type](https://developer.mozilla.org/en-US/docs/Web/API/Response/type)
-type: ResponseType = .default,
-
-/// The URL of the response.
-///
-/// MDN: [Response.url](https://developer.mozilla.org/en-US/docs/Web/API/Response/url)
-url: []const u8 = "",
 
 /// Arena allocator for response-scoped allocations.
 arena: std.mem.Allocator,
@@ -203,22 +142,12 @@ pub const ResponseCookies = struct {
 };
 
 pub const Init = struct {
-    status: u16 = 200,
-    redirected: bool = false,
-    url: []const u8 = "",
-    response_type: ResponseType = .default,
     arena: std.mem.Allocator,
     http: Http = .{},
 };
 
 pub fn init(opts: Init) Response {
     return .{
-        .ok = opts.status >= 200 and opts.status <= 299,
-        .redirected = opts.redirected,
-        .status = opts.status,
-        .statusText = common.statusCodeToText(opts.status),
-        .type = opts.response_type,
-        .url = opts.url,
         .arena = opts.arena,
         ._internal = .{ .http = opts.http },
         .headers = .{ ._internal = .{ .http = opts.http } },

@@ -25,10 +25,10 @@ type NodeInfo =
  *
  * @example
  * import Parser from "tree-sitter";
- * import ZX from "tree-sitter-zx";
+ * import MDZX from "tree-sitter-mdzx";
  *
  * const parser = new Parser();
- * parser.setLanguage(ZX);
+ * parser.setLanguage(MDZX);
  */
 declare const binding: {
   /**
@@ -43,6 +43,18 @@ declare const binding: {
    * @see {@linkplain https://tree-sitter.github.io/tree-sitter/using-parsers/6-static-node-types Static Node Types}
    */
   nodeTypeInfo: NodeInfo[];
+
+  /** The inline grammar, used for the contents of `inline` nodes. */
+  inline: {
+    /**
+     * The inner language object.
+     * @private
+     */
+    language: unknown;
+
+    /** The content of the `node-types.json` file for the inline grammar. */
+    nodeTypeInfo: NodeInfo[];
+  };
 
   /** The syntax highlighting query for this grammar. */
   HIGHLIGHTS_QUERY?: string;

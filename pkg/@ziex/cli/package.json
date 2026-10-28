@@ -4,8 +4,7 @@
   "description": "Ziex is a framework for building web applications with Zig.",
   "type": "module",
   "bin": {
-    "zx": "bin/zx",
-    "ziex": "bin/zx"
+    "zx": "bin/zx"
   },
   "repository": {
     "type": "git",

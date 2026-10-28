@@ -44,11 +44,6 @@
       "title": "Ziex",
       "type": "object",
       "properties": {
-        "ziex.format.enableZigExpression": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable autoformatting of Zig expressions (and HTML inside those expressions) that are embedded inside HTML blocks. Default is true. Use the command 'Ziex: Toggle embedded Zig expression formatting' from the Command Palette to toggle this setting."
-        },
         "ziex.lsp.enableSnippets": {
           "type": "boolean",
           "default": true,
@@ -141,10 +136,6 @@
       }
     },
     "commands": [
-      {
-        "command": "ziex.toggleZigExpressionFormatting",
-        "title": "ZX: Toggle embedded Zig expression formatting"
-      },
       {
         "command": "ziex.toggleMultilineStringLiteral",
         "title": "ZX: Toggle multiline string literal"

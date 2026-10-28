@@ -163,94 +163,6 @@ test "res > headers" {
     try std.testing.expect(headers.get("X-Test") == null);
 }
 
-// --- Response Instance (Web Standard Properties) --- //
-
-test "res > default" {
-    var buffer: [1024]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const res = Response{ .arena = fba.allocator() };
-
-    try std.testing.expectEqualStrings("", res.body);
-    try std.testing.expect(!res.bodyUsed);
-    try std.testing.expect(res.ok);
-    try std.testing.expect(!res.redirected);
-    try std.testing.expectEqual(@as(u16, 200), res.status);
-    try std.testing.expectEqualStrings("OK", res.statusText);
-    try std.testing.expectEqual(Response.ResponseType.default, res.type);
-    try std.testing.expectEqualStrings("", res.url);
-}
-
-test "res > ok 2xx" {
-    var buffer: [1024]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const res200 = Response.init(.{ .status = 200, .arena = fba.allocator() });
-    const res201 = Response.init(.{ .status = 201, .arena = fba.allocator() });
-    const res299 = Response.init(.{ .status = 299, .arena = fba.allocator() });
-
-    try std.testing.expect(res200.ok);
-    try std.testing.expect(res201.ok);
-    try std.testing.expect(res299.ok);
-}
-
-test "res > ok non-2xx" {
-    var buffer: [1024]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const res199 = Response.init(.{ .status = 199, .arena = fba.allocator() });
-    const res300 = Response.init(.{ .status = 300, .arena = fba.allocator() });
-    const res404 = Response.init(.{ .status = 404, .arena = fba.allocator() });
-    const res500 = Response.init(.{ .status = 500, .arena = fba.allocator() });
-
-    try std.testing.expect(!res199.ok);
-    try std.testing.expect(!res300.ok);
-    try std.testing.expect(!res404.ok);
-    try std.testing.expect(!res500.ok);
-}
-
-test "res > status text" {
-    var buffer: [1024]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const res200 = Response.init(.{ .status = 200, .arena = fba.allocator() });
-    const res404 = Response.init(.{ .status = 404, .arena = fba.allocator() });
-    const res500 = Response.init(.{ .status = 500, .arena = fba.allocator() });
-
-    try std.testing.expectEqualStrings("OK", res200.statusText);
-    try std.testing.expectEqualStrings("Not Found", res404.statusText);
-    try std.testing.expectEqualStrings("Internal Server Error", res500.statusText);
-}
-
-// --- ResponseType --- //
-
-test "res > type" {
-    const types = [_]Response.ResponseType{
-        .basic, .cors, .default, .@"error", .@"opaque", .opaqueredirect,
-    };
-    try std.testing.expectEqual(6, types.len);
-}
-
-// --- Init --- //
-
-test "res > init custom" {
-    var buffer: [1024]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const res = Response.init(.{
-        .status = 201,
-        .url = "https://example.com/api",
-        .response_type = .cors,
-        .arena = fba.allocator(),
-    });
-
-    try std.testing.expectEqual(@as(u16, 201), res.status);
-    try std.testing.expect(res.ok);
-    try std.testing.expectEqualStrings("Created", res.statusText);
-    try std.testing.expectEqualStrings("https://example.com/api", res.url);
-    try std.testing.expectEqual(Response.ResponseType.cors, res.type);
-}
-
 // --- Methods (without backend) --- //
 
 test "res > set status no backend" {
@@ -259,9 +171,8 @@ test "res > set status no backend" {
 
     const res = Response.init(.{ .arena = fba.allocator() });
 
-    // Should not crash, but local fields remain unchanged
+    // Should not crash
     res.setStatus(.not_found);
-    try std.testing.expectEqual(@as(u16, 200), res.status);
 }
 
 test "res > text no backend" {
@@ -271,7 +182,6 @@ test "res > text no backend" {
     const res = Response.init(.{ .arena = fba.allocator() });
 
     res.text("Hello");
-    try std.testing.expectEqualStrings("", res.body);
 }
 
 test "res > redirect no backend" {
@@ -282,8 +192,6 @@ test "res > redirect no backend" {
 
     res.redirect("/new", null);
     res.redirect("/permanent", 301);
-    try std.testing.expectEqual(@as(u16, 200), res.status);
-    try std.testing.expect(!res.redirected);
 }
 
 // --- Headers --- //

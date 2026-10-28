@@ -1,11 +1,11 @@
 [package]
-name = "tree-sitter-zx"
-description = "ZX is a framework for building web applications with Zig."
+name = "tree-sitter-mdzx"
+description = "MDZX: Markdown + ZX."
 version = "0.1.0-dev"
 authors = ["Nurul Huda (Apon) <me@nurulhudaapon.com>"]
 license = "MIT"
 readme = "README.md"
-keywords = ["incremental", "parsing", "tree-sitter", "zx"]
+keywords = ["incremental", "parsing", "tree-sitter", "mdzx"]
 categories = ["parser-implementations", "parsing", "text-editors"]
 repository = "https://github.com/ziex-dev/ziex"
 edition = "2021"
@@ -17,6 +17,8 @@ include = [
   "grammar.js",
   "queries/*",
   "src/*",
+  "tree-sitter-mdzx-inline/queries/*",
+  "tree-sitter-mdzx-inline/src/*",
   "tree-sitter.json",
   "/LICENSE",
 ]

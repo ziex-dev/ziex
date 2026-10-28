@@ -1,4 +1,4 @@
-//! This crate provides ZX language support for the [tree-sitter] parsing library.
+//! This crate provides MDZX language support for the [tree-sitter] parsing library.
 //!
 //! Typically, you will use the [`LANGUAGE`] constant to add this language to a
 //! tree-sitter [`Parser`], and then use the parser to parse some code:
@@ -7,10 +7,10 @@
 //! let code = r#"
 //! "#;
 //! let mut parser = tree_sitter::Parser::new();
-//! let language = tree_sitter_zx::LANGUAGE;
+//! let language = tree_sitter_mdzx::LANGUAGE;
 //! parser
 //!     .set_language(&language.into())
-//!     .expect("Error loading ZX parser");
+//!     .expect("Error loading MDZX parser");
 //! let tree = parser.parse(code, None).unwrap();
 //! assert!(!tree.root_node().has_error());
 //! ```
@@ -21,16 +21,23 @@
 use tree_sitter_language::LanguageFn;
 
 extern "C" {
-    fn tree_sitter_zx() -> *const ();
+    fn tree_sitter_mdzx() -> *const ();
+    fn tree_sitter_mdzx_inline() -> *const ();
 }
 
 /// The tree-sitter [`LanguageFn`] for this grammar.
-pub const LANGUAGE: LanguageFn = unsafe { LanguageFn::from_raw(tree_sitter_zx) };
+pub const LANGUAGE: LanguageFn = unsafe { LanguageFn::from_raw(tree_sitter_mdzx) };
+
+/// The tree-sitter [`LanguageFn`] for the inline grammar.
+pub const INLINE_LANGUAGE: LanguageFn = unsafe { LanguageFn::from_raw(tree_sitter_mdzx_inline) };
 
 /// The content of the [`node-types.json`] file for this grammar.
 ///
 /// [`node-types.json`]: https://tree-sitter.github.io/tree-sitter/using-parsers/6-static-node-types
 pub const NODE_TYPES: &str = include_str!("../../src/node-types.json");
+
+/// The content of the [`node-types.json`] file for the inline grammar.
+pub const INLINE_NODE_TYPES: &str = include_str!("../../tree-sitter-mdzx-inline/src/node-types.json");
 
 #[cfg(with_highlights_query)]
 /// The syntax highlighting query for this grammar.
@@ -55,6 +62,9 @@ mod tests {
         let mut parser = tree_sitter::Parser::new();
         parser
             .set_language(&super::LANGUAGE.into())
-            .expect("Error loading ZX parser");
+            .expect("Error loading MDZX parser");
+        parser
+            .set_language(&super::INLINE_LANGUAGE.into())
+            .expect("Error loading MDZX inline parser");
     }
 }

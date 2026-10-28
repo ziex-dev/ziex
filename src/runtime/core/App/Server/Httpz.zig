@@ -282,7 +282,6 @@ pub fn createResponse(ctx: *HttpzCtx, arena: std.mem.Allocator) Response {
         ctx.res.header("Server", token);
     }
     return .init(.{
-        .status = ctx.res.status,
         .arena = arena,
         .http = ctx.http(),
     });

@@ -25,17 +25,20 @@ fn main() {
         ]);
     }
 
-    let parser_path = src_dir.join("parser.c");
-    c_config.file(&parser_path);
-    println!("cargo:rerun-if-changed={}", parser_path.to_str().unwrap());
+    let inline_src_dir = std::path::Path::new("tree-sitter-mdzx-inline/src");
+    for dir in [src_dir, inline_src_dir] {
+        let parser_path = dir.join("parser.c");
+        c_config.file(&parser_path);
+        println!("cargo:rerun-if-changed={}", parser_path.to_str().unwrap());
 
-    let scanner_path = src_dir.join("scanner.c");
-    if scanner_path.exists() {
-        c_config.file(&scanner_path);
-        println!("cargo:rerun-if-changed={}", scanner_path.to_str().unwrap());
+        let scanner_path = dir.join("scanner.c");
+        if scanner_path.exists() {
+            c_config.file(&scanner_path);
+            println!("cargo:rerun-if-changed={}", scanner_path.to_str().unwrap());
+        }
     }
 
-    c_config.compile("tree-sitter-zx");
+    c_config.compile("tree-sitter-mdzx");
 
     println!("cargo:rustc-check-cfg=cfg(with_highlights_query)");
     if !"queries/highlights.scm".is_empty() && std::path::Path::new("queries/highlights.scm").exists() {

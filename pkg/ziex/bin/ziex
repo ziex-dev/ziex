@@ -2,24 +2,21 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+// Delegates to @ziex/cli so `npx ziex` works without a second copy of the launcher.
 const require = createRequire(import.meta.url);
-const pkgName = `@ziex/cli-${process.platform}-${process.arch}`;
 
+let launcher;
 try {
-  const binaryPath = require.resolve(`${pkgName}/bin/zx`);
-
-  const child = spawn(binaryPath, process.argv.slice(2), { 
-    stdio: 'inherit',
-    shell: process.platform === 'win32' 
-  });
-
-  child.on('exit', (code) => process.exit(code ?? 0));
-  child.on('error', (err) => {
-    console.error('Failed to start child process:', err);
-    process.exit(1);
-  });
-} catch (e) {
-  console.error(`Error: Could not find binary for ${process.platform}-${process.arch}`);
-  console.error(`Ensure the optional dependency "${pkgName}" is installed.`);
+  launcher = require.resolve('@ziex/cli/bin/zx');
+} catch {
+  console.error('Error: Could not find @ziex/cli. Ensure the "@ziex/cli" dependency is installed.');
   process.exit(1);
 }
+
+const child = spawn(process.execPath, [launcher, ...process.argv.slice(2)], { stdio: 'inherit' });
+
+child.on('exit', (code) => process.exit(code ?? 0));
+child.on('error', (err) => {
+  console.error('Failed to start child process:', err);
+  process.exit(1);
+});

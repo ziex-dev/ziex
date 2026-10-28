@@ -14,8 +14,7 @@ const jspi = Suspending !== undefined;
 const miss = jspi ? -1 : 0;
 
 function putOptions(ttlSeconds: number): { expirationTtl: number } | undefined {
-    if (ttlSeconds < 60) return undefined;
-    return { expirationTtl: ttlSeconds };
+    return ttlSeconds > 0 ? { expirationTtl: ttlSeconds } : undefined;
 }
 
 /** Our backends export `del`; Cloudflare KV uses `delete`. */
@@ -83,8 +82,14 @@ function get(
     return maybeThen(b.get(key), (v) => encodeGet(getMemory, allocRef, v, out_ptr));
 }
 
+/** TTL is passed through as is; puts the binding rejects surface as `error.KvPutFailed`. */
 function put(b: KVNamespace, key: string, val: string, ttl: number): number | Promise<number> {
-    return maybeThen(b.put(key, val, putOptions(ttl)), () => 0);
+    try {
+        const r = b.put(key, val, putOptions(ttl));
+        return r instanceof Promise ? r.then(() => 0, () => -1) : 0;
+    } catch {
+        return -1;
+    }
 }
 
 function del(b: KVNamespace, key: string): number | Promise<number> {

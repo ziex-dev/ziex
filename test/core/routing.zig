@@ -78,10 +78,7 @@ test "page ctx > has request field" {
         .arena = alloc,
     });
 
-    const res = Response.init(.{
-        .status = 200,
-        .arena = alloc,
-    });
+    const res = Response.init(.{ .arena = alloc });
 
     const ctx = PageContext.init(req, res, alloc, std.testing.io);
 
@@ -95,16 +92,11 @@ test "page ctx > has response field" {
     const alloc = fba.allocator();
 
     const req = Request.init(.{ .arena = alloc });
-    const res = Response.init(.{
-        .status = 201,
-        .arena = alloc,
-    });
+    const res = Response.init(.{ .arena = alloc });
 
     const ctx = PageContext.init(req, res, alloc, std.testing.io);
 
-    try std.testing.expectEqual(@as(u16, 201), ctx.response.status);
-    try std.testing.expect(ctx.response.ok);
-    try std.testing.expectEqualStrings("Created", ctx.response.statusText);
+    try std.testing.expect(ctx.response.headers.get("Content-Type") == null);
 }
 
 test "page ctx > has allocator and arena fields" {
@@ -200,15 +192,11 @@ test "error ctx > has request and response fields" {
         .arena = alloc,
     });
 
-    const res = Response.init(.{
-        .status = 500,
-        .arena = alloc,
-    });
+    const res = Response.init(.{ .arena = alloc });
 
     const ctx = ErrorContext.init(req, res, alloc, std.testing.io, error.Unexpected);
 
     try std.testing.expectEqualStrings("/error-page", ctx.request.url);
-    try std.testing.expectEqual(@as(u16, 500), ctx.response.status);
 }
 
 test "error ctx > has allocator and arena fields" {

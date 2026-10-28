@@ -2,7 +2,7 @@
   "name": "tree-sitter-mdzx",
   "version": "0.1.0-dev",
   "description": "ZX is a framework for building web applications with Zig.",
-  "repository": "https://github.com/nurulhudaapon/mdzx",
+  "repository": "https://github.com/ziex-dev/ziex",
   "license": "MIT",
   "author": {
     "name": "Nurul Huda (Apon)",
@@ -25,6 +25,9 @@
     "bindings/node/*",
     "queries/*",
     "src/**",
+    "tree-sitter-mdzx-inline/grammar.js",
+    "tree-sitter-mdzx-inline/queries/*",
+    "tree-sitter-mdzx-inline/src/**",
     "*.wasm"
   ],
   "dependencies": {
