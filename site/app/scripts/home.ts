@@ -7,6 +7,28 @@ import {
 
 import { setupFeatureCanvases } from "./feature_canvas";
 
+// Side-effect scripts: copy buttons, the section runners and Ziggy (the last two from the branding repo).
+import "../assets/clipboard";
+import "@branding/runner";
+import "@branding/ziggy-crawler";
+
+declare global {
+  interface Window {
+    ZiggyCrawler: {
+      attach(target: Element, options: { src: string; size?: number }): unknown;
+    };
+  }
+}
+
+const ZIGGY_SRC = "/assets/branding/mascots/ziggy/ziggy-animated.svg";
+const ZIGGY_WINDOWS = "#control-flow-tabs, .code-preview-example";
+
+function setupZiggy() {
+  for (const el of document.querySelectorAll(ZIGGY_WINDOWS)) {
+    Promise.resolve(window.ZiggyCrawler.attach(el, { src: ZIGGY_SRC, size: 72 })).catch((err) => console.warn(err));
+  }
+}
+
 function getVisibleCodePanel(container: Element): HTMLElement | null {
   const panels = Array.from(container.querySelectorAll<HTMLElement>(".code-example-panel"));
   const containerRadios = Array.from(container.querySelectorAll<HTMLInputElement>(".code-example-tab-radio"));
@@ -185,4 +207,5 @@ document.addEventListener("DOMContentLoaded", () => {
   setupHomeCodeExampleButtons();
   setupFeatureStack();
   setupFeatureCanvases();
+  setupZiggy();
 });

@@ -2,7 +2,7 @@ const std = @import("std");
 const ziex = @import("ziex");
 
 const build_zon = @import("build.zig.zon");
-const ziex_version = 13; // Increment this when site js changes
+const ziex_version = 14; // Increment this when site js changes
 
 const ServerBackend = enum {
     std,
@@ -327,6 +327,7 @@ pub fn build(b: *std.Build) !void {
     if (true) {
         const is_release = optimize != .debug;
         const build_client_wasm = app_client.wasm.link;
+        const branding_dep = b.dependency("branding", .{});
         const site_scripts = esbuild.addBuild(b, .{
             .name = "site_scripts",
             .config = .{
@@ -334,6 +335,11 @@ pub fn build(b: *std.Build) !void {
                     b.path("app/scripts/client.ts"),
                     b.path("app/scripts/docs.ts"),
                     b.path("app/scripts/home.ts"),
+                },
+                // Mascot scripts from the branding repo, bundled into home.js.
+                .alias = &.{
+                    .{ .key = "@branding/runner", .path = branding_dep.path("mascots/runner/runner.js") },
+                    .{ .key = "@branding/ziggy-crawler", .path = branding_dep.path("mascots/ziggy/ziggy-crawler.js") },
                 },
                 .platform = .browser,
                 .minify = is_release,

@@ -21,3 +21,6 @@ declare module "*.wasm" {
     const module: WebAssembly.Module;
     export default module;
 }
+
+// Plain browser scripts from the branding repo, aliased in build.zig and imported for side effects
+declare module "@branding/*";

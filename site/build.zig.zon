@@ -15,8 +15,8 @@
             .lazy = true,
         },
         .branding = .{
-            .url = "git+https://github.com/ziex-dev/branding.git#04a22af76e2198d06c429e4025f960f76d93bf9f",
-            .hash = "N-V-__8AACJRHgCH8MXnlovqXGaz3lrGQkWP6HqE81M04zkV",
+            .url = "git+https://github.com/ziex-dev/branding.git#351a992d01f38303c5ccb479250241481b43e627",
+            .hash = "N-V-__8AAHMUmwDsRB5yB9XEGz4Z4kxOtPsLjV46IIlLgpck",
         },
         .lunasvg = .{
             .url = "git+https://github.com/nurulhudaapon/lunasvg.git#9ad04e73f305c0136a1e58307dcb8bafed76b94d",

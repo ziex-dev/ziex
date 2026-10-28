@@ -396,7 +396,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
 
                         <div class="hero-mascot">
                             <div class="hero-mascot-glow"></div>
-                            <img src="/assets/branding/compressed/ziex-ziguana.svg" alt="Ziguana Mascot" />
+                            <img src="/assets/branding/compressed/ziex-ziguana-animated.svg" alt="Ziguana Mascot" />
                         </div>
                     </div>
                 </section>
@@ -457,8 +457,6 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                 </div>
                 <p>Copyright © {current_year} {" ziex.dev"}</p>
             </footer>
-            <script src=`/assets/clipboard.js?v={util.buildId(ctx.io, ctx.arena)}` defer="true"></script>
-            <script src=`/assets/runner.js?v={util.buildId(ctx.io, ctx.arena)}` defer="true"></script>
             <script src=`/assets/home.js?v={util.buildId(ctx.io, ctx.arena)}` defer="true"></script>
         </div>
     );

@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "build": "zig build -Dtarget=wasm32-wasi -Doptimize=ReleaseSmall",
-    "purgecss": "npx purgecss --css ./app/assets/docs.css --content dist/learn.html dist/reference.html  app/assets/clipboard.js app/assets/runner.js app/assets/home.js --output ./app/assets/docs.css"
+    "purgecss": "npx purgecss --css ./app/assets/docs.css --content dist/learn.html dist/reference.html  zig-out/static/assets/home.js --output ./app/assets/docs.css"
   },
   "devDependencies": {
     "@tailwindcss/cli": "4.3.3",
