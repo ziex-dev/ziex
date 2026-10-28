@@ -243,6 +243,12 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
     const resolved_zig = util.resolveZigExe(env_map, zig_path);
     if (build_args_array.items.len > 0) build_args_array.items[0] = resolved_zig;
 
+    // CLI `--watch` reports no progress, so warm the cache with a one-shot BSP build first.
+    if (Builder.default == Builder.Cli) {
+        try startStatus(ctx.spinner, use_spinner, "{s}{s}Building...{s}", .{ Colors.cyan, Colors.bold, Colors.reset });
+        try prebuild(io, allocator, ctx.spinner, build_args_array.items, env_map, zig_path);
+    }
+
     var builder_impl: Builder.default = undefined;
     builder_impl.init(io, .{
         .allocator = allocator,
@@ -515,6 +521,51 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
                 last_exe_fingerprint = exe_fp orelse exeContentFingerprint(io, program_path.?);
                 rebuilding_shown = false;
             },
+        }
+    }
+}
+
+/// Errors are left for the watch builder to report.
+fn prebuild(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    status: *tui.Spinner,
+    argv: []const []const u8,
+    env_map: *std.process.Environ.Map,
+    zig_path: []const u8,
+) !void {
+    var impl: Builder.Bsp = undefined;
+    impl.init(io, .{
+        .allocator = allocator,
+        .argv = argv,
+        .environ_map = env_map,
+        .watch = false,
+    }) catch |err| util.exitZigSpawnFailed(zig_path, err);
+    var builder = impl.builder();
+    children.setBuilder(builder.child().id);
+    defer {
+        builder.deinit(io);
+        children.setBuilder(null);
+    }
+
+    while (try builder.next(io)) |event| {
+        switch (event) {
+            .step_progress => |progress| {
+                var status_buf: [256]u8 = undefined;
+                try status.updateMessage("{s}", .{build_status.formatStepProgress(&status_buf, "Building", progress)});
+            },
+            .errors => |result_val| {
+                var result = result_val;
+                result.deinit();
+                break;
+            },
+            .assets_installed => |result_val| {
+                var result = result_val;
+                result.deinit();
+                break;
+            },
+            .should_restart, .build_complete_no_change, .resolved => break,
+            .change_detected => {},
         }
     }
 }
