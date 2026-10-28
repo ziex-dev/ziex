@@ -121,7 +121,7 @@ pub fn CacheComponent(
 
 fn Slow(allocator: zx.Allocator) !zx.Component {
     try std.Io
-        .sleep(zx.io(), .fromSeconds(2), .awake);
+        .sleep(zx.Io.default(), .fromSeconds(2), .awake);
     return (<div @{allocator}>Slow</div>);
 }
 // --- Caching: page ---
@@ -129,7 +129,7 @@ pub fn Caching__Page(
     ctx: zx.PageContext,
 ) !zx.Component {
     try std.Io
-        .sleep(zx.io(), .fromSeconds(2), .awake);
+        .sleep(zx.Io.default(), .fromSeconds(2), .awake);
     return (
         <div @allocator={ctx.arena}>
             <h1>Expensive Page</h1>
@@ -1187,7 +1187,7 @@ pub fn RenderTest(ctx: zx.PageContext) !zx.Component {
 
     const allocator = ctx.arena;
 
-    var conn = zx.Http.Conn.init(allocator);
+    var conn = zx.http.Conn.init(allocator);
     defer conn.deinit();
     conn.search = ctx.request.search;
     const request = conn.request(ctx.request.method, ctx.request.pathname, ctx.request.url);

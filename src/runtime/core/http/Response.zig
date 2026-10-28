@@ -1,12 +1,10 @@
 const Response = @This();
 
 const std = @import("std");
-const common = @import("common.zig");
-const Http = @import("../Http.zig");
+const http = @import("../http.zig");
+const Transport = @import("Transport.zig");
 
-pub const Cookies = common.Cookies;
-pub const CookieOptions = common.CookieOptions;
-pub const ContentType = common.ContentType;
+pub const CookieOptions = http.CookieOptions;
 
 /// The Headers object associated with the response.
 ///
@@ -20,10 +18,10 @@ cookies: CookieJar = .{},
 arena: std.mem.Allocator,
 
 /// Internal backend transport carrier. All response writes delegate here.
-_internal: Http.Facade = .{},
+_internal: Transport.Facade = .{},
 
 /// Sets the HTTP status code.
-pub fn setStatus(self: *const Response, stat: Http.Status) void {
+pub fn setStatus(self: *const Response, stat: http.Status) void {
     self._internal.http.resSetStatus(@backingInt(stat));
 }
 
@@ -62,7 +60,7 @@ pub fn setContentType(self: *const Response, content_type: ContentType) void {
 /// - `redirect_status`: Optional status code (default: 302 Found).
 ///
 /// MDN: [Response.redirect()](https://developer.mozilla.org/en-US/docs/Web/API/Response/redirect_static)
-pub fn redirect(self: *const Response, location: []const u8, redirect_status: ?Http.Status) void {
+pub fn redirect(self: *const Response, location: []const u8, redirect_status: ?http.Status) void {
     self.setStatus(redirect_status orelse .found);
     self.headers.set("Location", location);
 }
@@ -86,7 +84,7 @@ pub fn clearWriter(self: *const Response) void {
 ///
 /// MDN: [Headers](https://developer.mozilla.org/en-US/docs/Web/API/Headers)
 pub const Headers = struct {
-    _internal: Http.Facade = .{},
+    _internal: Transport.Facade = .{},
 
     /// Returns the values of a header with the given name.
     ///
@@ -114,7 +112,7 @@ pub const Headers = struct {
 
 /// Sets and deletes cookies on the response.
 pub const CookieJar = struct {
-    _internal: Http.Facade = .{},
+    _internal: Transport.Facade = .{},
 
     /// Sets a cookie on the response.
     ///
@@ -134,7 +132,7 @@ pub const CookieJar = struct {
 
 pub const Init = struct {
     arena: std.mem.Allocator,
-    http: Http = .{},
+    http: Transport = .{},
 };
 
 pub fn init(opts: Init) Response {
@@ -145,3 +143,66 @@ pub fn init(opts: Init) Response {
         .cookies = .{ ._internal = .{ .http = opts.http } },
     };
 }
+
+/// Common MIME content types.
+///
+/// MDN: https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
+///
+pub const ContentType = enum {
+    // Application types
+    @"application/gzip",
+    @"application/javascript",
+    @"application/json",
+    @"application/octet-stream",
+    @"application/pdf",
+    @"application/wasm",
+    @"application/xhtml+xml",
+    @"application/xml",
+    @"application/x-www-form-urlencoded",
+
+    // Audio types
+    @"audio/aac",
+    @"audio/mpeg",
+    @"audio/ogg",
+    @"audio/wav",
+    @"audio/webm",
+
+    // Font types
+    @"font/otf",
+    @"font/ttf",
+    @"font/woff",
+    @"font/woff2",
+
+    // Image types
+    @"image/avif",
+    @"image/bmp",
+    @"image/gif",
+    @"image/jpeg",
+    @"image/png",
+    @"image/svg+xml",
+    @"image/tiff",
+    @"image/webp",
+
+    // Multipart types
+    @"multipart/form-data",
+
+    // Text types
+    @"text/css",
+    @"text/csv",
+    @"text/html",
+    @"text/javascript",
+    @"text/plain",
+    @"text/xml",
+
+    // Video types
+    @"video/mp4",
+    @"video/mpeg",
+    @"video/ogg",
+    @"video/webm",
+    @"video/x-msvideo",
+
+    /// Returns the MIME type string.
+    pub fn toString(self: ContentType) []const u8 {
+        return @tagName(self);
+    }
+};

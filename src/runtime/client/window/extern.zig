@@ -55,5 +55,6 @@ pub extern "__zx" fn _fetchAsync(
     body_ptr: [*]const u8,
     body_len: usize,
     timeout_ms: u32,
+    redirect: u32,
     callback_id: u64,
 ) void;

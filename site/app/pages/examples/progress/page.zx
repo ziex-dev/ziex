@@ -74,20 +74,20 @@ fn reset(_: zx.client.Event) void {
 
 fn fetch() void {
     running.set(true);
-    _ = zx.fetch(.wasm(&onFetch), zx.allocator, zx.allocator.print("/examples/progress?actionId={d}", .{action_id}) catch "/examples/progress", .{ .method = .POST }) catch {};
+    var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = zx.allocator };
+    const url = zx.allocator.print("/examples/progress?actionId={d}", .{action_id}) catch "/examples/progress";
+    client.fetchThen(.{ .url = url, .method = .POST }, {}, onFetch);
 }
 
-fn onFetch(res: ?*zx.Fetch.Response, _: ?zx.Fetch.Error) void {
+fn onFetch(_: void, result: zx.http.Client.Error!zx.http.Client.Result) void {
     running.set(false);
-    if (res) |r| {
-        defer r.deinit();
-        if (r.json(struct { progress: u32, completed: bool })) |p| {
-            progress.set(p.value.progress);
-            if (p.value.completed) {
-                if (interval_id) |id| zx.client.clearInterval(id);
-                interval_id = null;
-            }
-        } else |_| {}
+    const r = result catch return;
+    const p = r.json(struct { progress: u32, completed: bool }, zx.allocator) catch return;
+    defer p.deinit();
+    progress.set(p.value.progress);
+    if (p.value.completed) {
+        if (interval_id) |id| zx.client.clearInterval(id);
+        interval_id = null;
     }
 }
 

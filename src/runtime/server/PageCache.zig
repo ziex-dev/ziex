@@ -3,8 +3,8 @@ const PageCache = @This();
 const std = @import("std");
 const zx = @import("../../root.zig");
 const AppConfig = @import("../core/App/Config.zig");
-const Request = @import("../core/Http/Request.zig");
-const Response = @import("../core/Http/Response.zig");
+const Request = @import("../core/http/Request.zig");
+const Response = @import("../core/http/Response.zig");
 
 const Allocator = std.mem.Allocator;
 const cachez = zx.Cache.cachez;

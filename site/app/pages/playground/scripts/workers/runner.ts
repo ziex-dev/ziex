@@ -114,6 +114,7 @@ function stubDbImports() {
 function stubNetImports() {
     return {
         fetch: () => -1,
+        take: () => {},
     };
 }
 

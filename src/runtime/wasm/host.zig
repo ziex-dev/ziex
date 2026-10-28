@@ -33,9 +33,7 @@ fn hostCb(msg_type: u8, id: u64, a: u64, b: u64, c: u64) callconv(.c) void {
     const msg: HostMsg = @enumFromInt(msg_type);
     switch (msg) {
         .fetch_success, .fetch_error => {
-            const body = hostBytes(b, @truncate(c));
-            const is_error: u8 = @intFromBool(msg == .fetch_error);
-            fetch.onFetchComplete(id, @truncate(a), body.ptr, body.len, is_error);
+            fetch.onFetchComplete(id, a, hostBytes(b, @truncate(c)), msg == .fetch_error);
         },
         // Browser-only callbacks.
         else => if (comptime is_client) dispatchClient(msg, id, a, b, c),

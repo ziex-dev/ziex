@@ -1,7 +1,7 @@
 pub const MultiFormData = @This();
 
 const std = @import("std");
-const Http = @import("../Http.zig");
+const Transport = @import("Transport.zig");
 
 pub const File = @import("File.zig");
 
@@ -25,7 +25,7 @@ pub const Entry = struct {
 };
 
 /// Internal backend transport carrier. All reads delegate here.
-_internal: Http.Facade = .{},
+_internal: Transport.Facade = .{},
 
 /// Returns the first value associated with a given key from within a MultiFormData object.
 pub fn get(self: *const MultiFormData, name: []const u8) ?Value {

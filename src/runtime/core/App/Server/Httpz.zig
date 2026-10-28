@@ -9,11 +9,11 @@ const App = @import("../../App.zig");
 const Server = @import("../Server.zig");
 const AppConfig = @import("../Config.zig");
 const server_meta = @import("../../../server/Server.zig");
-const Http = @import("../../Http.zig");
-const Request = @import("../../Http/Request.zig");
-const Response = @import("../../Http/Response.zig");
-const common = @import("../../Http/common.zig");
-const MultiFormData = @import("../../Http/MultiFormData.zig");
+const Transport = @import("../../http/Transport.zig");
+const Request = @import("../../http/Request.zig");
+const Response = @import("../../http/Response.zig");
+const CookieOptions = @import("../../http.zig").CookieOptions;
+const MultiFormData = @import("../../http/MultiFormData.zig");
 const core_handler = @import("../Router/Handler.zig");
 const routing = @import("../Router/routing.zig");
 const rndr = @import("../../../server/render.zig");
@@ -95,11 +95,11 @@ pub const HttpzCtx = struct {
     req: *httpz.Request,
     res: *httpz.Response,
 
-    pub fn http(self: *HttpzCtx) Http {
+    pub fn http(self: *HttpzCtx) Transport {
         return .{ .userdata = @ptrCast(self), .vtable = &vtable };
     }
 
-    const vtable = Http.VTable{
+    const vtable = Transport.VTable{
         .reqText = &reqText,
         .reqHeaderGet = &reqHeaderGet,
         .reqHeaderHas = &reqHeaderHas,
@@ -121,15 +121,15 @@ pub const HttpzCtx = struct {
         .resClearWriter = &resClearWriter,
         .resSetCookie = &resSetCookie,
         // WebSocket ops are not available on the plain request/response backend.
-        .wsUpgrade = Http.failing_vtable.wsUpgrade,
-        .wsSend = Http.failing_vtable.wsSend,
-        .wsRead = Http.failing_vtable.wsRead,
-        .wsClose = Http.failing_vtable.wsClose,
-        .wsSubscribe = Http.failing_vtable.wsSubscribe,
-        .wsUnsubscribe = Http.failing_vtable.wsUnsubscribe,
-        .wsPublish = Http.failing_vtable.wsPublish,
-        .wsIsSubscribed = Http.failing_vtable.wsIsSubscribed,
-        .wsSetPublishToSelf = Http.failing_vtable.wsSetPublishToSelf,
+        .wsUpgrade = Transport.failing_vtable.wsUpgrade,
+        .wsSend = Transport.failing_vtable.wsSend,
+        .wsRead = Transport.failing_vtable.wsRead,
+        .wsClose = Transport.failing_vtable.wsClose,
+        .wsSubscribe = Transport.failing_vtable.wsSubscribe,
+        .wsUnsubscribe = Transport.failing_vtable.wsUnsubscribe,
+        .wsPublish = Transport.failing_vtable.wsPublish,
+        .wsIsSubscribed = Transport.failing_vtable.wsIsSubscribed,
+        .wsSetPublishToSelf = Transport.failing_vtable.wsSetPublishToSelf,
     };
 
     fn ctx(userdata: ?*anyopaque) *HttpzCtx {
@@ -238,7 +238,7 @@ pub const HttpzCtx = struct {
         ctx(userdata).res.clearWriter();
     }
 
-    fn resSetCookie(userdata: ?*anyopaque, name: []const u8, value: []const u8, opts: common.CookieOptions) anyerror!void {
+    fn resSetCookie(userdata: ?*anyopaque, name: []const u8, value: []const u8, opts: CookieOptions) anyerror!void {
         const res = ctx(userdata).res;
         const httpz_opts: httpz.response.CookieOpts = .{
             .path = opts.path,
@@ -301,7 +301,7 @@ pub const UpgradeBackend = struct {
     }
 
     const vtable = blk: {
-        var vt = Http.failing_vtable;
+        var vt = Transport.failing_vtable;
         vt.wsUpgrade = &wsUpgrade;
         break :blk vt;
     };
@@ -935,7 +935,7 @@ fn Handler(comptime Ctx: type) type {
                 res.content_type = .HTML;
             } else {
                 res.content_type = .HTML;
-                // prepare* already set res.body via Http.resSetBody
+                // prepare* already set res.body via Transport.resSetBody
             }
         }
 
@@ -1318,7 +1318,7 @@ fn Handler(comptime Ctx: type) type {
             }
 
             /// Create a Socket interface for the current connection, backed by
-            /// this handler via the unified `Http` vtable (only `ws*` slots).
+            /// this handler via the unified `Transport` vtable (only `ws*` slots).
             fn createSocket(self: *WebsocketHandler) zx.Socket {
                 return .{ ._internal = .{
                     .http = .{ .userdata = @ptrCast(self), .vtable = &socket_vtable },
@@ -1327,7 +1327,7 @@ fn Handler(comptime Ctx: type) type {
             }
 
             const socket_vtable = blk: {
-                var vt = zx.Http.failing_vtable;
+                var vt = zx.http.Transport.failing_vtable;
                 vt.wsSend = &socketSend;
                 vt.wsClose = &socketClose;
                 vt.wsSubscribe = &socketSubscribe;

@@ -10,5 +10,5 @@ pub const App = server.ServerApp;
 pub const server_app = server.server_app;
 
 // Legacy -- may be kept
-pub const Request = @import("core/Http/Request.zig");
-pub const Response = @import("core/Http/Response.zig");
+pub const Request = @import("core/http/Request.zig");
+pub const Response = @import("core/http/Response.zig");

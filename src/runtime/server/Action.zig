@@ -2,10 +2,10 @@ const Action = @This();
 
 const std = @import("std");
 const zx = @import("../../root.zig");
-const Request = @import("../core/Http/Request.zig");
-const Response = @import("../core/Http/Response.zig");
+const Request = @import("../core/http/Request.zig");
+const Response = @import("../core/http/Response.zig");
 const CoreEvent = @import("../core/Event.zig");
-const File = @import("../core/Http/File.zig");
+const File = @import("../core/http/File.zig");
 
 const StateContext = CoreEvent.StateContext;
 const Allocator = std.mem.Allocator;

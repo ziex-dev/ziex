@@ -1,8 +1,9 @@
 const std = @import("std");
-const Request = @import("../../Http/Request.zig");
-const Response = @import("../../Http/Response.zig");
-const Http = @import("../../Http.zig");
+const Request = @import("../../http/Request.zig");
+const Response = @import("../../http/Response.zig");
+const Transport = @import("../../http/Transport.zig");
 const WebSocket = @import("../../WebSocket.zig");
+const Client = @import("../../http/Client.zig");
 
 pub const PageData = struct {
     const Store = struct {
@@ -66,6 +67,9 @@ pub const BaseContext = struct {
     pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
         return fmtInner(self.arena, format, args);
     }
+
+    pub const fetch = Fetch(Self).fetch;
+    pub const fetchThen = Fetch(Self).fetchThen;
 };
 
 pub const PageContext = BaseContext;
@@ -99,6 +103,9 @@ pub const ErrorContext = struct {
             .data = PageData.init(request.arena),
         };
     }
+
+    pub const fetch = Fetch(ErrorContext).fetch;
+    pub const fetchThen = Fetch(ErrorContext).fetchThen;
 };
 
 /// Socket options for configuring WebSocket behavior
@@ -111,7 +118,7 @@ pub const Socket = struct {
     _internal: Internal = .{},
 
     pub const Internal = struct {
-        http: Http = .{},
+        http: Transport = .{},
         attached: bool = false,
     };
 
@@ -246,6 +253,9 @@ pub const RouteContext = struct {
     pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
         return fmtInner(self.arena, format, args);
     }
+
+    pub const fetch = Fetch(Self).fetch;
+    pub const fetchThen = Fetch(Self).fetchThen;
 };
 
 /// Context for WebSocket message handlers
@@ -320,6 +330,30 @@ pub fn SocketCloseCtx(comptime DataType: type) type {
 
         pub fn fmt(self: Self, comptime format: []const u8, args: anytype) ![]u8 {
             return fmtInner(self.arena, format, args);
+        }
+    };
+}
+
+/// `fetch` / `fetchThen` for any context with an `io` field and an `arena` (or `allocator`)
+/// that outlives the call.
+pub fn Fetch(comptime Ctx: type) type {
+    return struct {
+        fn client(self: *const Ctx) Client {
+            const allocator = if (@hasField(Ctx, "arena")) self.arena else self.allocator;
+            return .{ .io = self.io, .allocator = allocator };
+        }
+
+        /// In the browser this suspends, so call it from a handler that may suspend, or use `fetchThen`.
+        pub fn fetch(self: *const Ctx, options: Client.FetchOptions) Client.Error!Client.Result {
+            var c = client(self);
+            defer c.deinit();
+            return c.fetch(options);
+        }
+
+        pub fn fetchThen(self: *const Ctx, options: Client.FetchOptions, context: anytype, comptime callback: fn (@TypeOf(context), Client.Error!Client.Result) void) void {
+            var c = client(self);
+            defer c.deinit();
+            c.fetchThen(options, context, callback);
         }
     };
 }

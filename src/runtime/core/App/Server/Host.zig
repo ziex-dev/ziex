@@ -1,8 +1,8 @@
 const Host = @This();
 
 const std = @import("std");
-const ext = @import("../../server/wasm/extern.zig");
-const Conn = @import("Conn.zig");
+const ext = @import("../../../server/wasm/extern.zig");
+const Conn = @import("../../http/Conn.zig");
 
 buf: [4096]u8 = undefined,
 writer: std.Io.Writer = undefined,

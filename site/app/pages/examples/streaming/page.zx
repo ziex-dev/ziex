@@ -74,7 +74,7 @@ fn SiteStats(allocator: zx.Allocator, props: struct { loading: bool }) zx.Compon
 fn wait(duration_ms: u64) void {
     if (zx.platform.isWasm()) return sleep_ms(@intCast(duration_ms));
 
-    std.Io.sleep(zx.io(), .fromMilliseconds(@intCast(duration_ms)), .awake) catch {};
+    std.Io.sleep(zx.Io.default(), .fromMilliseconds(@intCast(duration_ms)), .awake) catch {};
 }
 extern "__zx_sys" fn sleep_ms(ms: u32) void;
 

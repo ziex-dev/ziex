@@ -4,8 +4,8 @@ const zx = @import("../../../../root.zig");
 const Router = zx.Router;
 const Component = zx.Component;
 const Allocator = std.mem.Allocator;
-const Request = @import("../../Http/Request.zig");
-const Response = @import("../../Http/Response.zig");
+const Request = @import("../../http/Request.zig");
+const Response = @import("../../http/Response.zig");
 const server_dispatch = @import("../../../server/dispatch.zig");
 const render = @import("../../../server/render.zig");
 const injections = @import("injections.zig");
@@ -236,7 +236,7 @@ pub fn renderError(
 /// Set 404 status/content-type and build the notfound component (if any).
 /// When no notfound page exists, sets the plain-text fallback body.
 pub fn prepareNotFound(
-    http: zx.Http,
+    http: zx.http.Transport,
     pathname: []const u8,
     request: Request,
     response: Response,
@@ -256,7 +256,7 @@ pub fn prepareNotFound(
 /// Set 500 status/content-type and build the error component (if any).
 /// When no error page exists, sets the plain-text fallback body.
 pub fn prepareError(
-    http: zx.Http,
+    http: zx.http.Transport,
     pathname: []const u8,
     request: Request,
     response: Response,

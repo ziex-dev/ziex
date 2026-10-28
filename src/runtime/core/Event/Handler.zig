@@ -505,9 +505,6 @@ pub fn init(
 pub fn actionHandler(ctx: *anyopaque, event: zx.client.Event) void {
     if (!is_wasm) return;
     event.preventDefault();
-    const client_fetch = @import("../../client/fetch.zig");
-    const CoreFetch = @import("../Fetch.zig");
-
     var handler_id: u32 = 0;
     const bound_states: []const Bound = if (@intFromPtr(ctx) == 1)
         &.{}
@@ -519,7 +516,7 @@ pub fn actionHandler(ctx: *anyopaque, event: zx.client.Event) void {
 
     var id_buf: [16]u8 = undefined;
     const id_str = std.fmt.bufPrint(&id_buf, "{d}", .{handler_id}) catch "0";
-    const headers = [_]CoreFetch.RequestInit.Header{
+    const headers = [_]zx.http.Header{
         .{ .name = "Content-Type", .value = "application/json" },
         .{ .name = Constants.action_header_name, .value = id_str },
     };
@@ -537,33 +534,17 @@ pub fn actionHandler(ctx: *anyopaque, event: zx.client.Event) void {
 
         const cb_ctx = getGlobalAllocator().create(Context) catch return;
         cb_ctx.* = .{ .bound_states = bound_states };
-        client_fetch.fetchAsyncCtx(
-            getGlobalAllocator(),
-            "",
-            .{ .method = .POST, .headers = &headers, .body = payload_buf },
-            @ptrCast(cb_ctx),
-            onEventResponse,
-        );
+        var page = pageClient();
+        page.fetchThen(.{ .url = "", .method = .POST, .headers = &headers, .payload = payload_buf }, cb_ctx, onEventResponse);
     } else {
-        client_fetch.fetchAsync(
-            getGlobalAllocator(),
-            "",
-            .{
-                .method = .GET,
-                .headers = &headers,
-                .body = "{}",
-            },
-            onActionResponse,
-        );
+        var page = pageClient();
+        page.fetchThen(.{ .url = "", .method = .GET, .headers = &headers, .payload = "{}" }, {}, onActionResponse);
     }
 }
 
 fn eventHandler(ctx: *anyopaque, event: zx.client.Event) void {
     if (comptime (!is_wasm)) return;
     event.preventDefault();
-
-    const client_fetch = @import("../../client/fetch.zig");
-    const CoreFetch = @import("../Fetch.zig");
 
     var handler_id: u32 = 0;
     const bound_states: []const Bound = if (@intFromPtr(ctx) == 1)
@@ -587,7 +568,7 @@ fn eventHandler(ctx: *anyopaque, event: zx.client.Event) void {
 
     var id_buf: [16]u8 = undefined;
     const id_str = std.fmt.bufPrint(&id_buf, "{d}", .{handler_id}) catch "0";
-    const headers = [_]CoreFetch.RequestInit.Header{
+    const headers = [_]zx.http.Header{
         .{ .name = "Content-Type", .value = "application/json" },
         .{ .name = Constants.event_header_name, .value = id_str },
     };
@@ -604,31 +585,26 @@ fn eventHandler(ctx: *anyopaque, event: zx.client.Event) void {
     if (bound_states.len > 0) {
         const cb_ctx = getGlobalAllocator().create(Context) catch return;
         cb_ctx.* = .{ .bound_states = bound_states };
-        client_fetch.fetchAsyncCtx(
-            getGlobalAllocator(),
-            "",
-            .{ .method = .POST, .headers = &headers, .body = payload_buf },
-            @ptrCast(cb_ctx),
-            onEventResponse,
-        );
+        var page = pageClient();
+        page.fetchThen(.{ .url = "", .method = .POST, .headers = &headers, .payload = payload_buf }, cb_ctx, onEventResponse);
     } else {
-        client_fetch.fetchAsync(
-            getGlobalAllocator(),
-            "",
-            .{ .method = .POST, .headers = &headers, .body = payload_buf },
-            onActionResponse,
-        );
+        var page = pageClient();
+        page.fetchThen(.{ .url = "", .method = .POST, .headers = &headers, .payload = payload_buf }, {}, onActionResponse);
     }
 }
 
-fn onActionResponse(_: ?*@import("../Fetch.zig").Response, _: ?@import("../Fetch.zig").Error) void {}
+/// Client for requests back to the current page (`url = ""`).
+fn pageClient() zx.http.Client {
+    return .{ .io = zx.Io.default(), .allocator = getGlobalAllocator() };
+}
 
-fn onEventResponse(ctx_ptr: *anyopaque, response: ?*@import("../Fetch.zig").Response, _: ?@import("../Fetch.zig").Error) void {
-    const cb_ctx: *Context = @ptrCast(@alignCast(ctx_ptr));
+fn onActionResponse(_: void, _: zx.http.Client.Error!zx.http.Client.Result) void {}
+
+fn onEventResponse(cb_ctx: *Context, result: zx.http.Client.Error!zx.http.Client.Result) void {
     defer getGlobalAllocator().destroy(cb_ctx);
 
-    const resp = response orelse return;
-    const body = resp._body;
+    const resp = result catch return;
+    const body = resp.body;
     if (body.len == 0) return;
 
     const states = zx.util.zxon.parse([]const []const u8, getGlobalAllocator(), body, .{}) catch return;

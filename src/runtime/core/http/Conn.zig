@@ -5,10 +5,10 @@ const Conn = @This();
 
 const std = @import("std");
 const builtin = @import("builtin");
-const Http = @import("../Http.zig");
+const Transport = @import("Transport.zig");
 const Request = @import("Request.zig");
 const Response = @import("Response.zig");
-const common = @import("common.zig");
+const CookieOptions = @import("../http.zig").CookieOptions;
 const MultiFormData = @import("MultiFormData.zig");
 const WebSocket = @import("../WebSocket.zig");
 const wasm_ext = @import("../../server/wasm/extern.zig");
@@ -58,7 +58,7 @@ pub fn deinit(self: *Conn) void {
     self.resp_headers.deinit(self.allocator);
 }
 
-pub fn http(self: *Conn) Http {
+pub fn http(self: *Conn) Transport {
     return .{ .userdata = @ptrCast(self), .vtable = &vtable };
 }
 
@@ -98,7 +98,7 @@ pub fn upgradeData(self: *const Conn) ?[]const u8 {
     return self.upgrade_data_buf[0..self.upgrade_data_len];
 }
 
-const vtable = Http.VTable{
+const vtable = Transport.VTable{
     .reqText = &reqText,
     .reqHeaderGet = &reqHeaderGet,
     .reqHeaderHas = &reqHeaderHas,
@@ -268,7 +268,7 @@ fn resClearWriter(userdata: ?*anyopaque) void {
     self.deferred_aw.clearRetainingCapacity();
 }
 
-fn resSetCookie(userdata: ?*anyopaque, name: []const u8, value: []const u8, opts: common.CookieOptions) anyerror!void {
+fn resSetCookie(userdata: ?*anyopaque, name: []const u8, value: []const u8, opts: CookieOptions) anyerror!void {
     const self = self_(userdata);
 
     var cookie_buf = std.Io.Writer.Allocating.init(self.allocator);

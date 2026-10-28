@@ -211,21 +211,16 @@ fn pendingFromOpaque(ptr: *anyopaque) *reactivity.State(bool) {
 }
 
 /// Called when a form action response arrives; applies state updates and settle UX.
-fn onFormActionResponse(
-    ctx_ptr: *anyopaque,
-    response: ?*@import("../core/Fetch.zig").Response,
-    err: ?@import("../core/Fetch.zig").Error,
-) void {
+fn onFormActionResponse(ctx_ptr: *anyopaque, result: zx.http.Client.Error!zx.http.Client.Result) void {
     const cb_ctx: *FormActionCallbackCtx = @ptrCast(@alignCast(ctx_ptr));
     defer zx.allocator.destroy(cb_ctx);
 
     const outcome: zx.ActionHandle.Outcome = blk: {
-        if (err != null) break :blk .err;
-        const resp = response orelse break :blk .err;
-        if (!resp.ok()) break :blk .err;
+        const resp = result catch break :blk .err;
+        if (resp.status.class() != .success) break :blk .err;
 
-        if (cb_ctx.bound_states.len > 0 and resp._body.len > 0) {
-            const states = zx.util.zxon.parse([]const []const u8, zx.allocator, resp._body, .{}) catch break :blk .err;
+        if (cb_ctx.bound_states.len > 0 and resp.body.len > 0) {
+            const states = zx.util.zxon.parse([]const []const u8, zx.allocator, resp.body, .{}) catch break :blk .err;
             for (states, 0..) |state_json, i| {
                 if (i >= cb_ctx.bound_states.len) break;
                 const bs = cb_ctx.bound_states[i];
@@ -303,11 +298,8 @@ fn formActionCallback(ctx: *anyopaque, event: zx.client.Event) void {
     };
 
     const client_fetch = @import("fetch.zig");
-    const fetch_id = client_fetch.allocFetchId(alloc, @ptrCast(cb_ctx), onFormActionResponse) orelse {
-        alloc.destroy(cb_ctx);
-        if (form_ctx.pending_state) |ps| pendingFromOpaque(ps).set(false);
-        return;
-    };
+    // On failure the callback has already run and released `cb_ctx`.
+    const fetch_id = client_fetch.register(alloc, @ptrCast(cb_ctx), onFormActionResponse) orelse return;
     // FormData is built synchronously inside this extern while inputs are still enabled.
     ext._submitFormActionAsync(form_ctx.vnode_id, form_ctx.action_id, states_json.ptr, states_json.len, fetch_id);
 

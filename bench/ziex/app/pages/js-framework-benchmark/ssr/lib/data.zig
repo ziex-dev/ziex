@@ -29,7 +29,7 @@ pub const Row = struct {
 };
 
 fn random(max: usize) usize {
-    const io = zx.io();
+    const io = zx.Io.default();
     var buffer: [1]u8 = undefined;
     std.Io.random(io, &buffer);
     return @mod(buffer[0], max);

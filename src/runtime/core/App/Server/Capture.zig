@@ -1,4 +1,4 @@
-/// Http.Capture - captures outgoing bytes for caching
+/// Tees outgoing bytes into a buffer for the page cache.
 const Capture = @This();
 
 const std = @import("std");

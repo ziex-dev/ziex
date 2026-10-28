@@ -103,7 +103,7 @@ test "conn > query.get percent-decodes values" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var conn = zx.Http.Conn.init(arena);
+    var conn = zx.http.Conn.init(arena);
     defer conn.deinit();
     conn.search = "?msg=hello%20world&q=a+b&flag";
 
@@ -144,7 +144,7 @@ test "req > init custom" {
 // --- Type Re-exports --- //
 
 test "res > status" {
-    try std.testing.expect(zx.Http.Status == std.http.Status);
+    try std.testing.expect(zx.http.Status == std.http.Status);
 }
 
 test "res > content type" {

@@ -174,12 +174,7 @@ pub fn disarmSignal() void {
 
 pub fn release(alloc: std.mem.Allocator) void {
     freeResolved(alloc);
-    if (comptime Threaded != void) {
-        if (threaded_initialized) {
-            threaded_instance.deinit();
-            threaded_initialized = false;
-        }
-    }
+    @import("Io.zig").deinitDefault();
 }
 
 pub fn assertNoLeaks() void {
@@ -211,22 +206,6 @@ pub const allocator = switch (builtin.os.tag) {
         .fast, .safe, .small => std.heap.smp_allocator,
     },
 };
-
-const Io = if (platform.os == .freestanding) void else std.Io;
-const Threaded = if (platform.os == .freestanding) void else std.Io.Threaded;
-
-var threaded_instance: Threaded = if (Threaded == void) {} else undefined;
-var threaded_initialized = false;
-
-pub fn io() Io {
-    if (comptime platform.os == .freestanding) return {};
-
-    if (!threaded_initialized) {
-        threaded_instance = Threaded.init(allocator, .{});
-        threaded_initialized = true;
-    }
-    return threaded_instance.io();
-}
 
 var kv: zx.Kv = undefined;
 var cache: zx.Cache = undefined;

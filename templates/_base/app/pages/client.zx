@@ -29,8 +29,12 @@ fn reset(_: zx.client.Event) void {
 }
 
 fn fetch(url: []const u8) void {
-    if (zx.platform.isClient())
-        _ = zx.fetch(.noop, zx.allocator, url, .{}) catch {};
+    if (zx.platform.isClient()) {
+        var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = zx.allocator };
+        client.fetchThen(.{ .url = url }, {}, ignore);
+    }
 }
+
+fn ignore(_: void, _: zx.http.Client.Error!zx.http.Client.Result) void {}
 
 const zx = @import("zx");

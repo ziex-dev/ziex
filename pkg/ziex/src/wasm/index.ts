@@ -49,6 +49,7 @@ import {
 } from "./constants";
 import { flushDomCmds } from "./dom_cmd";
 import { createFetchImports } from "../runtime/fetch";
+import { createIoImports } from "../runtime/io";
 import { createKVImports } from "../runtime/kv/extern";
 import { createBrowserKVBindings, type KVNamespace } from "../runtime/kv";
 import { DELEGATED_EVENTS } from "./generated/events";
@@ -240,6 +241,10 @@ export class ZxBridge extends ZxBridgeCore {
     static override createImportObject(bridgeRef: [ZxBridge | null]): WebAssembly.Imports {
         return {
             ...jsz.importObject(),
+            __zx_io: createIoImports(() => {
+                if (!jsz.memory) throw new Error("WASM memory is not ready");
+                return jsz.memory;
+            }) as WebAssembly.ModuleImports,
             __zx_net: createFetchImports(() => {
                 if (!jsz.memory) throw new Error("WASM memory is not ready");
                 return jsz.memory;
@@ -262,6 +267,7 @@ export class ZxBridge extends ZxBridgeCore {
                     bodyPtr: number,
                     bodyLen: number,
                     timeoutMs: number,
+                    redirect: number,
                     fetchId: bigint
                 ) => {
                     bridgeRef[0]?.fetchAsync(
@@ -270,6 +276,7 @@ export class ZxBridge extends ZxBridgeCore {
                         headersPtr, headersLen,
                         bodyPtr, bodyLen,
                         timeoutMs,
+                        redirect,
                         fetchId
                     );
                 },

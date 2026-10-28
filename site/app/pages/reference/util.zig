@@ -478,8 +478,8 @@ pub fn highlightZx(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
     logTiming("Cache lookup/init", timer.lap());
 
     // Lock for thread safety (important in concurrent requests)
-    cache.mutex.lock(zx.io()) catch return error.Cancelled;
-    defer cache.mutex.unlock(zx.io());
+    cache.mutex.lock(zx.Io.default()) catch return error.Cancelled;
+    defer cache.mutex.unlock(zx.Io.default());
 
     timer.reset();
     const tree = cache.parser.parseString(source, null) orelse return error.ParseError;
@@ -570,23 +570,23 @@ const Timer = struct {
     start_ts: std.Io.Timestamp,
 
     fn start() Timer {
-        return .{ .start_ts = .now(zx.io(), .awake) };
+        return .{ .start_ts = .now(zx.Io.default(), .awake) };
     }
 
     fn lap(self: *Timer) u64 {
-        const now = std.Io.Timestamp.now(zx.io(), .awake);
+        const now = std.Io.Timestamp.now(zx.Io.default(), .awake);
         const elapsed: u64 = @intCast(now.nanoseconds - self.start_ts.nanoseconds);
         self.start_ts = now;
         return elapsed;
     }
 
     fn read(self: Timer) u64 {
-        const now = std.Io.Timestamp.now(zx.io(), .awake);
+        const now = std.Io.Timestamp.now(zx.Io.default(), .awake);
         return @intCast(now.nanoseconds - self.start_ts.nanoseconds);
     }
 
     fn reset(self: *Timer) void {
-        self.start_ts = .now(zx.io(), .awake);
+        self.start_ts = .now(zx.Io.default(), .awake);
     }
 };
 

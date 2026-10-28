@@ -489,7 +489,7 @@ const Ws = struct {
     }
 
     const vtable = blk: {
-        var vt = zx.Http.failing_vtable;
+        var vt = zx.http.Transport.failing_vtable;
         vt.wsSend = &send;
         vt.wsClose = &close;
         vt.wsSubscribe = &subscribe;

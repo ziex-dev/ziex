@@ -6,9 +6,10 @@ const ActionContext = @import("../../../server/Action.zig");
 const ClientActionContext = @import("../../../client/Action.zig");
 const ClientEvent = @import("../../../client/Event.zig");
 const CoreEvent = @import("../../Event.zig");
-const Request = @import("../../Http/Request.zig");
-const Response = @import("../../Http/Response.zig");
+const Request = @import("../../http/Request.zig");
+const Response = @import("../../http/Response.zig");
 const ServerEvent = @import("../../../server/Event.zig");
+const routing = @import("routing.zig");
 
 const StateContext = CoreEvent.StateContext;
 const Allocator = zx.Allocator;
@@ -77,6 +78,7 @@ pub fn ComponentCtx(comptime PropsType: type) type {
         const Self = @This();
         props: PropsType,
         allocator: Allocator,
+        io: std.Io,
         children: ?zx.Component = null,
 
         _internal: Internal = .{},
@@ -86,6 +88,9 @@ pub fn ComponentCtx(comptime PropsType: type) type {
             state_idx: u32 = 0,
             action_idx: u32 = 0,
         };
+
+        pub const fetch = routing.Fetch(Self).fetch;
+        pub const fetchThen = routing.Fetch(Self).fetchThen;
 
         pub fn state(self: *Self, comptime T: type, initial: T) reactivity.StateInstance(T) {
             const slot = (1 << 20) + self._internal.state_idx;

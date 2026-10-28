@@ -38,7 +38,7 @@ fn redirect(ctx: zx.PageContext) void {
 }
 
 pub fn handleRequest(ctx: zx.PageContext) BenchState {
-    const io = zx.io();
+    const io = zx.Io.default();
     // Add CORS headers to allow requests from the benchmark server
     ctx.response.headers.set("Access-Control-Allow-Origin", "*");
     ctx.response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");

@@ -93,7 +93,7 @@ fn loadStats(arena: zx.Allocator) !Stats {
         if (cached) |s| return s;
     } else |_| {} // stale/invalid type - fall through and regenerate
 
-    const fresh = try stats_gen.collect(arena, zx.io());
+    const fresh = try stats_gen.collect(arena, zx.Io.default());
     zx.kv.putAs(KV_KEY, fresh, .{ .ttl = .fromSeconds(TTL_SECONDS) }) catch {};
     return fresh;
 }

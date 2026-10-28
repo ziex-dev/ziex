@@ -3,7 +3,7 @@ const std = @import("std");
 const zx = @import("../../../root.zig");
 const core_handler = @import("Router/Handler.zig");
 const render = @import("../../server/render.zig");
-const Http = @import("../Http.zig");
+const Transport = @import("../http/Transport.zig");
 const server = @import("../../server/Server.zig");
 
 const Component = zx.Component;
@@ -642,7 +642,7 @@ pub fn renderNotFoundComponent(
 }
 
 pub const HandleOptions = struct {
-    http: Http,
+    http: Transport,
     request: zx.server.Request,
     response: zx.server.Response,
     pathname: []const u8,

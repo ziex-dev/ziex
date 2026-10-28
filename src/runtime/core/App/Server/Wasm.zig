@@ -14,10 +14,10 @@ const render = @import("../../../server/render.zig");
 const PageCache = @import("../../../server/PageCache.zig");
 
 const Router = zx.Router;
-const Conn = zx.Http.Conn;
-const Capture = zx.Http.Capture;
-const Host = zx.Http.Host;
-const HeaderEntry = zx.Http.Conn.HeaderEntry;
+const Conn = zx.http.Conn;
+const Capture = @import("Capture.zig");
+const Host = @import("Host.zig");
+const HeaderEntry = zx.http.Conn.HeaderEntry;
 const Method = zx.server.Request.Method;
 
 const base_path = app_opts.app_base_path;
@@ -137,7 +137,7 @@ const Ctx = struct {
     allocator: std.mem.Allocator,
     io: std.Io,
     conn: *Conn,
-    http: zx.Http,
+    http: zx.http.Transport,
     request: zx.server.Request,
     response: zx.server.Response,
     pathname: []const u8,

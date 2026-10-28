@@ -63,41 +63,22 @@ fn onTimeoutFired() void {
     std.log.info("setTimeout fired after 2 seconds!", .{});
 }
 
-fn onFetchComplete(response: ?*zx.Fetch.Response, err: ?zx.Fetch.Error) void {
-    if (err) |e| {
+fn onFetchComplete(_: void, result: zx.http.Client.Error!zx.http.Client.Result) void {
+    const res = result catch |err| {
         status.set("Fetch failed");
-        std.log.err("Fetch error!", .{});
-        std.log.err("Fetch error: {s}", .{@errorName(e)});
+        std.log.err("Fetch error: {s}", .{@errorName(err)});
         return;
-    }
-
-    if (response) |res| {
-        defer res.deinit();
-        _ = res.text() catch |e| {
-            status.set("Could not read response");
-            std.log.err("Fetch text error: {s}", .{@errorName(e)});
-            return;
-        };
-        status.set("Fetch complete");
-        std.log.info("Fetch completed! Response:", .{});
-    } else {
-        status.set("Empty response");
-    }
+    };
+    status.set("Fetch complete");
+    std.log.info("Fetch completed! Response: {s}", .{res.body});
 }
 
 fn doFetch(_: zx.client.Event) void {
     status.set("Fetching");
     std.log.debug("Starting fetch request (client-side)...", .{});
 
-    _ = zx.fetch(
-        .wasm(&onFetchComplete),
-        zx.allocator,
-        "/examples/api-route",
-        .{},
-    ) catch |err| {
-        status.set("Could not start fetch");
-        std.log.err("Fetch init error: {s}", .{@errorName(err)});
-    };
+    var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = zx.allocator };
+    client.fetchThen(.{ .url = "/examples/api-route" }, {}, onFetchComplete);
 
     std.log.info("Fetch initiated (async)", .{});
 }

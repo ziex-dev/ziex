@@ -32,7 +32,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
 const AsyncScoreProps = struct { index: u64 = 0, label: []const u8 = "Item" };
 fn AsyncScore(allocator: zx.Allocator, props: AsyncScoreProps) zx.Component {
     const ms: i64 = @intCast(100 * props.index);
-    std.Io.sleep(zx.io(), .fromMilliseconds(ms), .awake) catch {};
+    std.Io.sleep(zx.Io.default(), .fromMilliseconds(ms), .awake) catch {};
 
     return (
         <span @allocator={allocator}>

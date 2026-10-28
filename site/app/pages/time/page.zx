@@ -18,7 +18,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
 }
 
 fn Time(allocator: zx.Allocator) zx.Component {
-    const time: i64 = @intCast(@divFloor(std.Io.Timestamp.now(zx.io(), .real).nanoseconds, std.time.ns_per_s));
+    const time: i64 = @intCast(@divFloor(std.Io.Timestamp.now(zx.Io.default(), .real).nanoseconds, std.time.ns_per_s));
 
     return (
         <p @allocator={allocator}>

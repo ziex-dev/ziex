@@ -100,6 +100,7 @@ pub const Component = union(enum) {
                 // allocator.create() does NOT run field default initializers, so explicitly
                 // set all fields that ComponentCtx defines with defaults.
                 ctx.allocator = allocator;
+                ctx.io = zx.Io.default();
                 if (@hasField(CtxType, "_internal")) ctx._internal = .{};
                 ctx.children = if (@hasField(@TypeOf(props), "children")) props.children else null;
                 if (@hasField(CtxType, "props")) {

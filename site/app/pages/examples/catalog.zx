@@ -5,7 +5,7 @@ pub const rendering = [_]SidebarProps.Section{
     .{ .title = "Counter", .href = "/examples/counter", .tags = &.{ "zx.State", "State.bind" } },
     .{ .title = "Todo", .href = "/examples/todo", .tags = &.{ "zx.State", "zx.client.Event" } },
     .{ .title = "Hydration", .href = "/examples/hydration", .tags = &.{ "zx.State", "typed props" } },
-    .{ .title = "Async APIs", .href = "/examples/async", .tags = &.{ "zx.client.setTimeout", "zx.fetch", "zx.State" } },
+    .{ .title = "Async APIs", .href = "/examples/async", .tags = &.{ "zx.client.setTimeout", "zx.http.Client", "zx.State" } },
     // .{ .title = "Progress", .href = "/examples/progress" },
     .{ .title = "Streaming SSR", .href = "/examples/streaming", .tags = &.{ "@async={.stream}", "@fallback" } },
     // .{ .title = "React Integration", .href = "/examples/react" },

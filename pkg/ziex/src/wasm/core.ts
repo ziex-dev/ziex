@@ -1,5 +1,6 @@
 import { ZigJS } from "../../../../vendor/jsz/js/src";
-import { createFetchImports } from "../runtime/fetch";
+import { createFetchImports, fetchMeta, performFetch } from "../runtime/fetch";
+import { createIoImports } from "../runtime/io";
 import {
     CallbackType_Event,
     CallbackType_FetchSuccess,
@@ -174,47 +175,20 @@ export class ZxBridgeCore {
         bodyPtr: number,
         bodyLen: number,
         timeoutMs: number,
+        redirect: number,
         fetchId: bigint
     ): void {
-        const url = readString(urlPtr, urlLen);
-        const method = methodLen > 0 ? readString(methodPtr, methodLen) : 'GET';
-        const headersJson = headersLen > 0 ? readString(headersPtr, headersLen) : '{}';
-        const body = bodyLen > 0 ? getMemoryView().subarray(bodyPtr, bodyPtr + bodyLen) : undefined;
-
-        let headers: Record<string, string> = {};
-        try {
-            headers = JSON.parse(headersJson);
-        } catch {
-            for (const line of headersJson.split('\n')) {
-                const colonIdx = line.indexOf(':');
-                if (colonIdx > 0) {
-                    headers[line.slice(0, colonIdx)] = line.slice(colonIdx + 1);
-                }
-            }
-        }
-
-        const controller = new AbortController();
-        const timeout = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
-
-        const fetchOptions: RequestInit = {
-            method,
-            headers: Object.keys(headers).length > 0 ? headers : undefined,
-            body: method !== 'GET' && method !== 'HEAD' ? body as BodyInit : undefined,
-            signal: controller.signal,
-        };
-
-        const target = url === '' && typeof location !== 'undefined' ? location.href : url;
-
-        fetch(target, fetchOptions)
-            .then(async (response) => {
-                if (timeout) clearTimeout(timeout);
-                const bytes = new Uint8Array(await response.arrayBuffer());
-                this._notifyFetchComplete(fetchId, response.status, bytes, false);
-            })
+        performFetch({
+            url: readString(urlPtr, urlLen),
+            method: methodLen > 0 ? readString(methodPtr, methodLen) : 'GET',
+            headersJson: readString(headersPtr, headersLen),
+            body: bodyLen > 0 ? getMemoryView().slice(bodyPtr, bodyPtr + bodyLen) : undefined,
+            timeoutMs,
+            redirect,
+        })
+            .then((res) => this._notifyFetchComplete(fetchId, res.status, res.bytes, false, res.headLen))
             .catch((error) => {
-                if (timeout) clearTimeout(timeout);
-                const isAbort = error.name === 'AbortError';
-                const errorMsg = isAbort ? 'Request timeout' : (error.message ?? 'Fetch failed');
+                const errorMsg = error === 'timeout' ? 'Request timeout' : (error?.message ?? 'Fetch failed');
                 this._notifyFetchComplete(fetchId, 0, errorMsg, true);
             });
     }
@@ -225,13 +199,14 @@ export class ZxBridgeCore {
         statusCode: number,
         body: string | Uint8Array,
         isError: boolean,
+        headLen = 0,
     ): void {
         const encoded = typeof body === 'string' ? textEncoder.encode(body) : body;
         const ptr = this._alloc(encoded.length) >>> 0;
         if (!ptr && encoded.length > 0) return;
         writeBytes(ptr, encoded);
         const type = isError ? CallbackType_FetchError : CallbackType_FetchSuccess;
-        this._invoke(type, fetchId, BigInt(statusCode), BigInt(ptr), BigInt(encoded.length));
+        this._invoke(type, fetchId, fetchMeta(statusCode, headLen), BigInt(ptr), BigInt(encoded.length));
     }
 
     /** Set a timeout and callback when it fires */
@@ -302,6 +277,10 @@ export class ZxBridgeCore {
     static createImportObject(bridgeRef: [ZxBridgeCore | null]): WebAssembly.Imports {
         return {
             ...jsz.importObject(),
+            __zx_io: createIoImports(() => {
+                if (!jsz.memory) throw new Error("WASM memory is not ready");
+                return jsz.memory;
+            }) as WebAssembly.ModuleImports,
             __zx_net: createFetchImports(() => {
                 if (!jsz.memory) throw new Error("WASM memory is not ready");
                 return jsz.memory;
@@ -318,6 +297,7 @@ export class ZxBridgeCore {
                     bodyPtr: number,
                     bodyLen: number,
                     timeoutMs: number,
+                    redirect: number,
                     fetchId: bigint
                 ) => {
                     bridgeRef[0]?.fetchAsync(
@@ -326,6 +306,7 @@ export class ZxBridgeCore {
                         headersPtr, headersLen,
                         bodyPtr, bodyLen,
                         timeoutMs,
+                        redirect,
                         fetchId
                     );
                 },

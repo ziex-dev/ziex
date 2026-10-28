@@ -1,18 +1,16 @@
 const Request = @This();
 
 const std = @import("std");
-const common = @import("common.zig");
-const Http = @import("../Http.zig");
+const http = @import("../http.zig");
+const Transport = @import("Transport.zig");
 const FormDataModule = @import("FormData.zig");
 const MultiFormDataModule = @import("MultiFormData.zig");
 
 pub const FormData = FormDataModule;
 pub const MultiFormData = MultiFormDataModule;
-pub const Method = common.Method;
-pub const Version = common.Version;
-pub const Cookies = common.Cookies;
-pub const Header = common.Header;
-pub const MultiFormEntry = common.MultiFormEntry;
+pub const Method = http.Method;
+pub const Version = http.Version;
+pub const Header = http.Header;
 
 /// Contains the URL of the request.
 ///
@@ -69,7 +67,7 @@ version: Version = .@"HTTP/1.1",
 arena: std.mem.Allocator,
 
 /// Internal backend transport carrier. All request reads delegate here.
-_internal: Http.Facade = .{},
+_internal: Transport.Facade = .{},
 
 /// Returns the request body as text.
 ///
@@ -100,7 +98,7 @@ pub fn multiFormData(self: *const Request) MultiFormDataModule {
 ///
 /// MDN: [URLSearchParams](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams)
 pub const UrlSearchParams = struct {
-    _internal: Http.Facade = .{},
+    _internal: Transport.Facade = .{},
 
     /// Returns the first value associated with the given search parameter.
     /// MDN: [URLSearchParams.get](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/get)
@@ -119,7 +117,7 @@ pub const UrlSearchParams = struct {
 /// The Params interface provides utility methods to work with URL parameters.
 /// extracted from dynamic routes.
 pub const Params = struct {
-    _internal: Http.Facade = .{},
+    _internal: Transport.Facade = .{},
 
     /// Returns the value of a URL parameter by name.
     pub fn get(self: *const Params, name: []const u8) ?[]const u8 {
@@ -148,7 +146,7 @@ pub const Params = struct {
 ///
 /// MDN: [Headers](https://developer.mozilla.org/en-US/docs/Web/API/Headers)
 pub const Headers = struct {
-    _internal: Http.Facade = .{},
+    _internal: Transport.Facade = .{},
 
     /// Returns the values of a header with the given name.
     ///
@@ -175,7 +173,7 @@ pub const Init = struct {
     version: Version = .@"HTTP/1.1",
     arena: std.mem.Allocator,
     cookie_header: []const u8 = "",
-    http: Http = .{},
+    http: Transport = .{},
 };
 
 pub fn init(opts: Init) Request {
@@ -195,3 +193,54 @@ pub fn init(opts: Init) Request {
         .params = .{ ._internal = .{ .http = opts.http } },
     };
 }
+
+/// Cookie accessor - parses cookies from the Cookie header.
+///
+/// In browsers, cookies are accessed via `document.cookie`.
+pub const Cookies = struct {
+    header_value: []const u8,
+
+    pub fn get(self: Cookies, name: []const u8) ?[]const u8 {
+        var it = std.mem.splitScalar(u8, self.header_value, ';');
+        while (it.next()) |kv| {
+            const trimmed = std.mem.trimStart(u8, kv, " ");
+            if (name.len >= trimmed.len) continue;
+            if (!std.mem.startsWith(u8, trimmed, name)) continue;
+            if (trimmed[name.len] != '=') continue;
+            return trimmed[name.len + 1 ..];
+        }
+        return null;
+    }
+
+    pub fn as(self: Cookies, name: []const u8, comptime T: type) ?T {
+        var it = std.mem.splitScalar(u8, self.header_value, ';');
+        while (it.next()) |kv| {
+            const trimmed = std.mem.trimStart(u8, kv, " ");
+            if (name.len >= trimmed.len) continue;
+            if (!std.mem.startsWith(u8, trimmed, name)) continue;
+            if (trimmed[name.len] != '=') continue;
+            const str = trimmed[name.len + 1 ..];
+
+            return switch (@typeInfo(T)) {
+                .pointer => |p| switch (p.size) {
+                    .Slice => if (p.child == u8 and p.is_const) str else @compileError("Cookies.getAs: only []const u8 is supported, got " ++ @typeName(T)),
+                    else => @compileError("Cookies.getAs: only []const u8 is supported, got " ++ @typeName(T)),
+                },
+                .int => std.fmt.parseInt(T, str, 10) catch return null,
+                .float => std.fmt.parseFloat(T, str) catch return null,
+                .bool => if (std.mem.eql(u8, str, "true") or std.mem.eql(u8, str, "1")) true else if (std.mem.eql(u8, str, "false") or std.mem.eql(u8, str, "0")) false else return null,
+                .@"enum" => std.meta.stringToEnum(T, str) orelse return null,
+                .@"struct", .@"union" => @compileError("Cookies.getAs: use getJson for struct/union types"),
+                else => @compileError("Cookies.getAs: unsupported type " ++ @typeName(T)),
+            };
+        }
+        return null;
+    }
+};
+
+/// Entry type for multipart form data (includes optional filename).
+pub const MultiFormEntry = struct {
+    key: []const u8,
+    value: []const u8,
+    filename: ?[]const u8,
+};

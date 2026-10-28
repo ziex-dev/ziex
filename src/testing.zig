@@ -3,7 +3,7 @@ const zx = @import("root.zig");
 const app_opts = @import("app_opts");
 
 const Allocator = std.mem.Allocator;
-const Conn = zx.Http.Conn;
+const Conn = zx.http.Conn;
 const Router = zx.Router;
 
 pub const Backend = enum {

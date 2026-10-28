@@ -1,29 +1,17 @@
-const Http = @This();
+//! Backend interface behind `Request`, `Response` and `Socket`. Server backends implement the vtable.
+const Transport = @This();
 
 const std = @import("std");
 
-const common = @import("Http/common.zig");
-
-pub const Conn = @import("Http/Conn.zig");
-pub const Capture = @import("Http/Capture.zig");
-pub const Host = @import("Http/Host.zig");
-
-pub const Request = @import("Http/Request.zig");
-pub const Response = @import("Http/Response.zig");
-pub const FormData = @import("Http/FormData.zig");
-pub const MultiFormData = @import("Http/MultiFormData.zig");
-pub const File = @import("Http/File.zig");
-
-pub const Status = common.Status;
-pub const CookieOptions = common.CookieOptions;
-pub const MultiFormValue = MultiFormData.Value;
-const WebSocketMessage = @import("WebSocket.zig").Message;
+const CookieOptions = @import("../http.zig").CookieOptions;
+const MultiFormValue = @import("MultiFormData.zig").Value;
+const WebSocketMessage = @import("../WebSocket.zig").Message;
 
 userdata: ?*anyopaque = null,
 vtable: *const VTable = &failing_vtable,
 
 pub const Facade = struct {
-    http: Http = .{},
+    http: Transport = .{},
 };
 
 pub const VTable = struct {
@@ -68,93 +56,93 @@ pub const VTable = struct {
     wsSetPublishToSelf: *const fn (userdata: ?*anyopaque, value: bool) void,
 };
 
-pub fn reqText(self: Http) ?[]const u8 {
+pub fn reqText(self: Transport) ?[]const u8 {
     return self.vtable.reqText(self.userdata);
 }
-pub fn reqHeaderGet(self: Http, name: []const u8) ?[]const u8 {
+pub fn reqHeaderGet(self: Transport, name: []const u8) ?[]const u8 {
     return self.vtable.reqHeaderGet(self.userdata, name);
 }
-pub fn reqHeaderHas(self: Http, name: []const u8) bool {
+pub fn reqHeaderHas(self: Transport, name: []const u8) bool {
     return self.vtable.reqHeaderHas(self.userdata, name);
 }
-pub fn reqParam(self: Http, name: []const u8) ?[]const u8 {
+pub fn reqParam(self: Transport, name: []const u8) ?[]const u8 {
     return self.vtable.reqParam(self.userdata, name);
 }
-pub fn reqQueryGet(self: Http, name: []const u8) ?[]const u8 {
+pub fn reqQueryGet(self: Transport, name: []const u8) ?[]const u8 {
     return self.vtable.reqQueryGet(self.userdata, name);
 }
-pub fn reqQueryHas(self: Http, name: []const u8) bool {
+pub fn reqQueryHas(self: Transport, name: []const u8) bool {
     return self.vtable.reqQueryHas(self.userdata, name);
 }
-pub fn reqFormGet(self: Http, name: []const u8) ?[]const u8 {
+pub fn reqFormGet(self: Transport, name: []const u8) ?[]const u8 {
     return self.vtable.reqFormGet(self.userdata, name);
 }
-pub fn reqFormHas(self: Http, name: []const u8) bool {
+pub fn reqFormHas(self: Transport, name: []const u8) bool {
     return self.vtable.reqFormHas(self.userdata, name);
 }
-pub fn reqMultiGet(self: Http, name: []const u8) ?MultiFormValue {
+pub fn reqMultiGet(self: Transport, name: []const u8) ?MultiFormValue {
     return self.vtable.reqMultiGet(self.userdata, name);
 }
-pub fn reqMultiHas(self: Http, name: []const u8) bool {
+pub fn reqMultiHas(self: Transport, name: []const u8) bool {
     return self.vtable.reqMultiHas(self.userdata, name);
 }
-pub fn reqMultiGetAll(self: Http, name: []const u8, allocator: std.mem.Allocator) ?[]const MultiFormValue {
+pub fn reqMultiGetAll(self: Transport, name: []const u8, allocator: std.mem.Allocator) ?[]const MultiFormValue {
     return self.vtable.reqMultiGetAll(self.userdata, name, allocator);
 }
 
-pub fn resSetStatus(self: Http, code: u16) void {
+pub fn resSetStatus(self: Transport, code: u16) void {
     self.vtable.resSetStatus(self.userdata, code);
 }
-pub fn resSetBody(self: Http, content: []const u8) void {
+pub fn resSetBody(self: Transport, content: []const u8) void {
     self.vtable.resSetBody(self.userdata, content);
 }
-pub fn resHeaderGet(self: Http, name: []const u8) ?[]const u8 {
+pub fn resHeaderGet(self: Transport, name: []const u8) ?[]const u8 {
     return self.vtable.resHeaderGet(self.userdata, name);
 }
-pub fn resHeaderSet(self: Http, name: []const u8, value: []const u8) void {
+pub fn resHeaderSet(self: Transport, name: []const u8, value: []const u8) void {
     self.vtable.resHeaderSet(self.userdata, name, value);
 }
-pub fn resHeaderAppend(self: Http, name: []const u8, value: []const u8) void {
+pub fn resHeaderAppend(self: Transport, name: []const u8, value: []const u8) void {
     self.vtable.resHeaderAppend(self.userdata, name, value);
 }
-pub fn resWriter(self: Http) ?*std.Io.Writer {
+pub fn resWriter(self: Transport) ?*std.Io.Writer {
     return self.vtable.resWriter(self.userdata);
 }
-pub fn resWrite(self: Http, data: []const u8) anyerror!void {
+pub fn resWrite(self: Transport, data: []const u8) anyerror!void {
     return self.vtable.resWrite(self.userdata, data);
 }
-pub fn resClearWriter(self: Http) void {
+pub fn resClearWriter(self: Transport) void {
     self.vtable.resClearWriter(self.userdata);
 }
-pub fn resSetCookie(self: Http, name: []const u8, value: []const u8, opts: CookieOptions) anyerror!void {
+pub fn resSetCookie(self: Transport, name: []const u8, value: []const u8, opts: CookieOptions) anyerror!void {
     return self.vtable.resSetCookie(self.userdata, name, value, opts);
 }
 
-pub fn wsUpgrade(self: Http, data: ?[]const u8) anyerror!void {
+pub fn wsUpgrade(self: Transport, data: ?[]const u8) anyerror!void {
     return self.vtable.wsUpgrade(self.userdata, data);
 }
-pub fn wsSend(self: Http, message: WebSocketMessage) anyerror!void {
+pub fn wsSend(self: Transport, message: WebSocketMessage) anyerror!void {
     return self.vtable.wsSend(self.userdata, message);
 }
-pub fn wsRead(self: Http) ?WebSocketMessage {
+pub fn wsRead(self: Transport) ?WebSocketMessage {
     return self.vtable.wsRead(self.userdata);
 }
-pub fn wsClose(self: Http) void {
+pub fn wsClose(self: Transport) void {
     self.vtable.wsClose(self.userdata);
 }
-pub fn wsSubscribe(self: Http, topic: []const u8) void {
+pub fn wsSubscribe(self: Transport, topic: []const u8) void {
     self.vtable.wsSubscribe(self.userdata, topic);
 }
-pub fn wsUnsubscribe(self: Http, topic: []const u8) void {
+pub fn wsUnsubscribe(self: Transport, topic: []const u8) void {
     self.vtable.wsUnsubscribe(self.userdata, topic);
 }
-pub fn wsPublish(self: Http, topic: []const u8, message: []const u8) usize {
+pub fn wsPublish(self: Transport, topic: []const u8, message: []const u8) usize {
     return self.vtable.wsPublish(self.userdata, topic, message);
 }
-pub fn wsIsSubscribed(self: Http, topic: []const u8) bool {
+pub fn wsIsSubscribed(self: Transport, topic: []const u8) bool {
     return self.vtable.wsIsSubscribed(self.userdata, topic);
 }
-pub fn wsSetPublishToSelf(self: Http, value: bool) void {
+pub fn wsSetPublishToSelf(self: Transport, value: bool) void {
     self.vtable.wsSetPublishToSelf(self.userdata, value);
 }
 
@@ -233,4 +221,4 @@ pub const failing_vtable = VTable{
     .wsSetPublishToSelf = &failWsSetPublishToSelf,
 };
 
-pub const failing = Http{ .vtable = &failing_vtable };
+pub const failing = Transport{ .vtable = &failing_vtable };

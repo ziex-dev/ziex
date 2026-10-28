@@ -110,19 +110,19 @@ fn fetchLatestRelease(allocator: zx.Allocator) ?GhRelease {
         .{slug},
     ) catch return null;
 
-    const init = zx.Fetch.RequestInit{
+    const options: zx.http.Client.FetchOptions = .{
+        .url = url,
         .headers = &.{
             .{ .name = "Accept", .value = "application/vnd.github+json" },
             .{ .name = "User-Agent", .value = "ziex-site" },
         },
+        .timeout_ms = 3_000,
     };
 
-    var response = fetchWithTimeout(allocator, url, init, 3_000) orelse return null;
-    defer response.deinit();
+    const response = fetchWithTimeout(allocator, options) orelse return null;
+    defer response.deinit(allocator);
 
-    if (!response.ok()) return null;
-
-    const parsed = response.json(GithubRelease) catch return null;
+    const parsed = response.json(GithubRelease, allocator) catch return null;
     defer parsed.deinit();
 
     const tag = parsed.value.tag_name;
@@ -140,42 +140,20 @@ fn fetchLatestRelease(allocator: zx.Allocator) ?GhRelease {
     };
 }
 
-fn fetchWithTimeout(allocator: zx.Allocator, url: []const u8, init: zx.Fetch.RequestInit, timeout_ms: u32) ?zx.Fetch.Response {
-    var fetch_init = init;
-    fetch_init.timeout_ms = timeout_ms;
+/// The timeout is enforced by the host on wasm and raced against a timer natively.
+fn fetchWithTimeout(allocator: zx.Allocator, options: zx.http.Client.FetchOptions) ?zx.http.Client.Result {
+    if (comptime zx.platform.isWasm()) return fetchOk(allocator, options);
 
-    if (comptime zx.platform.isWasm()) {
-        var response = (zx.fetch(.blocking, allocator, url, fetch_init) catch |err| {
-            zx.log.warn("version fetch failed: {s}", .{@errorName(err)});
-            return null;
-        }) orelse return null;
-        if (!response.ok()) {
-            zx.log.warn("version fetch http {d}", .{response.status});
-            response.deinit();
-            return null;
-        }
-        return response;
-    }
-
-    const io = zx.io();
+    const io = zx.Io.default();
 
     const Branch = union(enum) {
-        response: ?zx.Fetch.Response,
+        response: ?zx.http.Client.Result,
         timer: void,
     };
 
     const FetchTask = struct {
-        fn run(a: zx.Allocator, fetch_url: []const u8, fetch_opts: zx.Fetch.RequestInit) ?zx.Fetch.Response {
-            var response = (zx.fetch(.blocking, a, fetch_url, fetch_opts) catch |err| {
-                zx.log.warn("version fetch failed: {s}", .{@errorName(err)});
-                return null;
-            }) orelse return null;
-            if (!response.ok()) {
-                zx.log.warn("version fetch http {d}", .{response.status});
-                response.deinit();
-                return null;
-            }
-            return response;
+        fn run(a: zx.Allocator, fetch_opts: zx.http.Client.FetchOptions) ?zx.http.Client.Result {
+            return fetchOk(a, fetch_opts);
         }
     };
 
@@ -188,8 +166,8 @@ fn fetchWithTimeout(allocator: zx.Allocator, url: []const u8, init: zx.Fetch.Req
     var buffer: [2]Branch = undefined;
     var selector = std.Io.Select(Branch).init(io, &buffer);
 
-    selector.async(.response, FetchTask.run, .{ allocator, url, fetch_init });
-    selector.async(.timer, Timer.run, .{ io, timeout_ms });
+    selector.async(.response, FetchTask.run, .{ allocator, options });
+    selector.async(.timer, Timer.run, .{ io, options.timeout_ms });
 
     const winner = selector.await() catch {
         zx.log.warn("version fetch timed out or was cancelled", .{});
@@ -201,6 +179,21 @@ fn fetchWithTimeout(allocator: zx.Allocator, url: []const u8, init: zx.Fetch.Req
         .response => |r| r,
         .timer => null,
     };
+}
+
+fn fetchOk(allocator: zx.Allocator, options: zx.http.Client.FetchOptions) ?zx.http.Client.Result {
+    var client: zx.http.Client = .{ .io = zx.Io.default(), .allocator = allocator };
+    defer client.deinit();
+    const response = client.fetch(options) catch |err| {
+        zx.log.warn("version fetch failed: {s}", .{@errorName(err)});
+        return null;
+    };
+    if (response.status.class() != .success) {
+        zx.log.warn("version fetch http {d}", .{@backingInt(response.status)});
+        response.deinit(allocator);
+        return null;
+    }
+    return response;
 }
 
 fn repoSlug() ?[]const u8 {

@@ -13,6 +13,7 @@ import {
     CallbackType_Timeout,
     CallbackType_Interval,
 } from "./constants";
+import { fetchMeta, performFetch } from "../runtime/fetch";
 
 type CallbackHandler = (type: number, id: bigint, a: bigint, b: bigint, c: bigint) => void;
 
@@ -80,50 +81,30 @@ export class ZxWasiBridge {
         headersPtr: number, headersLen: number,
         bodyPtr: number, bodyLen: number,
         timeoutMs: number,
+        redirect: number,
         fetchId: bigint
     ): void {
-        const url = this.#readString(urlPtr, urlLen);
-        const method = methodLen > 0 ? this.#readString(methodPtr, methodLen) : 'GET';
-        const headersJson = headersLen > 0 ? this.#readString(headersPtr, headersLen) : '{}';
-        const body = bodyLen > 0 ? this.#view().subarray(bodyPtr, bodyPtr + bodyLen) : undefined;
-
-        let headers: Record<string, string> = {};
-        try {
-            headers = JSON.parse(headersJson);
-        } catch {
-            for (const line of headersJson.split('\n')) {
-                const i = line.indexOf(':');
-                if (i > 0) headers[line.slice(0, i)] = line.slice(i + 1);
-            }
-        }
-
-        const controller = new AbortController();
-        const timeout = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
-
-        fetch(url, {
-            method,
-            headers: Object.keys(headers).length > 0 ? headers : undefined,
-            body: method !== 'GET' && method !== 'HEAD' ? body as BodyInit : undefined,
-            signal: controller.signal,
+        performFetch({
+            url: this.#readString(urlPtr, urlLen),
+            method: methodLen > 0 ? this.#readString(methodPtr, methodLen) : 'GET',
+            headersJson: this.#readString(headersPtr, headersLen),
+            body: bodyLen > 0 ? this.#view().slice(bodyPtr, bodyPtr + bodyLen) : undefined,
+            timeoutMs,
+            redirect,
         })
-            .then(async (res) => {
-                if (timeout) clearTimeout(timeout);
-                const bytes = new Uint8Array(await res.arrayBuffer());
-                this.#notifyFetchComplete(fetchId, res.status, bytes, false);
-            })
-            .catch((err: Error) => {
-                if (timeout) clearTimeout(timeout);
-                const msg = err.name === 'AbortError' ? 'Request timeout' : (err.message ?? 'Fetch failed');
+            .then((res) => this.#notifyFetchComplete(fetchId, res.status, res.bytes, false, res.headLen))
+            .catch((err) => {
+                const msg = err === 'timeout' ? 'Request timeout' : (err?.message ?? 'Fetch failed');
                 this.#notifyFetchComplete(fetchId, 0, msg, true);
             });
     }
 
-    #notifyFetchComplete(fetchId: bigint, status: number, body: string | Uint8Array, isError: boolean): void {
+    #notifyFetchComplete(fetchId: bigint, status: number, body: string | Uint8Array, isError: boolean, headLen = 0): void {
         const encoded = typeof body === 'string' ? encoder.encode(body) : body;
         const ptr = this.#alloc(encoded.length);
         this.#writeBytes(ptr, encoded);
         const type = isError ? CallbackType_FetchError : CallbackType_FetchSuccess;
-        this.#invoke(type, fetchId, BigInt(status), BigInt(ptr), BigInt(encoded.length));
+        this.#invoke(type, fetchId, fetchMeta(status, headLen), BigInt(ptr), BigInt(encoded.length));
     }
 
     setTimeout(callbackId: bigint, delayMs: number): void {
@@ -161,12 +142,13 @@ export class ZxWasiBridge {
                     headersPtr: number, headersLen: number,
                     bodyPtr: number, bodyLen: number,
                     timeoutMs: number,
+                    redirect: number,
                     fetchId: bigint
                 ) => {
                     bridgeRef[0]?.fetchAsync(
                         urlPtr, urlLen, methodPtr, methodLen,
                         headersPtr, headersLen, bodyPtr, bodyLen,
-                        timeoutMs, fetchId
+                        timeoutMs, redirect, fetchId
                     );
                 },
                 _setTimeout: (callbackId: bigint, delayMs: number) => {

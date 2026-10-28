@@ -15,7 +15,7 @@ const Devtool = @import("Devtool.zig");
 const Router = zx.Router;
 
 pub const Config = AppConfig;
-pub const Conn = zx.Http.Conn;
+pub const Conn = zx.http.Conn;
 pub const Component = zx.Component;
 pub const HeaderEntry = Conn.HeaderEntry;
 pub const PubSub = @import("PubSub.zig");
@@ -194,10 +194,10 @@ fn runOutcome(
     comptime o: Opts,
     ctx: Ctx,
     backend: *Conn,
-    http: zx.Http,
+    http: zx.http.Transport,
     pathname: []const u8,
-    req_obj: zx.Http.Request,
-    res_obj: zx.Http.Response,
+    req_obj: zx.http.Request,
+    res_obj: zx.http.Response,
     matched: ?*const Meta.Route,
     handlers: ?RouteHandlers,
     outcome: Router.Outcome,
@@ -269,10 +269,10 @@ fn streamComponentSsr(
     ctx: Ctx,
     backend: *Conn,
     component: Component,
-    http: zx.Http,
+    http: zx.http.Transport,
     pathname: []const u8,
-    req_obj: zx.Http.Request,
-    res_obj: zx.Http.Response,
+    req_obj: zx.http.Request,
+    res_obj: zx.http.Response,
     matched: ?*const Meta.Route,
     transport: Transport,
 ) !void {
@@ -301,7 +301,7 @@ fn streamComponentSsr(
 fn handleDevtool(
     ctx: Ctx,
     backend: *Conn,
-    http: zx.Http,
+    http: zx.http.Transport,
     method: std.http.Method,
     transport: Transport,
 ) !bool {
@@ -332,7 +332,7 @@ fn handleDevtool(
 fn respondDevtoolComponents(
     ctx: Ctx,
     backend: *Conn,
-    http: zx.Http,
+    http: zx.http.Transport,
     component: *Component,
     transport: Transport,
 ) !void {
@@ -346,10 +346,10 @@ fn respondDevtoolComponents(
 fn handleStaticProbes(
     ctx: Ctx,
     backend: *Conn,
-    http: zx.Http,
+    http: zx.http.Transport,
     pathname: []const u8,
-    req_obj: zx.Http.Request,
-    res_obj: zx.Http.Response,
+    req_obj: zx.http.Request,
+    res_obj: zx.http.Response,
     matched: ?*const Meta.Route,
     transport: Transport,
 ) !bool {
@@ -521,7 +521,7 @@ pub fn proxyStatus(proxy: Router.ProxyResult) void {
     }
 }
 
-pub fn socket(h: zx.Http, handlers: ?RouteHandlers) zx.Socket {
+pub fn socket(h: zx.http.Transport, handlers: ?RouteHandlers) zx.Socket {
     if (handlers != null and handlers.?.socket != null) {
         return .{ ._internal = .{ .http = h, .attached = true } };
     }

@@ -101,16 +101,13 @@ pub var kv: Kv = .failing;
 pub var cache: Cache = .failing;
 
 // --- Net --- //
-pub const Http = @import("runtime/core/Http.zig");
-pub const Fetch = @import("runtime/core/Fetch.zig");
+pub const http = @import("runtime/core/http.zig");
 pub const WebSocket = @import("runtime/core/WebSocket.zig");
-pub const Io = Fetch.Io;
 pub const Socket = routing.Socket;
-pub const fetch = Fetch.fetch;
 
 // --- Values --- //
 pub const allocator = app_mod.allocator;
-pub const io = app_mod.io;
+pub const Io = @import("runtime/core/Io.zig");
 pub const platform: Platform = plfm.platform;
 pub const std_options = opts.std_options;
 
