@@ -244,11 +244,11 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
     if (build_args_array.items.len > 0) build_args_array.items[0] = resolved_zig;
 
     var builder_impl: Builder.default = undefined;
-    try builder_impl.init(io, .{
+    builder_impl.init(io, .{
         .allocator = allocator,
         .argv = build_args_array.items,
         .environ_map = env_map,
-    });
+    }) catch |err| util.exitZigSpawnFailed(zig_path, err);
     var builder = builder_impl.builder();
     children.setBuilder(builder.child().id);
 

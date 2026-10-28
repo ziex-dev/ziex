@@ -42,10 +42,10 @@ pub fn buildStatic(ctx: CommandContext, args: anytype) !void {
     }
     try build_argv.appendSlice(ctx.allocator, &.{ "-p", install_prefix });
 
-    var build_proc = try util.spawnZig(io, .{
+    var build_proc = util.spawnZig(io, .{
         .argv = build_argv.items,
         .environ_map = app.environ_map,
-    });
+    }) catch |err| util.exitZigSpawnFailed(args.@"zig-path", err);
     switch (try build_proc.wait(io)) {
         .exited => |code| if (code != 0) {
             try ctx.writer.print("Failed to build the app for static export (exit {d})!\n", .{code});

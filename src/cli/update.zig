@@ -27,10 +27,10 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const fetch_uri = try ctx.allocator.print("git+{s}{s}", .{ zx_info.repository, ref });
     defer ctx.allocator.free(fetch_uri);
 
-    var system = try util.spawnZig(app.io, .{
+    var system = util.spawnZig(app.io, .{
         .argv = &.{ args.@"zig-path", "fetch", "--save", fetch_uri },
         .environ_map = app.environ_map,
-    });
+    }) catch |err| util.exitZigSpawnFailed(args.@"zig-path", err);
     const term = try system.wait(app.io);
     _ = term;
 }

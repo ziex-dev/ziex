@@ -69,10 +69,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         .argv = build_args.items,
         .environ_map = app.environ_map,
         .watch = false,
-    }) catch |err| {
-        std.log.err("zig build failed to start ({s})\n", .{@errorName(err)});
-        std.process.exit(1);
-    };
+    }) catch |err| util.exitZigSpawnFailed(args.@"zig-path", err);
     var builder = builder_impl.builder();
     defer builder.deinit(io);
 

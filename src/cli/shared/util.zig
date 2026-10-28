@@ -119,6 +119,28 @@ fn trySpawnZigFromUnderscore(
     return std.process.spawn(io, retry);
 }
 
+pub fn exitZigSpawnFailed(zig_path: []const u8, err: anyerror) noreturn {
+    switch (err) {
+        error.FileNotFound => {
+            if (zig_path.len == 0 or std.mem.eql(u8, zig_path, "zig")) {
+                std.log.err("zig not found in PATH", .{});
+            } else {
+                std.log.err("zig not found at '{s}'", .{zig_path});
+            }
+            std.debug.print(
+                \\
+                \\  Ziex needs Zig to build your app. Install it from https://ziglang.org/download/
+                \\  and make sure it is in PATH, or pass --zig-path <path>.
+                \\
+                \\
+            , .{});
+        },
+        error.AccessDenied, error.PermissionDenied => std.log.err("zig at '{s}' is not executable ({s})", .{ zig_path, @errorName(err) }),
+        else => std.log.err("failed to start zig ({s})", .{@errorName(err)}),
+    }
+    std.process.exit(1);
+}
+
 fn copyArgv(dst: *[64][]const u8, src: []const []const u8) void {
     for (src, 0..) |arg, index| dst[index] = arg;
 }
