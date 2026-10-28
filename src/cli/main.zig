@@ -20,6 +20,7 @@ const bundle = @import("bundle.zig");
 const update = @import("update.zig");
 const upgrade = @import("upgrade.zig");
 const cli_args = @import("root.zig");
+const help = @import("shared/help.zig");
 
 pub const AppContext = context.AppContext;
 pub const CommandContext = context.CommandContext;
@@ -92,8 +93,8 @@ pub fn run(
     const parsed = try std_cli.parseAlloc(root_command, arena, args, .{
         .exit_usage_error = true,
         .render_usage_errors = true,
-        .exit_help = true,
-        .render_help = .generated,
+        .exit_help = false,
+        .render_help = .none,
     });
 
     if (parsed.subcommand == null and parsed.kind == .args and parsed.kind.args.version) {
@@ -101,8 +102,9 @@ pub fn run(
         return;
     }
 
-    if (parsed.kind == .help or parsed.subcommand == null) {
-        try std_cli.writeHelpGenerated(root_command, args[0], parsed, writer);
+    if (std_cli.helpWanted(parsed) or parsed.subcommand == null) {
+        // Ignore broken pipes, e.g. `zx --help | head`.
+        help.write(root_command, parsed, writer, .{ .color = help.useColor(app) }) catch {};
         return;
     }
 
@@ -125,10 +127,7 @@ pub fn run(
                 if (comptime mod.command.subcommands.len > 0) {
                     return mod.run(ctx, s);
                 } else switch (s.kind) {
-                    .help => {
-                        try std_cli.writeHelpGenerated(mod.command, args[0], s, writer);
-                        return;
-                    },
+                    .help => unreachable,
                     .args => |cmd_args| return mod.run(ctx, cmd_args),
                 }
             }

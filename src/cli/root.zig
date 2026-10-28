@@ -119,9 +119,9 @@ pub const build: Command = .{
             .help = "Pre-render every route to static HTML in --outdir instead of building a server (can't be combined with --target)",
         }),
         Argument.init(.outdir, []const u8, .{
-            .default_value = "dist",
+            .default_value = "",
             .short = 'o',
-            .help = "Output directory (requires --static)",
+            .help = "Output directory for --static builds (default: dist)",
         }),
         Argument.init(.@"prerendered-only", bool, .{
             .default_value = false,
@@ -340,7 +340,12 @@ pub const lsp: Command = .{
 
 pub const bundle: Command = .{
     .name = .bundle,
-    .help_short = "Bundle the site into a deployable directory",
+    .help_short = "Bundle the built app and its static assets for native deployment",
+    .help =
+    \\Copy the built app executable and its static assets into a deployable directory.
+    \\Run `zx build` first.
+    \\
+    ,
     .named_args = &.{
         Argument.init(.outdir, []const u8, .{
             .default_value = "bundle",

@@ -21,11 +21,11 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const w = ctx.writer;
 
     const event_name = env.get("ZIEX_DEV_EVENT") orelse {
-        try w.print("{s}error:{s} zx dev needs a native host to watch and serve the app\n", .{ Colors.red, Colors.reset });
+        std.log.err("zx dev needs a native host to watch and serve the app", .{});
         std.process.exit(1);
     };
     const event = std.meta.stringToEnum(Event, event_name) orelse {
-        try w.print("{s}error:{s} unknown dev event '{s}'\n", .{ Colors.red, Colors.reset, event_name });
+        std.log.err("unknown dev event '{s}'", .{event_name});
         std.process.exit(1);
     };
 

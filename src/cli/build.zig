@@ -19,14 +19,19 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     const io = app.io;
     const allocator = ctx.allocator;
 
+    if (!args.static and args.outdir.len > 0) {
+        std.log.err("--outdir only applies to --static builds", .{});
+        std.process.exit(1);
+    }
+
     if (args.static) {
         // Static builds run the built app on this machine, so they can't be cross-compiled.
         if (args.target.len > 0 and !std.mem.eql(u8, args.target, "native")) {
-            try ctx.writer.print("{s}error:{s} --static builds for this machine and can't be combined with --target={s}\n", .{ Colors.red, Colors.reset, args.target });
+            std.log.err("--static builds for this machine and can't be combined with --target={s}\n", .{args.target});
             std.process.exit(1);
         }
         return static_cmd.buildStatic(ctx, .{
-            .outdir = args.outdir,
+            .outdir = if (args.outdir.len > 0) args.outdir else "dist",
             .@"bin-path" = args.@"bin-path",
             .@"zig-path" = args.@"zig-path",
             .release = if (args.release.len > 0) args.release else "small",
@@ -65,7 +70,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         .environ_map = app.environ_map,
         .watch = false,
     }) catch |err| {
-        try ctx.writer.print("{s}error:{s} zig build failed to start ({s})\n", .{ Colors.red, Colors.reset, @errorName(err) });
+        std.log.err("zig build failed to start ({s})\n", .{@errorName(err)});
         std.process.exit(1);
     };
     var builder = builder_impl.builder();
