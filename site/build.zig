@@ -55,7 +55,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     const pg_step = b.step("pg", "Install playground assets");
-    const playground_zig_version = "0.17.0";
+    const playground_zig_version = "0.18.0-dev.738";
 
     // --- Playground Assets --- //
     {
@@ -119,6 +119,8 @@ pub fn build(b: *std.Build) !void {
                     .root_source_file = zig_dep.path("lib/compiler_rt.zig"),
                     .target = wasm_target,
                     .optimize = wasm_optimize,
+                    // Zig 0.18 defaults wasm libraries to PIC; the playground links non-PIC executables.
+                    .pic = false,
                 }),
             });
             const zig_exe = zig_dep.artifact("zig");
@@ -145,6 +147,8 @@ pub fn build(b: *std.Build) !void {
                     .root_source_file = zigc_lib.path("compiler_rt.zig"),
                     .target = wasm_target,
                     .optimize = wasm_optimize,
+                    // Zig 0.18 defaults wasm libraries to PIC; the playground links non-PIC executables.
+                    .pic = false,
                 }),
             });
 

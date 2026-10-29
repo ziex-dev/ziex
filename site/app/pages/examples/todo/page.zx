@@ -7,7 +7,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
 }
 
 const Todo = struct { id: u32, text: []const u8, completed: bool };
-const TodoList = std.ArrayListUnmanaged(Todo);
+const TodoList = std.ArrayList(Todo);
 
 pub fn TodoApp(ctx: *zx.ComponentCtx(void)) !zx.Component {
     const todos_state = ctx.state(TodoList, blk: {

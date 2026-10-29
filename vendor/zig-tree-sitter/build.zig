@@ -19,6 +19,7 @@ pub fn build(b: *std.Build) !void {
         .@"enable-wasm" = enable_wasm,
     });
     const core_lib = core.artifact("tree-sitter");
+    b.addNamedLazyPath("wasi-include", core.namedLazyPath("wasi-include"));
     const wasmtime = if (enable_wasm) core.builder.lazyDependency(ts.wasmtimeDep(target.result), .{}) else null;
 
     const module = b.addModule("tree_sitter", .{

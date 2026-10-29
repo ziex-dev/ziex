@@ -91,7 +91,7 @@ pub const Ref = packed struct(u64) {
         const testing = std.testing;
 
         {
-            const n: u64 = (@as(u64, @intCast(@as(u32, @intCast(nanHead)) << 3 | 2)) << 32) | 14;
+            const n: u64 = (@as(u64, @intCast((@as(u32, @intCast(nanHead)) << 3) | 2)) << 32) | 14;
             const ref: Ref = @bitCast(n);
             try testing.expectEqual(nanHead, ref.head);
             try testing.expectEqual(js.Type.string, ref.typeOf());

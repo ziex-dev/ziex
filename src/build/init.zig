@@ -585,7 +585,7 @@ const Clients = struct {
     stub_mode: ServerOnlyStubMode,
     added: std.AutoHashMapUnmanaged(*Module, void) = .empty,
     wasm: std.AutoHashMapUnmanaged(*Module, *Module) = .empty,
-    clones: std.ArrayListUnmanaged(struct { src: *Module, dst: *Module }) = .empty,
+    clones: std.ArrayList(struct { src: *Module, dst: *Module }) = .empty,
 
     fn add(self: *Clients, mod: *Module) void {
         const b = self.b;
@@ -956,7 +956,7 @@ fn addStaticAssetRun(
 }
 
 const Injections = struct {
-    items: std.ArrayListUnmanaged(AddElementOptions) = .empty,
+    items: std.ArrayList(AddElementOptions) = .empty,
     wf: ?*std.Build.Step.WriteFile = null,
 
     pub fn add(self: *Injections, b: *std.Build, options: AddElementOptions) void {

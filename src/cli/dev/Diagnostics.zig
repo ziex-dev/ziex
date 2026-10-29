@@ -173,7 +173,7 @@ pub fn remapLocation(
 
 /// Resolve `@src()` / diagnostic paths to a readable generated `.zig` on disk.
 fn zigPathCandidates(allocator: std.mem.Allocator, file: []const u8, transpile_dir: []const u8) ![][]u8 {
-    var list: std.ArrayListUnmanaged([]u8) = .empty;
+    var list: std.ArrayList([]u8) = .empty;
     errdefer {
         for (list.items) |c| allocator.free(c);
         list.deinit(allocator);
