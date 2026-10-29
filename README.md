@@ -6,7 +6,6 @@ A full-stack web framework for Zig. Declarative UI components using familiar pat
 
 Ziex combines the power and performance of Zig with the expressiveness and simplicity of declarative UI, enabling you to build fast, type-safe web applications.
 
-
 <p align="center">
   <a href="https://ziex.dev">Website</a> ·
   <a href="https://ziex.dev/learn">Docs</a> ·
@@ -25,7 +24,6 @@ curl -fsSL https://ziex.dev/install | bash
 # Windows
 powershell -c "irm ziex.dev/install.ps1 | iex"
 ```
-
 
 ### 2. Initializing Project
 
@@ -173,8 +171,8 @@ const zx = @import("zx");
 
 | Zig      | Ziex                                                                              | Branch     | Status      |
 | -------- | --------------------------------------------------------------------------------- | ---------- | ----------- |
-| `0.17.x` |                                                                                   | `main`     | Development |
-| `0.17.x` | [`0.1.0`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0)         |            | **Latest**  |
+| `0.18.x` | [`0.1.0`](https://github.com/ziex-dev/ziex/tree/main)                             | `main`     | Development |
+| `0.17.x` | [`0.1.0`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0)                   | `zig-0.17` | **Latest**  |
 | `0.16.x` | [`0.1.0-dev.1259`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0-dev.1259) | `zig-0.16` | Outdated    |
 | `0.15.x` | [`0.1.0-dev-1050`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0-dev.1050) | `zig-0.15` | Outdated    |
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const REPO = "ziex-dev/ziex";
 const CODE_EXTS = [_][]const u8{ ".zig", ".zx", ".ts", ".css", ".md" };
@@ -247,8 +248,9 @@ fn httpGet(a: std.mem.Allocator, io: std.Io, url: []const u8, accept: ?[]const u
         .{ .name = "user-agent", .value = "ziex-stats" },
         .{ .name = "accept", .value = accept orelse "application/vnd.github+json" },
     });
-    // Optional auth - lifts the unauthenticated rate limit.
-    if (std.c.getenv("GITHUB_TOKEN")) |tok_z| {
+    // Optional auth - lifts the unauthenticated rate limit. Needs libc (absent on wasi).
+    const token: ?[*:0]const u8 = if (builtin.link_libc) std.c.getenv("GITHUB_TOKEN") else null;
+    if (token) |tok_z| {
         const tok = std.mem.span(tok_z);
         if (tok.len > 0) {
             try headers.append(a, .{

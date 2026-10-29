@@ -1,17 +1,15 @@
 .{
     .name = .ziex_js,
     .fingerprint = 0x3428b4e119b455bf,
-    .version = "0.1.0",
+    .version = "0.1.1",
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
-        .prebuilt = .{
-            // TODO: publish to github packages and use from there instead
-            .url = "https://registry.npmjs.org/ziex/-/ziex-0.1.0.tgz",
-            .hash = "ziex_js-0.1.0-v1W0GWWBBQAGh3oThNXzvMNAH0eGXbTSoA0FLHlxak8b",
-            .lazy = true,
-        },
         .esbuild = .{ .path = "../plugin-esbuild" },
         .typescript = .{ .path = "../plugin-typescript", .lazy = true },
+        .prebuilt = .{
+            .url = "https://registry.npmjs.org/ziex/-/ziex-0.1.0.tgz",
+            .hash = "ziex_js-0.1.0-v1W0GWWBBQAGh3oThNXzvMNAH0eGXbTSoA0FLHlxak8b",
+        },
     },
     .paths = .{""},
 }

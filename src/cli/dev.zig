@@ -217,7 +217,7 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
     };
 
     const outer_port = dev_server.address.getPort();
-    const inner_port = DevServer.findFreePort(io) catch outer_port +% 1;
+    const inner_port = DevServer.findFreePort(io) catch (outer_port +% 1);
     if (inner_port == 0 or inner_port == outer_port) {
         try ctx.writer.print("Failed to allocate an inner port for the app binary\n", .{});
         return;

@@ -1,22 +1,22 @@
 .{
     .name = .ziex,
-    .version = "0.1.0",
+    .version = "0.2.0-dev",
     .description = "Ziex is a framework for building web applications with Zig.",
     .repository = "https://github.com/ziex-dev/ziex",
     .homepage = "https://ziex.dev",
     .fingerprint = 0x249409a7bd1c7667,
-    .minimum_zig_version = "0.17.0",
+    .minimum_zig_version = "0.18.0-dev.738+ae9a8acc7",
     .dependencies = .{
         .ziex_js = .{ .path = "pkg/ziex", .lazy = true },
         // httpz - HTTP server for Ziex
         .httpz = .{
-            .url = "git+https://github.com/ziex-dev/httpz.git#e8272bfd5727aade0dcee3e2aba6c50f57c374b6",
-            .hash = "httpz-0.0.0-PNVzrNAXCQDHb-rRH2jq07A3Ekv3GS6XOTkiqZJtKeqv",
+            .url = "git+https://github.com/ziex-dev/httpz.git?ref=zig-0.18#f21bc30aafb7d213372d18c31682c1578f61e9e6",
+            .hash = "httpz-0.0.0-PNVzrFA0CQA-DWzbUCyENdHqO20UelsvJ2ls_ZpkoTYn",
             .lazy = true,
         },
         .zls = .{
-            .url = "git+https://github.com/ziex-dev/zls.git#a13ce6275c3124f6a8ba57cfe2e64d0ef249058a",
-            .hash = "zls-0.17.1-dev-rmm5fq5GHABMs_zD8vCvNLpSaR3f43LKVgC-w1mgVJ2x",
+            .url = "git+https://github.com/ziex-dev/zls.git?ref=zig-0.18/zx#d6d765496724e61597307022bc64a894e895a1e8",
+            .hash = "zls-0.18.0-dev-rmm5fhxDHACDBLQyAlc7TNnUgMsRZ14qqtaZi2nUtkJG",
             .lazy = true,
         },
         .lsp_kit = .{

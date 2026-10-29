@@ -2,16 +2,11 @@
     .name = .tree_sitter,
     .fingerprint = 0x841224b47f8817f2,
     .version = "0.25.0",
-    .minimum_zig_version = "0.17.0",
+    .minimum_zig_version = "0.18.0-dev.738+ae9a8acc7",
     .dependencies = .{
-        .@"tree-sitter-c" = .{
-            .url = "git+https://github.com/tree-sitter/tree-sitter-c#586dd62ad4d3532895ea80a8382d21307b4733bd",
-            .hash = "tree_sitter_c-0.24.1-ns1YLwdjQACIi5BEwewiqu6a6Zcl91RWoSWbz0KmxUOj",
-            .lazy = true,
-        },
         .tree_sitter = .{
-            .url = "git+https://github.com/ziex-dev/tree-sitter.git?ref=zig-0.17#3d66a75de0b3d9f9df7c96c6524444d6a3b4eda0",
-            .hash = "tree_sitter-0.27.0-Tw2sR0f_CwDrLd0k6L_8HRkq6z-omnRpV8JeIWbbCFfw",
+            .url = "git+https://github.com/ziex-dev/tree-sitter.git?ref=zig-0.18#2d6071f226dd4bcad6a1cb0609523be93f226dc6",
+            .hash = "tree_sitter-0.28.0-Tw2sR1dRDgCAM04B76CjM3cI-hlRjeZzURoauiUjutEj",
         },
     },
     .paths = .{

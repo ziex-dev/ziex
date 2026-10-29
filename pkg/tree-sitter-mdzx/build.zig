@@ -15,10 +15,16 @@ pub fn build(b: *std.Build) !void {
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
-            .link_libc = true,
+            .link_libc = target.result.os.tag != .wasi,
             .pic = if (shared) true else null,
         }),
     });
+    // Zig no longer bundles a libc for wasi; tree-sitter provides the headers.
+    if (target.result.os.tag == .wasi) {
+        if (b.lazyDependency("tree_sitter", .{})) |ts_dep| {
+            lib.root_module.addSystemIncludePath(ts_dep.namedLazyPath("wasi-include"));
+        }
+    }
 
     lib.root_module.addCSourceFile(.{
         .file = b.path("src/parser.c"),

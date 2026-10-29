@@ -48,8 +48,10 @@ pub fn build(b: *std.Build) !void {
 
     // Imports (zx)
     {
+        // wasi has no libc in Zig 0.18; its server uses host-provided db and transport.
+        const is_wasi = target.result.os.tag == .wasi;
         if (!is_client) {
-            if (enable_sqlite) {
+            if (enable_sqlite and !is_wasi) {
                 const db_sqlite_dep = b.lazyDependency("db_sqlite", .{ .target = target, .optimize = optimize });
                 if (db_sqlite_dep) |a| mod.addImport("zqlite", a.module("zqlite"));
             }
@@ -58,7 +60,7 @@ pub fn build(b: *std.Build) !void {
                 if (db_postgres_dp) |a| mod.addImport("db_postgres", a.module("postgres"));
             }
 
-            if (enable_httpz) {
+            if (enable_httpz and !is_wasi) {
                 if (b.lazyDependency("httpz", .{ .target = target, .optimize = optimize })) |httpz_dep| {
                     mod.addImport("httpz", httpz_dep.module("httpz"));
                 }

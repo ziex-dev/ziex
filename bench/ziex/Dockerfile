@@ -1,7 +1,7 @@
 FROM alpine:3.22.2 AS build
 
 # Setup Zig
-ARG ZIG_VER=0.17.0
+ARG ZIG_VER=0.18.0-dev.738+ae9a8acc7
 RUN wget https://ziglang.org/builds/zig-$(uname -m)-linux-${ZIG_VER}.tar.xz && \
     tar -xf zig-*.tar.xz && \
     rm zig-*.tar.xz && \
@@ -21,10 +21,8 @@ COPY templates/_docker templates/_docker
 
 # App
 COPY ./bench/ziex/build.zig bench/ziex/build.zig.zon ./bench/ziex/
-RUN cd bench/ziex && zig build --fetch
-
 COPY ./bench/ziex/app ./bench/ziex/app
-RUN cd bench/ziex && zig build --release=fast -Dcpu=baseline -Dtarget=$(uname -m)-linux-musl
+RUN cd bench/ziex && zig build zx -- build --build-args="--release=fast -Dcpu=baseline -Dtarget=$(uname -m)-linux-musl"
 
 # Run app
 FROM alpine:3.22.2
