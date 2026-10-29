@@ -17,7 +17,8 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     const zig_path = options.cli.zig_path orelse b.graph.zig_exe;
 
     const server_backend = if (options.app) |app| app.server.backend else InitOptions.AppOptions.Server.Backend.auto;
-    const enable_httpz = switch (server_backend) {
+    const is_wasi = if (target) |t| t.result.os.tag == .wasi else false;
+    const enable_httpz = !is_wasi and switch (server_backend) {
         // .auto => optimize != .debug,
         .auto => true, // default to httpz for now
         .httpz => true,
