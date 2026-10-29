@@ -6,7 +6,7 @@
         .plugin_system = .{ .path = "../plugin-system" },
         .typescript = .{
             .url = "https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz",
-            .hash = "N-V-__8AANobJgAIcxnJ_YkILJqGSkF7-YzE6Jr6ib9B1U1i",
+            .hash = "N-V-__8AANobJgDe6XjyeHD_GyzOsFedKsGpVaX3DU20szFp",
             .lazy = true,
         },
         .typescript_aix_ppc64 = .{
