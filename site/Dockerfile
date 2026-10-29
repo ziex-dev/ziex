@@ -1,7 +1,7 @@
 FROM alpine:3.22.2 AS build
 
 # Install Zig
-ARG ZIG_VER=0.17.0
+ARG ZIG_VER=0.18.0-dev.738+ae9a8acc7
 RUN wget https://ziglang.org/builds/zig-$(uname -m)-linux-${ZIG_VER}.tar.xz && \
     tar -xf zig-*.tar.xz && \
     rm zig-*.tar.xz && \
@@ -24,7 +24,6 @@ COPY pkg ./pkg
 COPY templates ./templates
 
 COPY site/build.zig site/build.zig.zon ./site/
-RUN cd site && zig build --fetch
 
 # App
 RUN cd site && zig build pg

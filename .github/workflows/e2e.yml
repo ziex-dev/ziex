@@ -51,7 +51,7 @@ jobs:
         if: ${{ !inputs.base_url }}
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0
+          version: 0.18.0-dev.738+ae9a8acc7
           cache-size-limit: 0
           use-tool-cache: true
 
