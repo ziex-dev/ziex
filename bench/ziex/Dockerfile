@@ -21,10 +21,8 @@ COPY templates/_docker templates/_docker
 
 # App
 COPY ./bench/ziex/build.zig bench/ziex/build.zig.zon ./bench/ziex/
-RUN cd bench/ziex && zig build --fetch
-
 COPY ./bench/ziex/app ./bench/ziex/app
-RUN cd bench/ziex && zig build --release=fast -Dcpu=baseline -Dtarget=$(uname -m)-linux-musl
+RUN cd bench/ziex && zig build zx -- build --build-args="--release=fast -Dcpu=baseline -Dtarget=$(uname -m)-linux-musl"
 
 # Run app
 FROM alpine:3.22.2
