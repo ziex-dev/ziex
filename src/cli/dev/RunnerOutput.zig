@@ -290,7 +290,7 @@ fn appendLeakSummary(state: *State, out: *std.ArrayList(u8)) void {
             group.line = loc.line;
             group.col = loc.col;
         }
-        const place = @as(u64, loc.line) << 32 | loc.col;
+        const place = (@as(u64, loc.line) << 32) | loc.col;
         if (std.mem.indexOfScalar(u64, group.places.items, place) == null) group.places.append(allocator, place) catch {};
     }
 

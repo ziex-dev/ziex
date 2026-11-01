@@ -648,7 +648,7 @@ fn buildAppInfoJson(ds: *DevServer) ![]u8 {
     var exe_path_owned: ?[]const u8 = null;
     defer if (exe_path_owned) |p| ds.gpa.free(p);
     var route_count: usize = 0;
-    var injection_ids: std.ArrayListUnmanaged([]const u8) = .empty;
+    var injection_ids: std.ArrayList([]const u8) = .empty;
     defer {
         for (injection_ids.items) |id| ds.gpa.free(id);
         injection_ids.deinit(ds.gpa);

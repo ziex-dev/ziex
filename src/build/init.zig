@@ -17,7 +17,8 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     const zig_path = options.cli.zig_path orelse b.graph.zig_exe;
 
     const server_backend = if (options.app) |app| app.server.backend else InitOptions.AppOptions.Server.Backend.auto;
-    const enable_httpz = switch (server_backend) {
+    const is_wasi = if (target) |t| t.result.os.tag == .wasi else false;
+    const enable_httpz = !is_wasi and switch (server_backend) {
         // .auto => optimize != .debug,
         .auto => true, // default to httpz for now
         .httpz => true,
@@ -585,7 +586,7 @@ const Clients = struct {
     stub_mode: ServerOnlyStubMode,
     added: std.AutoHashMapUnmanaged(*Module, void) = .empty,
     wasm: std.AutoHashMapUnmanaged(*Module, *Module) = .empty,
-    clones: std.ArrayListUnmanaged(struct { src: *Module, dst: *Module }) = .empty,
+    clones: std.ArrayList(struct { src: *Module, dst: *Module }) = .empty,
 
     fn add(self: *Clients, mod: *Module) void {
         const b = self.b;
@@ -956,7 +957,7 @@ fn addStaticAssetRun(
 }
 
 const Injections = struct {
-    items: std.ArrayListUnmanaged(AddElementOptions) = .empty,
+    items: std.ArrayList(AddElementOptions) = .empty,
     wf: ?*std.Build.Step.WriteFile = null,
 
     pub fn add(self: *Injections, b: *std.Build, options: AddElementOptions) void {

@@ -13,7 +13,7 @@ const allocator = std.heap.page_allocator;
 fn LinearMap(comptime V: type) type {
     const Entry = struct { key: []const u8, val: V };
     return struct {
-        entries: std.ArrayListUnmanaged(Entry) = .empty,
+        entries: std.ArrayList(Entry) = .empty,
 
         pub fn put(self: *@This(), key: []const u8, val: V) void {
             for (self.entries.items) |*e| {
@@ -43,7 +43,7 @@ const ActionEntry = struct {
     action_fn: ActionFn,
 };
 
-var action_entries: std.ArrayListUnmanaged(ActionEntry) = .empty;
+var action_entries: std.ArrayList(ActionEntry) = .empty;
 
 /// Register an action handler for a route and return its stable action ID.
 pub fn register(route_path: []const u8, preferred_action_id: u32, action_fn: ActionFn) u32 {

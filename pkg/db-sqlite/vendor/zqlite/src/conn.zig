@@ -949,7 +949,7 @@ test "statement meta" {
     const conn = testDB();
     defer conn.tryClose() catch unreachable;
 
-    const row = conn.row("select 1 as id, 'leto' as name, null as other", .{}) catch unreachable orelse unreachable;
+    const row = (conn.row("select 1 as id, 'leto' as name, null as other", .{}) catch unreachable) orelse unreachable;
     defer row.deinit();
 
     try t.expectEqual(@as(i32, 3), row.stmt.columnCount());
@@ -1026,12 +1026,12 @@ fn queryLast(conn: Conn) ?TestRow {
 }
 
 fn queryId(conn: Conn, id: i64) ?TestRow {
-    const row = conn.row(
+    const row = (conn.row(
         \\
         \\ select id, cint, cintn, creal, crealn,
         \\   ctext, ctextn, cblob, cblobn
         \\ from test where id = ?
-    , .{id}) catch unreachable orelse return null;
+    , .{id}) catch unreachable) orelse return null;
 
     return .{
         .row = row,
