@@ -11,6 +11,11 @@
 			"binding": "KV"
 		},
 	],
+	"d1_databases": [
+		{
+			"binding": "DB"
+		},
+	],
 	"build": {
 		"watch_dir": "./app",
 		"command": "zig build -Dtarget=wasm32-wasi -Doptimize=ReleaseSmall",

@@ -32,7 +32,7 @@ Every [Ziex CLI](https://ziex.dev/reference#cli) command is available as `npx zi
 npm run deploy
 ```
 
-The worker entrypoint is `app/main.ts`, and a `KV` namespace binding is declared in `wrangler.jsonc`.
+The worker entrypoint is `app/main.ts`. `wrangler.jsonc` declares `KV` and D1 (`DB`) bindings (auto-provisioned on deploy).
 
 Pre-rendering: pages that look the same for every visitor can be served from Cloudflare's CDN. Mark them with `pub const options = zx.PageOptions{ .rendering = .prerendered };` and set `build.command` in `wrangler.jsonc` to:
 
