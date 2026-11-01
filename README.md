@@ -180,9 +180,7 @@ const zx = @import("zx");
 
 ## Roadmap
 
-[Ziex 0.1.0](https://github.com/ziex-dev/ziex/milestone/2) is planned for release after `Zig 0.17.0` is available. You can view the [roadmap](https://github.com/ziex-dev/ziex/milestones) to learn more.
-
-The [`0.1.0`](https://github.com/ziex-dev/ziex/milestone/2) release will indicate that Ziex is production-ready, with all major features fully implemented, and will receive patch releases for bug fixes.
+[`0.1.0`](https://github.com/ziex-dev/ziex/releases/tag/v0.1.0) is the first public release. Work is underway on [`0.2.0`](https://github.com/ziex-dev/ziex/milestones), targeting `Zig 0.18.0`, with a focus on batteries included. See the [roadmap](https://github.com/ziex-dev/ziex/milestones) for more.
 
 The [`1.0.0`](https://github.com/ziex-dev/ziex/milestone/6) release will signify long-term support for that major version, receiving bug fixes and minor updates.
 

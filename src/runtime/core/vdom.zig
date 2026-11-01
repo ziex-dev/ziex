@@ -8,7 +8,7 @@ var next_velement_id: u64 = 0;
 pub const VNode = struct {
     id: u64,
     component: zx.Component,
-    children: std.ArrayListUnmanaged(*VNode),
+    children: std.ArrayList(*VNode),
     key: ?[]const u8 = null,
     owner_component_id: []const u8 = "",
     owns_owner_component_id: bool = false,
