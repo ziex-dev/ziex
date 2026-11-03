@@ -27,7 +27,7 @@ npm i -D tailwindcss @tailwindcss/node
 ## Usage
 
 ```bash
-zig fetch --save "git+https://github.com/ziex-dev/plugin-tailwindcss"
+zig fetch --save "git+https://github.com/ziex-dev/plugin-tailwindcss#latest"
 ```
 
 ```zig

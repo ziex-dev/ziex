@@ -19,7 +19,7 @@ Third-party apps normally depend on this only **transitively** through a
 plugin package.
 
 ```bash
-zig fetch --save "git+https://github.com/ziex-dev/plugin-system"
+zig fetch --save "git+https://github.com/ziex-dev/plugin-system#latest"
 ```
 
 See [Using build plugins](https://github.com/ziex-dev/ziex/blob/main/pkg/PLUGINS.md).

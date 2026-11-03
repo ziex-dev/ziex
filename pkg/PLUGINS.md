@@ -17,18 +17,19 @@ examples do). For a third-party app, depend on the published package.
 ## Consumer setup
 
 ```bash
-zig fetch --save "git+https://github.com/ziex-dev/plugin-tailwindcss"
+zig fetch --save "git+https://github.com/ziex-dev/plugin-tailwindcss#latest"
 ```
 
-Omit the `#tag` to resolve the default branch tip (latest sync). Pin a release
-with `#vX.Y.Z` when you want a fixed version.
+`#latest` is a moving tag updated on each plugin sync (stable docs URL). Pin a
+release with `#vX.Y.Z` when you want an immutable version. `zig fetch --save`
+still records a content `hash`, so builds stay reproducible until you re-fetch.
 
 `build.zig.zon` (filled by `zig fetch --save`):
 
 ```zon
 .dependencies = .{
     .tailwindcss = .{
-        .url = "git+https://github.com/ziex-dev/plugin-tailwindcss",
+        .url = "git+https://github.com/ziex-dev/plugin-tailwindcss#latest",
         .hash = "...",
     },
 },
@@ -60,9 +61,10 @@ The same pattern applies to `esbuild` and `typescript` (`addBuild` /
 On a GitHub Release of `ziex-dev/ziex`, [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 runs `tools/syncplugin`, which:
 
-1. Pushes `plugin-system` and tags it
-2. Rewrites dependents' `.plugin_system = .{ .path = ... }` to that tag's url+hash
-3. Pushes/tags `plugin-tailwindcss`, `plugin-typescript`, and `plugin-esbuild`
+1. Pushes `plugin-system` and tags it (`vX.Y.Z` + moving `latest`)
+2. Rewrites dependents' `.plugin_system = .{ .path = ... }` to that version tag's url+hash
+3. Pushes/tags `plugin-tailwindcss`, `plugin-typescript`, and `plugin-esbuild` the same way
+
 
 Local dry-run:
 

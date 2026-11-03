@@ -16,7 +16,7 @@ Developed in [ziex-dev/ziex](https://github.com/ziex-dev/ziex) (`pkg/plugin-type
 this repo is synced on each Ziex release for `zig fetch`.
 
 ```bash
-zig fetch --save "git+https://github.com/ziex-dev/plugin-typescript"
+zig fetch --save "git+https://github.com/ziex-dev/plugin-typescript#latest"
 ```
 
 ```zig

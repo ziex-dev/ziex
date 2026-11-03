@@ -220,8 +220,11 @@ push_plugin_repo() {
         commit -m "release: ${TAG} from ${OWNER}/ziex" >/dev/null
     git remote add origin "$remote_url"
     git push -u origin main --force
+    # Immutable release tag + moving `latest` pointer for docs / zig fetch defaults.
     git -c tag.gpgsign=false tag "$TAG"
+    git -c tag.gpgsign=false tag -f latest
     git push origin "$TAG" --force
+    git push origin latest --force
   )
 
   gh release create "$TAG" \
