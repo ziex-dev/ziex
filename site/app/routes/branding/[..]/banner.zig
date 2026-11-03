@@ -12,6 +12,10 @@ pub const presets = blk: {
         "Railway",
         "Render",
         "Node",
+        "Tailwind CSS",
+        "esbuild",
+        "TypeScript",
+        "Plugin System",
     };
     var list: [labels.len]Preset = undefined;
     for (labels, 0..) |label, i| list[i] = .{ .label = label, .slug = slugify(label) };

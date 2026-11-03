@@ -13,7 +13,8 @@
 #   tools/syncplugin v0.1.0 plugin-tailwindcss
 #
 # Environment:
-#   GITHUB_TOKEN — required for push / gh release (unless --dry-run)
+#   GITHUB_TOKEN - optional; falls back to `gh auth token` for push / gh release
+#                  (unless --dry-run)
 #
 # Always publishes plugin-system first when syncing dependents, so path deps can
 # be rewritten to url+hash of the tagged plugin-system package.
@@ -99,8 +100,14 @@ if [[ $needs_system -eq 1 ]]; then
 fi
 
 if [[ $DRY_RUN -eq 0 && -z "${GITHUB_TOKEN:-}" ]]; then
-  echo "error: GITHUB_TOKEN is required unless --dry-run" >&2
-  exit 1
+  if command -v gh >/dev/null 2>&1; then
+    GITHUB_TOKEN="$(gh auth token 2>/dev/null || true)"
+  fi
+  if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    echo "error: set GITHUB_TOKEN or run \`gh auth login\` (unless --dry-run)" >&2
+    exit 1
+  fi
+  export GITHUB_TOKEN
 fi
 
 copy_plugin_tree() {
@@ -206,19 +213,21 @@ push_plugin_repo() {
     cd "$tree"
     git init -b main >/dev/null
     git add .
+    # Disable signing: ephemeral publish commits use the bot identity (no local key).
     git -c user.name="github-actions[bot]" \
         -c user.email="github-actions[bot]@users.noreply.github.com" \
+        -c commit.gpgsign=false \
         commit -m "release: ${TAG} from ${OWNER}/ziex" >/dev/null
     git remote add origin "$remote_url"
     git push -u origin main --force
-    git tag "$TAG"
+    git -c tag.gpgsign=false tag "$TAG"
     git push origin "$TAG" --force
   )
 
   gh release create "$TAG" \
     --repo "$OWNER/$repo_name" \
     --title "$TAG" \
-    --notes "Release ${TAG} — synced from [${OWNER}/ziex@${TAG}](https://github.com/${OWNER}/ziex/releases/tag/${TAG})" \
+    --notes "Release ${TAG} - synced from [${OWNER}/ziex@${TAG}](https://github.com/${OWNER}/ziex/releases/tag/${TAG})" \
     2>/dev/null || echo "  note: release $TAG may already exist for $repo_name"
 }
 
