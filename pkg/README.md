@@ -10,6 +10,17 @@ Subpackages that are published separately or consumed by the root Ziex project.
 | `create-ziex` | NPM/JavaScript | `npm init ziex` or `bun create ziex` |
 | `playground` | Zig | Interactive Zig development environment |
 | `plugin-bun` | NPM/JavaScript | Bun plugin for the Zig build system |
-| `plugin-tailwind` | Zig | Tailwind CSS plugin for the Zig build system |
+| `plugin-system` | Zig | Shared helpers for Zig build plugins |
+| `plugin-tailwindcss` | Zig | Tailwind CSS plugin for the Zig build system |
+| `plugin-esbuild` | Zig | esbuild plugin for the Zig build system |
+| `plugin-typescript` | Zig | TypeScript (`tsc`) plugin for the Zig build system |
 | `tree-sitter-zx` | Tree-Sitter (C) | Tree-Sitter parser for .zx files |
 | `tree-sitter-mdzx` | Tree-Sitter (C) | Tree-Sitter parser for .mdzx / .md files |
+
+## Zig build plugins
+
+Developed under `pkg/plugin-*` in this monorepo; released to standalone
+`ziex-dev/plugin-*` repos on each Ziex release for `zig fetch`.
+
+See **[PLUGINS.md](./PLUGINS.md)** for consumer setup (`build.zig.zon` +
+`@import` + `addBuild`).

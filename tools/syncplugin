@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+# Sync Zig build plugins from pkg/plugin-* to standalone ziex-dev/plugin-* repos.
+#
+# Developed in the monorepo; published on release tags so consumers can:
+#   zig fetch --save "git+https://github.com/<owner>/plugin-tailwindcss#vX.Y.Z"
+#
+# Usage:
+#   tools/syncplugin <tag> [--owner OWNER] [--dry-run] [plugin...]
+#
+# Examples:
+#   tools/syncplugin v0.1.0
+#   tools/syncplugin v0.1.0 --dry-run
+#   tools/syncplugin v0.1.0 plugin-tailwindcss
+#
+# Environment:
+#   GITHUB_TOKEN — required for push / gh release (unless --dry-run)
+#
+# Always publishes plugin-system first when syncing dependents, so path deps can
+# be rewritten to url+hash of the tagged plugin-system package.
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+OWNER="${OWNER:-ziex-dev}"
+TAG=""
+DRY_RUN=0
+FILTERS=()
+
+PLUGIN_SYSTEM="plugin-system"
+# Dependents that path-depend on plugin-system in the monorepo.
+DEPENDENT_PLUGINS=(plugin-tailwindcss plugin-typescript plugin-esbuild)
+ALL_PLUGINS=("$PLUGIN_SYSTEM" "${DEPENDENT_PLUGINS[@]}")
+
+usage() {
+  sed -n '2,22p' "$0" | sed 's/^# \?//'
+  exit "${1:-0}"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage 0 ;;
+    --owner)
+      OWNER="${2:?--owner requires a value}"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage 1
+      ;;
+    *)
+      if [[ -z "$TAG" ]]; then
+        TAG="$1"
+      else
+        FILTERS+=("$1")
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$TAG" ]]; then
+  echo "error: tag is required (e.g. v0.1.0)" >&2
+  usage 1
+fi
+
+# Normalize: accept 0.1.0 or v0.1.0
+case "$TAG" in
+  v*) ;;
+  *) TAG="v$TAG" ;;
+esac
+
+if [[ ${#FILTERS[@]} -eq 0 ]]; then
+  PLUGINS=("${ALL_PLUGINS[@]}")
+else
+  PLUGINS=("${FILTERS[@]}")
+fi
+
+# If any dependent is selected, ensure plugin-system is synced first.
+needs_system=0
+for p in "${PLUGINS[@]}"; do
+  if [[ "$p" != "$PLUGIN_SYSTEM" ]]; then
+    needs_system=1
+    break
+  fi
+done
+if [[ $needs_system -eq 1 ]]; then
+  ordered=("$PLUGIN_SYSTEM")
+  for p in "${PLUGINS[@]}"; do
+    [[ "$p" == "$PLUGIN_SYSTEM" ]] && continue
+    ordered+=("$p")
+  done
+  PLUGINS=("${ordered[@]}")
+fi
+
+if [[ $DRY_RUN -eq 0 && -z "${GITHUB_TOKEN:-}" ]]; then
+  echo "error: GITHUB_TOKEN is required unless --dry-run" >&2
+  exit 1
+fi
+
+copy_plugin_tree() {
+  local src="$1"
+  local dest="$2"
+  mkdir -p "$dest"
+  # Prefer rsync when available; fall back to tar to preserve structure.
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a \
+      --exclude '.zig-cache/' \
+      --exclude 'zig-out/' \
+      --exclude 'zig-pkg/' \
+      --exclude 'node_modules/' \
+      --exclude '.git/' \
+      --exclude '.DS_Store' \
+      "$src"/ "$dest"/
+  else
+    tar -C "$src" \
+      --exclude='.zig-cache' \
+      --exclude='zig-out' \
+      --exclude='zig-pkg' \
+      --exclude='node_modules' \
+      --exclude='.git' \
+      --exclude='.DS_Store' \
+      -cf - . | tar -C "$dest" -xf -
+  fi
+  if [[ ! -f "$dest/LICENSE" && -f "$ROOT_DIR/LICENSE" ]]; then
+    cp "$ROOT_DIR/LICENSE" "$dest/LICENSE"
+  fi
+}
+
+rewrite_plugin_system_dep() {
+  local zon="$1"
+  local url="$2"
+  local hash="$3"
+  if [[ ! -f "$zon" ]]; then
+    echo "error: missing $zon" >&2
+    exit 1
+  fi
+  if ! grep -q 'plugin_system' "$zon"; then
+    return 0
+  fi
+  # Replace `.plugin_system = .{ .path = "..." },` (single- or multi-line) with url+hash.
+  python3 - "$zon" "$url" "$hash" <<'PY'
+import re, sys
+
+path, url, hash_ = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(path, encoding="utf-8").read()
+pat = re.compile(
+    r'\.plugin_system\s*=\s*\.\{\s*\.path\s*=\s*"[^"]*"\s*,?\s*\},',
+    re.S,
+)
+repl = (
+    ".plugin_system = .{\n"
+    f'            .url = "{url}",\n'
+    f'            .hash = "{hash_}",\n'
+    "        },"
+)
+new, n = pat.subn(repl, text, count=1)
+if n != 1:
+    sys.stderr.write(
+        f"error: failed to rewrite plugin_system path dep in {path} (replacements={n})\n"
+    )
+    sys.exit(1)
+open(path, "w", encoding="utf-8").write(new)
+PY
+}
+
+ensure_repo() {
+  local repo_name="$1"
+  local description="$2"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "  [dry-run] ensure repo $OWNER/$repo_name"
+    return 0
+  fi
+  if gh repo view "$OWNER/$repo_name" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "  creating $OWNER/$repo_name"
+  gh repo create "$OWNER/$repo_name" --public --description "$description" >/dev/null
+}
+
+push_plugin_repo() {
+  local plugin="$1"
+  local tree="$2"
+  local repo_name="$plugin"
+
+  ensure_repo "$repo_name" "Ziex Zig build plugin: ${plugin#plugin-}"
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "  [dry-run] would push $plugin -> $OWNER/$repo_name @$TAG"
+    echo "  [dry-run] tree preview:"
+    find "$tree" -maxdepth 2 -type f | sed 's|^|    |' | head -40
+    if [[ -f "$tree/build.zig.zon" ]]; then
+      echo "  [dry-run] build.zig.zon:"
+      sed 's/^/    /' "$tree/build.zig.zon"
+    fi
+    return 0
+  fi
+
+  local remote_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${OWNER}/${repo_name}.git"
+  (
+    cd "$tree"
+    git init -b main >/dev/null
+    git add .
+    git -c user.name="github-actions[bot]" \
+        -c user.email="github-actions[bot]@users.noreply.github.com" \
+        commit -m "release: ${TAG} from ${OWNER}/ziex" >/dev/null
+    git remote add origin "$remote_url"
+    git push -u origin main --force
+    git tag "$TAG"
+    git push origin "$TAG" --force
+  )
+
+  gh release create "$TAG" \
+    --repo "$OWNER/$repo_name" \
+    --title "$TAG" \
+    --notes "Release ${TAG} — synced from [${OWNER}/ziex@${TAG}](https://github.com/${OWNER}/ziex/releases/tag/${TAG})" \
+    2>/dev/null || echo "  note: release $TAG may already exist for $repo_name"
+}
+
+fetch_package_hash() {
+  local url="$1"
+  # zig fetch prints the content hash on stdout.
+  zig fetch "$url"
+}
+
+PLUGIN_SYSTEM_HASH=""
+PLUGIN_SYSTEM_URL="git+https://github.com/${OWNER}/${PLUGIN_SYSTEM}#${TAG}"
+
+echo "Syncing plugins to $OWNER @ $TAG"
+[[ $DRY_RUN -eq 1 ]] && echo "(dry-run)"
+echo
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+for plugin in "${PLUGINS[@]}"; do
+  src="$ROOT_DIR/pkg/$plugin"
+  if [[ ! -d "$src" ]]; then
+    echo "error: missing package directory $src" >&2
+    exit 1
+  fi
+  if [[ ! -f "$src/build.zig.zon" ]]; then
+    echo "error: $src has no build.zig.zon" >&2
+    exit 1
+  fi
+
+  echo "==> $plugin"
+  dest="$WORK/$plugin"
+  copy_plugin_tree "$src" "$dest"
+
+  if [[ "$plugin" != "$PLUGIN_SYSTEM" ]]; then
+    if [[ -z "$PLUGIN_SYSTEM_HASH" ]]; then
+      if [[ $DRY_RUN -eq 1 ]]; then
+        PLUGIN_SYSTEM_HASH="DRY_RUN_PLUGIN_SYSTEM_HASH"
+        echo "  [dry-run] using placeholder plugin_system hash"
+      else
+        echo "  fetching plugin_system hash from $PLUGIN_SYSTEM_URL"
+        PLUGIN_SYSTEM_HASH=$(fetch_package_hash "$PLUGIN_SYSTEM_URL")
+        echo "  plugin_system hash: $PLUGIN_SYSTEM_HASH"
+      fi
+    fi
+    rewrite_plugin_system_dep "$dest/build.zig.zon" "$PLUGIN_SYSTEM_URL" "$PLUGIN_SYSTEM_HASH"
+  fi
+
+  push_plugin_repo "$plugin" "$dest"
+
+  if [[ "$plugin" == "$PLUGIN_SYSTEM" && $DRY_RUN -eq 0 ]]; then
+    echo "  resolving plugin_system hash after push..."
+    PLUGIN_SYSTEM_HASH=$(fetch_package_hash "$PLUGIN_SYSTEM_URL")
+    echo "  plugin_system hash: $PLUGIN_SYSTEM_HASH"
+  elif [[ "$plugin" == "$PLUGIN_SYSTEM" && $DRY_RUN -eq 1 ]]; then
+    PLUGIN_SYSTEM_HASH="DRY_RUN_PLUGIN_SYSTEM_HASH"
+  fi
+
+  echo
+done
+
+echo "Done."

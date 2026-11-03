@@ -454,3 +454,34 @@ jobs:
             rm -rf "$TEMP_DIR"
           done
 
+  sync-plugins:
+    name: Sync & Release Plugins
+    runs-on: ubuntu-latest
+    needs: create-release
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+          cache-size-limit: 0
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync and release Zig build plugins
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f1)
+          TAG="${{ github.event.release.tag_name }}"
+          bash tools/syncplugin "$TAG" --owner "$OWNER"
+

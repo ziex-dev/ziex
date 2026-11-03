@@ -1,106 +1,76 @@
-// Tailwind Plugin Example (lines 1-29)
-const zx = @import("zx");
+// Tailwind Plugin Example (lines 1-22)
 const std = @import("std");
+const tailwindcss = @import("tailwindcss");
 
 pub fn build(b: *std.Build) !void {
-    const target = b.standardTargetOptions(.{});
+    const css = tailwindcss.addBuild(b, .{
+        .config = .{
+            .input = b.path("app/styles/tailwind.css"),
+            // .minify = true,
+            // .optimize = true,
+            // .map = false,
+        },
+    });
+    const install = b.addInstallFile(css.file, "static/assets/tailwind.css");
+    b.default_step.dependOn(&install.step);
+}
+
+// Esbuild Plugin Example (lines 24-45)
+const std = @import("std");
+const esbuild = @import("esbuild");
+
+pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
-    
-    const zx_dep = b.dependency("zx", .{ .target = target, .optimize = optimize });
-    const exe = b.addExecutable(.{
-        .name = "my-app",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("app/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-
-    try ziex.init(b, exe, .{
-        .plugins = &.{
-            zx.plugins.tailwind(b, .{
-                .bin = b.path("node_modules/.bin/tailwindcss"),
-                .input = b.path("app/assets/styles.css"),
-                .output = b.path("{outdir}/assets/styles.css"),
-                .minify = optimize != .debug,
-            }),
+    const out = esbuild.addBuild(b, .{
+        .config = .{
+            .entrypoints = &.{b.path("app/main.ts")},
+            .platform = .browser,
+            .minify = optimize != .debug,
+            .sourcemap = if (optimize == .debug) .@"inline" else .none,
         },
     });
+    const install = b.addInstallDirectory(.{
+        .source_dir = out.dir,
+        .install_dir = .prefix,
+        .install_subdir = "static/assets",
+    });
+    b.default_step.dependOn(&install.step);
 }
 
-// Esbuild Plugin Example (lines 31-56)
-const zx = @import("zx");
+// TypeScript Plugin Example (lines 47-60)
 const std = @import("std");
+const typescript = @import("typescript");
 
 pub fn build(b: *std.Build) !void {
-    // ... setup code ...
-
-    try ziex.init(b, exe, .{
-        .plugins = &.{
-            zx.plugins.esbuild(b, .{
-                .bin = b.path("node_modules/.bin/esbuild"),
-                .input = b.path("app/main.ts"),
-                .output = b.path("{outdir}/assets/main.js"),
-                .bundle = true,
-                .format = .esm,
-                .platform = .browser,
-                .target = "es2020",
-                .external = &.{ "react", "react-dom" },
-                .define = &.{
-                    .{ .key = "API_URL", .value = "\"https://api.example.com\"" },
-                },
-            }),
+    const dts = typescript.addBuild(b, .{
+        .name = "app.d.ts",
+        .config = .{
+            .project = b.path("tsconfig.json"),
         },
     });
+    _ = dts;
 }
 
-// Combined Plugins Example (lines 58-70)
-try ziex.init(b, exe, .{
-    .plugins = &.{
-        zx.plugins.esbuild(b, .{
-            .input = b.path("app/main.ts"),
-            .output = b.path("{outdir}/assets/main.js"),
-        }),
-        zx.plugins.tailwind(b, .{
-            .input = b.path("app/assets/styles.css"),
-            .output = b.path("{outdir}/assets/styles.css"),
-        }),
-    },
-});
-
-// Custom Plugin Example (lines 72-107)
-const zx = @import("zx");
+// Combined Plugins Example (lines 62-83)
 const std = @import("std");
+const esbuild = @import("esbuild");
+const tailwindcss = @import("tailwindcss");
 
 pub fn build(b: *std.Build) !void {
-    // ... setup code ...
+    const css = tailwindcss.addBuild(b, .{
+        .config = .{ .input = b.path("app/styles/tailwind.css") },
+    });
+    b.default_step.dependOn(&b.addInstallFile(css.file, "static/assets/tailwind.css").step);
 
-    try ziex.init(b, exe, .{
-        .plugins = &.{
-            // Custom plugin using PluginOptions directly
-            createImageOptimizer(b),
+    const js = esbuild.addBuild(b, .{
+        .config = .{
+            .entrypoints = &.{b.path("app/main.ts")},
+            .platform = .browser,
         },
     });
+    b.default_step.dependOn(&b.addInstallDirectory(.{
+        .source_dir = js.dir,
+        .install_dir = .prefix,
+        .install_subdir = "static/assets",
+    }).step);
 }
-
-fn createImageOptimizer(b: *std.Build) zx.InitOptions.PluginOptions {
-    const cmd = std.Build.Step.Run.create(b, "optimize-images");
-    
-    // Add your custom command
-    cmd.addArgs(&.{ "npx", "imagemin", "app/public/**/*", "--out-dir={outdir}/public" });
-    
-    // Allocate steps array
-    const steps = b.allocator.alloc(zx.InitOptions.PluginOptions.PluginStep, 1) catch @panic("OOM");
-    steps[0] = .{
-        .command = .{
-            .type = .after_transpile,  // Run after ZX transpilation
-            .run = cmd,
-        },
-    };
-    
-    return .{
-        .name = "image-optimizer",
-        .steps = steps,
-    };
-}
-

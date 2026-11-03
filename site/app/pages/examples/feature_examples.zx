@@ -360,28 +360,29 @@ fn increment(e: *zx.client.Event.Stateful) void {
 
 // --- Plugin: tailwind ---
 pub fn buildTailwind(b: *std.Build) !void {
-    const exe = b.addExecutable(.{ .name = "my-app" });
-    var zx_build = try ziex.init(b, exe, .{});
-    var assetsdir = zx_build.assetsdir;
-    zx_build.plugin(
-        zx.plugins.tailwind(b, .{
-            .input = b.path("app/assets/style.css"),
-            .output = assetsdir.path(b, "style.css"),
-        }),
-    );
+    const css = plugin_tailwindcss.addBuild(b, .{
+        .config = .{
+            .input = b.path("app/styles/tailwind.css"),
+        },
+    });
+    const install = b.addInstallFile(css.file, "static/assets/tailwind.css");
+    b.default_step.dependOn(&install.step);
 }
 
 // --- Plugin: esbuild ---
 pub fn buildEsbuild(b: *std.Build) !void {
-    const exe = b.addExecutable(.{ .name = "my-app" });
-    var zx_build = try ziex.init(b, exe, .{});
-    var assetsdir = zx_build.assetsdir;
-    zx_build.plugin(
-        zx.plugins.esbuild(b, .{
-            .input = b.path("app/main.ts"),
-            .output = assetsdir.path(b, "main.js"),
-        }),
-    );
+    const out = plugin_esbuild.addBuild(b, .{
+        .config = .{
+            .entrypoints = &.{b.path("app/main.ts")},
+            .platform = .browser,
+        },
+    });
+    const install = b.addInstallDirectory(.{
+        .source_dir = out.dir,
+        .install_dir = .prefix,
+        .install_subdir = "static/assets",
+    });
+    b.default_step.dependOn(&install.step);
 }
 
 // --- Learn: greeting ---
@@ -1246,6 +1247,8 @@ pub fn RenderTest(ctx: zx.PageContext) !zx.Component {
     _ = try Learn__enableDbInit(undefined, undefined);
     _ = try Learn__enableCacheInit(undefined, undefined);
     _ = Learn__build;
+    _ = buildTailwind;
+    _ = buildEsbuild;
 
     _ = RefPageCaching__Page(page_ctx);
     _ = Ref__Layout(layout_ctx, .none);
@@ -1365,6 +1368,34 @@ const ziex = struct {
         _ = b;
         _ = app_exe;
         _ = options;
+    }
+};
+
+// Stubs for plugin snippets (real packages are @import("tailwindcss") / @import("esbuild")).
+const plugin_tailwindcss = struct {
+    pub const Build = struct {
+        name: ?[]const u8 = null,
+        config: struct { input: std.Build.LazyPath },
+    };
+    pub const Output = struct { file: std.Build.LazyPath };
+    pub fn addBuild(b: *std.Build, build_item: Build) Output {
+        _ = build_item;
+        return .{ .file = b.path("tailwind.css") };
+    }
+};
+
+const plugin_esbuild = struct {
+    pub const Build = struct {
+        name: ?[]const u8 = null,
+        config: struct {
+            entrypoints: []const std.Build.LazyPath,
+            platform: enum { browser } = .browser,
+        },
+    };
+    pub const Output = struct { dir: std.Build.LazyPath };
+    pub fn addBuild(b: *std.Build, build_item: Build) Output {
+        _ = build_item;
+        return .{ .dir = b.path("dist") };
     }
 };
 
