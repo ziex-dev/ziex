@@ -5,19 +5,21 @@
 #   zig fetch --save "git+https://github.com/<owner>/plugin-tailwindcss#vX.Y.Z"
 #
 # Usage:
-#   tools/syncplugin <tag> [--owner OWNER] [--dry-run] [plugin...]
+#   tools/syncplugin <tag> [--owner OWNER] [--dry-run] [--plugin-system-tag TAG] [plugin...]
 #
 # Examples:
 #   tools/syncplugin v0.1.0
 #   tools/syncplugin v0.1.0 --dry-run
-#   tools/syncplugin v0.1.0 plugin-tailwindcss
+#   tools/syncplugin v0.1.1 plugin-tailwindcss
+#   tools/syncplugin v0.1.1 --plugin-system-tag v0.1.0 plugin-tailwindcss
 #
 # Environment:
 #   GITHUB_TOKEN - optional; falls back to `gh auth token` for push / gh release
 #                  (unless --dry-run)
 #
-# Always publishes plugin-system first when syncing dependents, so path deps can
-# be rewritten to url+hash of the tagged plugin-system package.
+# Full syncs publish plugin-system at <tag> first, then rewrite dependents to
+# that tag. Filtered syncs of dependents alone reuse an existing plugin-system
+# tag (--plugin-system-tag, or the latest GitHub release) and do not republish it.
 
 set -euo pipefail
 
@@ -26,6 +28,7 @@ cd "$ROOT_DIR"
 
 OWNER="${OWNER:-ziex-dev}"
 TAG=""
+PLUGIN_SYSTEM_TAG=""
 DRY_RUN=0
 FILTERS=()
 
@@ -35,7 +38,7 @@ DEPENDENT_PLUGINS=(plugin-tailwindcss plugin-typescript plugin-esbuild)
 ALL_PLUGINS=("$PLUGIN_SYSTEM" "${DEPENDENT_PLUGINS[@]}")
 
 usage() {
-  sed -n '2,22p' "$0" | sed 's/^# \?//'
+  sed -n '2,24p' "$0" | sed 's/^# \?//'
   exit "${1:-0}"
 }
 
@@ -44,6 +47,10 @@ while [[ $# -gt 0 ]]; do
     -h|--help) usage 0 ;;
     --owner)
       OWNER="${2:?--owner requires a value}"
+      shift 2
+      ;;
+    --plugin-system-tag)
+      PLUGIN_SYSTEM_TAG="${2:?--plugin-system-tag requires a value}"
       shift 2
       ;;
     --dry-run)
@@ -71,32 +78,50 @@ if [[ -z "$TAG" ]]; then
 fi
 
 # Normalize: accept 0.1.0 or v0.1.0
-case "$TAG" in
-  v*) ;;
-  *) TAG="v$TAG" ;;
-esac
+normalize_tag() {
+  case "$1" in
+    v*) echo "$1" ;;
+    *) echo "v$1" ;;
+  esac
+}
+TAG="$(normalize_tag "$TAG")"
+if [[ -n "$PLUGIN_SYSTEM_TAG" ]]; then
+  PLUGIN_SYSTEM_TAG="$(normalize_tag "$PLUGIN_SYSTEM_TAG")"
+fi
 
 if [[ ${#FILTERS[@]} -eq 0 ]]; then
   PLUGINS=("${ALL_PLUGINS[@]}")
+  FULL_SYNC=1
 else
   PLUGINS=("${FILTERS[@]}")
+  FULL_SYNC=0
 fi
 
-# If any dependent is selected, ensure plugin-system is synced first.
-needs_system=0
+publish_system=0
+has_dependent=0
 for p in "${PLUGINS[@]}"; do
-  if [[ "$p" != "$PLUGIN_SYSTEM" ]]; then
-    needs_system=1
-    break
+  if [[ "$p" == "$PLUGIN_SYSTEM" ]]; then
+    publish_system=1
+  else
+    has_dependent=1
   fi
 done
-if [[ $needs_system -eq 1 ]]; then
+
+# Full sync always publishes plugin-system first. Explicit filters only publish
+# what was named — dependents alone reuse an existing plugin-system tag.
+if [[ $FULL_SYNC -eq 1 ]]; then
+  publish_system=1
+fi
+
+if [[ $publish_system -eq 1 && $has_dependent -eq 1 ]]; then
   ordered=("$PLUGIN_SYSTEM")
   for p in "${PLUGINS[@]}"; do
     [[ "$p" == "$PLUGIN_SYSTEM" ]] && continue
     ordered+=("$p")
   done
   PLUGINS=("${ordered[@]}")
+elif [[ $publish_system -eq 1 ]]; then
+  PLUGINS=("$PLUGIN_SYSTEM")
 fi
 
 if [[ $DRY_RUN -eq 0 && -z "${GITHUB_TOKEN:-}" ]]; then
@@ -109,6 +134,27 @@ if [[ $DRY_RUN -eq 0 && -z "${GITHUB_TOKEN:-}" ]]; then
   fi
   export GITHUB_TOKEN
 fi
+
+resolve_existing_plugin_system_tag() {
+  if [[ -n "$PLUGIN_SYSTEM_TAG" ]]; then
+    return 0
+  fi
+  if [[ $DRY_RUN -eq 1 ]]; then
+    PLUGIN_SYSTEM_TAG="v0.0.0-dry-run"
+    echo "  [dry-run] no --plugin-system-tag; would resolve latest $OWNER/$PLUGIN_SYSTEM release"
+    return 0
+  fi
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "error: gh is required to resolve the latest $PLUGIN_SYSTEM tag (or pass --plugin-system-tag)" >&2
+    exit 1
+  fi
+  PLUGIN_SYSTEM_TAG=$(gh release view --repo "$OWNER/$PLUGIN_SYSTEM" --json tagName -q .tagName)
+  if [[ -z "$PLUGIN_SYSTEM_TAG" ]]; then
+    echo "error: could not resolve latest $OWNER/$PLUGIN_SYSTEM release; pass --plugin-system-tag" >&2
+    exit 1
+  fi
+  echo "  reusing $PLUGIN_SYSTEM @$PLUGIN_SYSTEM_TAG (pass --plugin-system-tag to override)"
+}
 
 copy_plugin_tree() {
   local src="$1"
@@ -241,9 +287,18 @@ fetch_package_hash() {
 }
 
 PLUGIN_SYSTEM_HASH=""
-PLUGIN_SYSTEM_URL="git+https://github.com/${OWNER}/${PLUGIN_SYSTEM}#${TAG}"
+if [[ $publish_system -eq 1 ]]; then
+  PLUGIN_SYSTEM_REF="$TAG"
+else
+  resolve_existing_plugin_system_tag
+  PLUGIN_SYSTEM_REF="$PLUGIN_SYSTEM_TAG"
+fi
+PLUGIN_SYSTEM_URL="git+https://github.com/${OWNER}/${PLUGIN_SYSTEM}#${PLUGIN_SYSTEM_REF}"
 
 echo "Syncing plugins to $OWNER @ $TAG"
+if [[ $publish_system -eq 0 ]]; then
+  echo "plugin-system: reuse @$PLUGIN_SYSTEM_REF (not republished)"
+fi
 [[ $DRY_RUN -eq 1 ]] && echo "(dry-run)"
 echo
 
@@ -269,7 +324,7 @@ for plugin in "${PLUGINS[@]}"; do
     if [[ -z "$PLUGIN_SYSTEM_HASH" ]]; then
       if [[ $DRY_RUN -eq 1 ]]; then
         PLUGIN_SYSTEM_HASH="DRY_RUN_PLUGIN_SYSTEM_HASH"
-        echo "  [dry-run] using placeholder plugin_system hash"
+        echo "  [dry-run] using placeholder plugin_system hash for $PLUGIN_SYSTEM_URL"
       else
         echo "  fetching plugin_system hash from $PLUGIN_SYSTEM_URL"
         PLUGIN_SYSTEM_HASH=$(fetch_package_hash "$PLUGIN_SYSTEM_URL")

@@ -28,4 +28,4 @@ const dts = typescript.addBuild(b, .{
 });
 ```
 
-See [Using build plugins](https://github.com/ziex-dev/ziex/blob/main/pkg/PLUGINS.md).
+See `example/` and [Using build plugins](https://github.com/ziex-dev/ziex/blob/main/pkg/PLUGINS.md).

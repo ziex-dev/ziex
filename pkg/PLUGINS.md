@@ -56,6 +56,9 @@ The same pattern applies to `esbuild` and `typescript` (`addBuild` /
 `addBuilds`). See each package's `example/` directory and the snippets in
 [`site/app/assets/snippets/plugin_examples.zig`](../site/app/assets/snippets/plugin_examples.zig).
 
+CI builds those examples on plugin changes (`.github/workflows/plugin.yml`) and
+again before plugin sync on release.
+
 ## Publishing
 
 On a GitHub Release of `ziex-dev/ziex`, [`.github/workflows/release.yml`](../.github/workflows/release.yml)
@@ -65,8 +68,15 @@ runs `tools/syncplugin`, which:
 2. Rewrites dependents' `.plugin_system = .{ .path = ... }` to that version tag's url+hash
 3. Pushes/tags `plugin-tailwindcss`, `plugin-typescript`, and `plugin-esbuild` the same way
 
+Patch one dependent without bumping `plugin-system` (reuses its latest release,
+or pass `--plugin-system-tag vX.Y.Z`):
 
-Local dry-run:
+```bash
+bash tools/syncplugin v0.1.1 --dry-run plugin-tailwindcss
+bash tools/syncplugin v0.1.1 plugin-tailwindcss
+```
+
+Full sync dry-run:
 
 ```bash
 bash tools/syncplugin v0.1.0 --dry-run

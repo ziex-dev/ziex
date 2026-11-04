@@ -1,0 +1,12 @@
+.{
+    .name = .typescript_example,
+    .fingerprint = 0xec59abce000f7576,
+    .version = "0.0.0",
+    .dependencies = .{
+        .typescript = .{
+            .path = "../",
+        },
+    },
+    .minimum_zig_version = "0.17.0",
+    .paths = .{""},
+}

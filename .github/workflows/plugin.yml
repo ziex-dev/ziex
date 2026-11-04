@@ -1,0 +1,94 @@
+name: Plugins
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pkg/plugin-system/**'
+      - 'pkg/plugin-tailwindcss/**'
+      - 'pkg/plugin-esbuild/**'
+      - 'pkg/plugin-typescript/**'
+      - 'tools/syncplugin'
+      - '.github/workflows/plugin.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'pkg/plugin-system/**'
+      - 'pkg/plugin-tailwindcss/**'
+      - 'pkg/plugin-esbuild/**'
+      - 'pkg/plugin-typescript/**'
+      - 'tools/syncplugin'
+      - '.github/workflows/plugin.yml'
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      plugins: ${{ steps.set-plugins.outputs.plugins }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: set-plugins
+        run: |
+          # Plugins that ship an example/ build used as the smoke test.
+          ALL_PLUGINS=$'plugin-tailwindcss\nplugin-esbuild\nplugin-typescript'
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PLUGINS=$(echo "$ALL_PLUGINS" | jq -R -s -c 'split("\n") | map(select(. != ""))')
+            echo "plugins=$PLUGINS" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            CHANGED_FILES=$(git diff --name-only "$BASE" "$HEAD")
+          else
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          fi
+
+          # Shared system / workflow / sync tool changes rebuild every example.
+          if echo "$CHANGED_FILES" | grep -qE '^(pkg/plugin-system/|tools/syncplugin|\.github/workflows/plugin\.yml)'; then
+            PLUGINS=$(echo "$ALL_PLUGINS" | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          else
+            CHANGED_PLUGINS=$(echo "$CHANGED_FILES" | grep '^pkg/plugin-' | cut -d'/' -f2 | sort -u)
+            PLUGINS=$(comm -12 <(echo "$ALL_PLUGINS" | sort) <(echo "$CHANGED_PLUGINS" | sort) | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          fi
+
+          echo "plugins=$PLUGINS" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: discover
+    runs-on: ubuntu-latest
+    if: needs.discover.outputs.plugins != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJson(needs.discover.outputs.plugins) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+          cache-size-limit: 0
+
+      - name: Setup Node
+        if: matrix.plugin == 'plugin-tailwindcss'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install npm deps
+        if: matrix.plugin == 'plugin-tailwindcss'
+        working-directory: pkg/${{ matrix.plugin }}/example
+        run: npm install
+
+      - name: Build plugin example
+        working-directory: pkg/${{ matrix.plugin }}/example
+        run: zig build
