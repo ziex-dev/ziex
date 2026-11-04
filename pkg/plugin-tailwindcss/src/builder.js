@@ -1,6 +1,19 @@
-const { compile, optimize } = require("@tailwindcss/node");
 const { readFileSync, writeFileSync, mkdirSync, readdirSync } = require("fs");
 const { dirname, resolve, join, sep } = require("path");
+
+function loadTailwindNode() {
+    try {
+        return require("@tailwindcss/node");
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        const missing =
+            err && typeof err === "object" && "code" in err && err.code === "MODULE_NOT_FOUND";
+        const hint = missing
+            ? "Install Tailwind in the app (npm i -D tailwindcss @tailwindcss/node) and run from a directory that can resolve those packages."
+            : detail;
+        throw new Error(`failed to load @tailwindcss/node: ${hint}`);
+    }
+}
 
 function writeLine(event) {
     process.stdout.write(JSON.stringify(event) + "\n");
@@ -92,17 +105,30 @@ function extractCandidates(content) {
     return result;
 }
 
-async function runBuild({ id, name, config }, index) {
+function formatError(err) {
+    if (!(err instanceof Error)) return String(err);
+    // Prefer message; append stack first frame for actionable diagnostics.
+    const stack_line = err.stack?.split("\n")[1]?.trim();
+    return stack_line ? `${err.message} (${stack_line})` : err.message;
+}
+
+async function runBuild(tw, { id, name, config }, index) {
     id = id ?? index;
+    const { compile, optimize } = tw;
 
     writeLine({ id, type: "start", name });
     try {
-        const css = readFileSync(config.input, "utf-8");
-        const base = config.base ?? dirname(config.input);
+        // enhanced-resolve (used by @tailwindcss/node) requires absolute bases.
+        const input = resolve(config.input);
+        const output = resolve(config.output);
+        const base = resolve(config.base ?? dirname(input));
+
+        const css = readFileSync(input, "utf-8");
 
         const dependencies = [];
         const compiler = await compile(css, {
             base,
+            from: input,
             onDependency: (path) => dependencies.push(path),
         });
 
@@ -110,7 +136,7 @@ async function runBuild({ id, name, config }, index) {
         const candidates = new Set();
 
         // Scan files from compiler-detected sources using Tailwind's own discovered patterns.
-        for (const source of compiler.sources) {
+        for (const source of compiler.sources ?? []) {
             if (source.negated) continue;
             const files = listFilesMatching(source.base, source.pattern);
             for (const file of files) {
@@ -128,11 +154,12 @@ async function runBuild({ id, name, config }, index) {
         if (config.sources) {
             for (const sourcePath of config.sources) {
                 try {
-                    const content = readFileSync(sourcePath, "utf-8");
+                    const abs = resolve(sourcePath);
+                    const content = readFileSync(abs, "utf-8");
                     for (const c of extractCandidates(content)) {
                         candidates.add(c);
                     }
-                    dependencies.push(sourcePath);
+                    dependencies.push(abs);
                 } catch {}
             }
         }
@@ -142,22 +169,22 @@ async function runBuild({ id, name, config }, index) {
         let result = built;
         if (config.optimize || config.minify) {
             const optimized = optimize(result, {
-                file: config.output,
+                file: output,
                 minify: config.minify,
             });
             result = optimized.code;
         }
 
-        mkdirSync(dirname(config.output), { recursive: true });
-        writeFileSync(config.output, result);
+        mkdirSync(dirname(output), { recursive: true });
+        writeFileSync(output, result);
 
-        writeLine({ id, type: "result", name, success: true, output: config.output, dependencies });
+        writeLine({ id, type: "result", name, success: true, output, dependencies });
     } catch (err) {
         writeLine({
             id,
             type: "error",
             name,
-            error: err instanceof Error ? err.message : String(err),
+            error: formatError(err),
         });
     } finally {
         writeLine({ id, type: "end", name });
@@ -165,16 +192,21 @@ async function runBuild({ id, name, config }, index) {
 }
 
 async function main() {
+    const tw = loadTailwindNode();
+
     // Read stdin as JSON (Node.js compatible)
     const chunks = [];
     for await (const chunk of process.stdin) {
         chunks.push(chunk);
     }
     const builds = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
-    await Promise.allSettled(builds.map(runBuild));
+    if (!Array.isArray(builds)) {
+        throw new Error("expected a JSON array of builds on stdin");
+    }
+    await Promise.allSettled(builds.map((build, index) => runBuild(tw, build, index)));
 }
 
 main().catch((err) => {
-    process.stderr.write(`ziex-plugin-tailwindcss: fatal: ${err}\n`);
+    process.stderr.write(`ziex-plugin-tailwindcss: fatal: ${formatError(err)}\n`);
     process.exit(1);
 });

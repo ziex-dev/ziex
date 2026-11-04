@@ -154,7 +154,9 @@ pub fn main(init: std.process.Init) !void {
                 .@"error" => {
                     failed += 1;
                     if (ev.@"error") |msg| {
-                        std.debug.print("tailwindcss [{s}] error: {s}\n", .{ ev.name, msg });
+                        std.log.err("tailwindcss [{s}]: {s}", .{ ev.name, msg });
+                    } else {
+                        std.log.err("tailwindcss [{s}]: unknown build error", .{ev.name});
                     }
                 },
                 .end => {
@@ -167,22 +169,24 @@ pub fn main(init: std.process.Init) !void {
 
             line_writer.clearRetainingCapacity();
         } else |err| {
-            if (err == error.EndOfStream) {}
+            if (err == error.EndOfStream) {} else {
+                std.log.err("tailwindcss: failed reading build events: {s}", .{@errorName(err)});
+            }
         }
     }
 
     if (dep_file_path) |dfp| {
         plugin_system.writeDepFile(allocator, init.io, dfp, output, all_deps.items) catch |err| {
-            std.debug.print("Failed to write dep file: {any}\n", .{err});
+            std.log.err("tailwindcss: failed to write dep file: {s}", .{@errorName(err)});
         };
     }
 
     const term = child.wait(init.io) catch |err| {
         if (err == error.FileNotFound) {
-            std.debug.print("Failed to execute JS runtime: executable not found at '{s}'\n", .{node_path});
+            std.log.err("tailwindcss: JS runtime not found at '{s}'", .{node_path});
             return error.NodeNotFound;
         }
-        std.debug.print("Failed to wait for JS runtime process: {any}\n", .{err});
+        std.log.err("tailwindcss: failed waiting for JS runtime: {s}", .{@errorName(err)});
         return error.WaitFailed;
     };
     const exit_code: u8 = switch (term) {
@@ -191,7 +195,14 @@ pub fn main(init: std.process.Init) !void {
     };
 
     if (exit_code != 0 or failed > 0) {
-        std.debug.print("tailwindcss: build failed\n", .{});
+        if (exit_code != 0 and failed == 0) {
+            std.log.err("tailwindcss: JS runtime exited with code {d}", .{exit_code});
+        } else {
+            std.log.err("tailwindcss: build failed ({d} error{s})", .{
+                failed,
+                if (failed == 1) "" else "s",
+            });
+        }
         std.process.exit(1);
     }
 }
