@@ -148,7 +148,7 @@ pub fn main(init: std.process.Init) !void {
                 .result => {
                     if (ev.success == false) failed += 1;
                     for (ev.dependencies) |dep| {
-                        try all_deps.append(allocator, try arena.dupe(u8, dep));
+                        try all_deps.append(allocator, try allocator.dupe(u8, dep));
                     }
                 },
                 .@"error" => {
