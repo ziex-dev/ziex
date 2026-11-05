@@ -14,6 +14,7 @@ request: Request = undefined,
 response: Response = undefined,
 allocator: Allocator = undefined,
 arena: Allocator = undefined,
+io: std.Io = undefined,
 
 _internal: Internal = .{},
 

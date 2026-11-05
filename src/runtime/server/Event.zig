@@ -8,6 +8,7 @@ const Event = @This();
 
 allocator: Allocator = undefined,
 arena: Allocator = undefined,
+io: @import("std").Io = undefined,
 
 _internal: Internal = .{},
 

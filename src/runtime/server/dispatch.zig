@@ -111,6 +111,7 @@ pub fn dispatchAction(
             .response = response,
             .allocator = allocator,
             .arena = arena,
+            .io = pagectx.io,
             ._internal = .{ .inputs = action_states },
         };
         af(&action_ctx);
@@ -149,6 +150,7 @@ pub fn dispatchServerEvent(
         var event_ctx = zx.server.Event{
             .allocator = allocator,
             .arena = arena,
+            .io = pagectx.io,
             ._internal = .{ .payload = payload },
         };
         ef(&event_ctx);
