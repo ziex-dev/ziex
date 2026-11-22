@@ -17,7 +17,8 @@ pub const Component = union(enum) {
     component_fn: ComponentFn,
 
     pub const ComponentFn = struct {
-        pub const Caller = *const fn (data: ?*const anyopaque, allocator: Allocator, owner_id: ?[]const u8) anyerror!Component;
+        pub const Caller = *const fn (data: ?*const anyopaque, allocator: Allocator, owner_id: ?[]const u8, section: ?*Section) anyerror!Component;
+        pub const Section = @import("runtime/server/render.zig").Section;
         pub const Destroyer = *const fn (data: ?*const anyopaque, allocator: Allocator) void;
 
         pub const VTable = struct {
@@ -135,7 +136,7 @@ pub const Component = union(enum) {
                     return result;
                 }
 
-                fn callImpl(erased: ?*const anyopaque, alloc: Allocator, owner_id: ?[]const u8) anyerror!Component {
+                fn callImpl(erased: ?*const anyopaque, alloc: Allocator, owner_id: ?[]const u8, section: ?*Section) anyerror!Component {
                     if (first_is_ctx_ptr) {
                         const CtxType = @typeInfo(FirstPropType).pointer.child;
                         const ctx_ptr: *CtxType = @ptrCast(@alignCast(@constCast(erased orelse @panic("ctx is null"))));
@@ -143,6 +144,7 @@ pub const Component = union(enum) {
                         if (@hasField(CtxType, "_internal")) {
                             ctx_ptr._internal.state_idx = 0;
                             if (owner_id) |oid| ctx_ptr._internal.component_id = oid;
+                            if (@hasField(@FieldType(CtxType, "_internal"), "section")) ctx_ptr._internal.section = section;
                         }
                         return normalize(func(ctx_ptr));
                     }
@@ -208,11 +210,16 @@ pub const Component = union(enum) {
         }
 
         pub fn call(self: ComponentFn) anyerror!Component {
-            return self.vtable.call(self.data, self.allocator, null);
+            return self.vtable.call(self.data, self.allocator, null, null);
         }
 
         pub fn callOwned(self: ComponentFn, owner_id: []const u8) anyerror!Component {
-            return self.vtable.call(self.data, self.allocator, owner_id);
+            return self.vtable.call(self.data, self.allocator, owner_id, null);
+        }
+
+        // Calls within an @async={.stream} section, which `ctx.flush` writes to.
+        pub fn callIn(self: ComponentFn, section: ?*Section) anyerror!Component {
+            return self.vtable.call(self.data, self.allocator, null, section);
         }
 
         pub fn isIsland(self: ComponentFn) bool {

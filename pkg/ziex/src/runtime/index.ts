@@ -58,6 +58,7 @@ export type RunOptions = {
  */
 export async function run({
     request,
+    env,
     ctx,
     module,
     kv = defaultKV(),
@@ -81,12 +82,12 @@ export async function run({
         : undefined;
 
     if (reuse && hasJspi && !isUpgrade && supportsReuse(module)) {
-        return serveReused({ module, request, stdinData, kv, db, imports, wasi });
+        return serveReused({ module, request, stdinData, env, kv, db, imports, wasi });
     }
 
     const http = newHttpState();
     const ws = newWsState();
-    const { instance } = instantiate({ module, request, stdinData, kv, db, imports, wasi, http, ws });
+    const { instance } = instantiate({ module, request, stdinData, env, kv, db, imports, wasi, http, ws });
     const done = start(instance, ws);
 
     // start() runs synchronously until the first suspension (`__zx_ws.recv` for sockets),

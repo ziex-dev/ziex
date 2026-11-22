@@ -22,12 +22,16 @@ export function createWasiImports({
     request,
     stdinData,
     extraArgs = [],
+    env,
 }: {
     request: Request;
     stdinData?: Uint8Array;
     extraArgs?: string[];
+    env?: unknown;
 }) {
     const encoder = new TextEncoder();
+    const environ = environOf(env).map((e) => encoder.encode(e + "\0"));
+    const environBufSize = environ.reduce((s, e) => s + e.length, 0);
 
     let encodedArgs: Uint8Array[] = [];
     let argBufSize = 0;
@@ -94,11 +98,19 @@ export function createWasiImports({
             return 0;
         },
         environ_sizes_get(count_ptr: number, buf_size_ptr: number): number {
-            v().setUint32(count_ptr, 0, true);
-            v().setUint32(buf_size_ptr, 0, true);
+            v().setUint32(count_ptr, environ.length, true);
+            v().setUint32(buf_size_ptr, environBufSize, true);
             return 0;
         },
-        environ_get(_environ_ptr: number, _environ_buf_ptr: number): number {
+        environ_get(environ_ptr: number, environ_buf_ptr: number): number {
+            const dv = v(); const mem = m();
+            let offset = environ_buf_ptr;
+            for (const entry of environ) {
+                dv.setUint32(environ_ptr, offset, true);
+                mem.set(entry, offset);
+                environ_ptr += 4;
+                offset += entry.length;
+            }
             return 0;
         },
         fd_write(fd: number, iovs_ptr: number, iovs_len: number, nwritten_ptr: number): number {
@@ -254,4 +266,12 @@ export function mergeUint8Arrays(arrays: Uint8Array[]): Uint8Array {
         offset += arr.length;
     }
     return result;
+}
+
+// String-valued bindings (vars and secrets) as `KEY=value`; KV, D1 and other objects are skipped.
+export function environOf(env: unknown): string[] {
+    if (!env || typeof env !== "object") return [];
+    return Object.entries(env)
+        .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+        .map(([key, value]) => `${key}=${value}`);
 }

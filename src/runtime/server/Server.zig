@@ -697,17 +697,20 @@ pub const ServerApp = struct {
 const server_routes = blk: {
     var routes: [app.routes.len]ServerApp.Route = undefined;
     for (app.routes, 0..) |route, i| {
+        const rendering = resolveRendering(route.path, route);
+        // Served from the static dir: drop the handlers (and all they pull in).
+        const omit = @import("app_opts").omit_prerendered and rendering.prerender;
         routes[i] = ServerApp.Route{
             .path = route.path,
 
-            .page = if (route.page) |page| ServerApp.page(page) else null,
+            .page = if (omit) null else if (route.page) |page| ServerApp.page(page) else null,
             .layout = if (route.layout) |layout| ServerApp.layout(layout) else null,
             .notfound = if (route.notfound) |notfound| ServerApp.notfound(notfound) else null,
             .@"error" = if (route.@"error") |err| ServerApp.@"error"(err) else null,
-            .route = if (route.route) |rt| ServerApp.route(rt, if (route.page) |page| page else null) else null,
+            .route = if (omit) null else if (route.route) |rt| ServerApp.route(rt, if (route.page) |page| page else null) else null,
 
-            .route_opts = if (route.route) |o| getOptions(o, zx.RouteOptions) else null,
-            .page_opts = if (route.page) |o| getOptions(o, zx.PageOptions) else null,
+            .route_opts = if (route.route) |o| withoutStatic(getOptions(o, zx.RouteOptions), omit) else null,
+            .page_opts = if (route.page) |o| withoutStatic(getOptions(o, zx.PageOptions), omit) else null,
             .layout_opts = if (route.layout) |o| getOptions(o, zx.LayoutOptions) else null,
             .notfound_opts = if (route.notfound) |o| getOptions(o, zx.NotFoundOptions) else null,
             .error_opts = if (route.@"error") |o| getOptions(o, zx.ErrorOptions) else null,
@@ -715,12 +718,18 @@ const server_routes = blk: {
             .proxy = if (route.proxy) |proxy| ServerApp.proxy(proxy) else null,
             .page_proxy = if (route.proxy) |proxy| ServerApp.pageProxy(proxy) else null,
             .route_proxy = if (route.proxy) |proxy| ServerApp.routeProxy(proxy) else null,
-            .rendering = resolveRendering(route.path, route),
+            .rendering = rendering,
         };
     }
 
     break :blk routes;
 };
+
+fn withoutStatic(opts: anytype, omit: bool) @TypeOf(opts) {
+    var o = opts orelse return null;
+    if (omit and @hasField(@TypeOf(o), "static")) o.static = null;
+    return o;
+}
 
 /// A page's own `rendering`, else the nearest layout's at or above its path, else
 /// `.default`. API routes only use their own setting.

@@ -7,8 +7,9 @@ const html_util = zx.util.html;
 /// handlers encountered during the render pass are registered for this route.
 pub var current_route_path: ?[]const u8 = null;
 
+// `$ZX(id, html, 1)` shows partial content; `$ZX(id, html)` replaces the placeholder.
 pub const streaming_bootstrap_script =
-    \\<script>window.$ZX=function(id,html){var t=document.getElementById('__ZX_S-'+id);if(t){var d=document.createElement('div');d.innerHTML=html;while(d.firstChild)t.parentNode.insertBefore(d.firstChild,t);t.remove();}}</script>
+    \\<script>window.$ZX=function(id,html,partial){var t=document.getElementById('__ZX_S-'+id);if(!t)return;if(partial){t.innerHTML=html;return}var d=document.createElement('div');d.innerHTML=html;while(d.firstChild)t.parentNode.insertBefore(d.firstChild,t);t.remove();}</script>
 ;
 
 /// Async component collected during streaming
@@ -17,33 +18,101 @@ pub const AsyncComponent = struct {
     component: zx.Component,
 
     pub fn renderScript(self: AsyncComponent, allocator: std.mem.Allocator) ![]const u8 {
-        var aw = std.Io.Writer.Allocating.init(allocator);
-        errdefer aw.deinit();
-
-        try self.component.render(&aw.writer, .{});
-        const html = aw.written();
-
-        // Build minimal script: <script>$ZX(id,`content`)</script>
-        var script_writer = std.Io.Writer.Allocating.init(allocator);
-        errdefer script_writer.deinit();
-
-        try script_writer.writer.print("<script>$ZX({d},`", .{self.id});
-
-        // Escape backticks, backslashes, and $ in HTML for template literal
-        for (html) |c| {
-            switch (c) {
-                '`' => try script_writer.writer.writeAll("\\`"),
-                '\\' => try script_writer.writer.writeAll("\\\\"),
-                '$' => try script_writer.writer.writeAll("\\$"),
-                else => try script_writer.writer.writeByte(c),
-            }
-        }
-
-        try script_writer.writer.writeAll("`)</script>");
-
-        return script_writer.written();
+        return script(allocator, self.id, self.component, null, false);
     }
 };
+
+fn script(allocator: std.mem.Allocator, id: u32, component: zx.Component, section: ?*Section, partial: bool) ![]const u8 {
+    var aw = std.Io.Writer.Allocating.init(allocator);
+    defer aw.deinit();
+    try render(component, &aw.writer, .{ .section = section });
+
+    var out = std.Io.Writer.Allocating.init(allocator);
+    errdefer out.deinit();
+    try out.writer.print("<script>$ZX({d},`", .{id});
+    // Escape for a template literal.
+    for (aw.written()) |c| switch (c) {
+        '`' => try out.writer.writeAll("\\`"),
+        '\\' => try out.writer.writeAll("\\\\"),
+        '$' => try out.writer.writeAll("\\$"),
+        else => try out.writer.writeByte(c),
+    };
+    try out.writer.writeAll(if (partial) "`,1)</script>" else "`)</script>");
+    return out.toOwnedSlice();
+}
+
+// Renders `components` and passes each script to `write`, partial ones from
+// `ctx.flush` included. Sections run concurrently when `io` allows it.
+pub fn streamAsync(
+    io: std.Io,
+    components: []const AsyncComponent,
+    context: anytype,
+    comptime write: fn (@TypeOf(context), []const u8) anyerror!void,
+) void {
+    const Context = @TypeOf(context);
+    var out: Out = .{
+        .io = io,
+        .context = @ptrCast(@constCast(context)),
+        .write = struct {
+            fn call(ptr: *anyopaque, bytes: []const u8) anyerror!void {
+                return write(@as(Context, @ptrCast(@alignCast(ptr))), bytes);
+            }
+        }.call,
+    };
+
+    var group: std.Io.Group = .init;
+    for (components) |c| {
+        group.concurrent(io, renderSection, .{ &out, c }) catch renderSection(&out, c);
+    }
+    group.await(io) catch {};
+}
+
+const Out = struct {
+    io: std.Io,
+    mutex: std.Io.Mutex = .init,
+    closed: bool = false,
+    context: *anyopaque,
+    write: *const fn (context: *anyopaque, bytes: []const u8) anyerror!void,
+
+    fn send(out: *Out, bytes: []const u8) void {
+        out.mutex.lockUncancelable(out.io);
+        defer out.mutex.unlock(out.io);
+        if (out.closed) return;
+        out.write(out.context, bytes) catch {
+            out.closed = true;
+        };
+    }
+};
+
+pub const Section = struct {
+    out: *Out,
+    id: u32,
+    last: ?std.Io.Timestamp = null,
+
+    const flush_interval_ms = 50;
+
+    // Throttled; the final render always follows.
+    pub fn flush(s: *Section, component: zx.Component) void {
+        const now = std.Io.Timestamp.now(s.out.io, .awake);
+        if (s.last) |last| if (last.durationTo(now).toMilliseconds() < flush_interval_ms) return;
+        s.last = now;
+
+        var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+        defer arena.deinit();
+        s.out.send(script(arena.allocator(), s.id, component, null, true) catch return);
+    }
+};
+
+fn renderSection(out: *Out, component: AsyncComponent) void {
+    var section: Section = .{ .out = out, .id = component.id };
+    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+    defer arena.deinit();
+    const bytes = script(arena.allocator(), component.id, component.component, &section, false) catch |err| {
+        std.log.err("rendering async component {d}: {}", .{ component.id, err });
+        return;
+    };
+    out.send(bytes);
+}
 
 /// Stream method that renders HTML while collecting async components
 /// Writes placeholders for @async={.stream} components and returns them for parallel rendering
@@ -66,6 +135,7 @@ pub const RenderOptions = struct {
     async_components: ?*std.array_list.Managed(AsyncComponent) = null,
     async_counter: ?*u32 = null,
     base_path: ?[]const u8 = null,
+    section: ?*Section = null,
 };
 
 pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions) !void {
@@ -147,7 +217,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
             }
 
             // No caching or cache miss - render directly
-            const component = try func.call();
+            const component = try func.callIn(options.section);
             try render(component, writer, options);
         },
         .element => |elem| {
@@ -186,6 +256,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
                         .async_components = options.async_components,
                         .async_counter = options.async_counter,
                         .base_path = options.base_path,
+                        .section = options.section,
                     };
                     for (children) |child| {
                         try render(child, writer, child_options);
@@ -281,6 +352,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
                     .async_components = options.async_components,
                     .async_counter = options.async_counter,
                     .base_path = options.base_path,
+                    .section = options.section,
                 };
                 for (children) |child| {
                     try render(child, writer, child_options);

@@ -170,6 +170,112 @@ pub fn fetchThenErased(client: *Client, options: FetchOptions, context: *anyopaq
     if (result) |res| res.deinit(client.allocator) else |_| {}
 }
 
+// A response whose body is read as it arrives. `timeout` is not applied.
+pub const Body = struct {
+    status: Status,
+    reader: *std.Io.Reader,
+    allocator: std.mem.Allocator,
+    transport: Transport,
+
+    const Transport = if (is_wasm) struct {
+        handle: u32,
+        interface: std.Io.Reader,
+        buffer: [4096]u8,
+    } else struct {
+        request: std.http.Client.Request,
+        response: std.http.Client.Response,
+        // Bounds the longest line a caller can take at once.
+        transfer: [16 * 1024]u8,
+        redirect: [8 * 1024]u8,
+    };
+
+    pub fn close(body: *Body) void {
+        if (comptime is_wasm) host.ext.close(body.transport.handle) else body.transport.request.deinit();
+        body.allocator.destroy(body);
+    }
+
+    fn stream(r: *std.Io.Reader, w: *std.Io.Writer, limit: std.Io.Limit) std.Io.Reader.StreamError!usize {
+        const t: *@FieldType(Body, "transport") = @alignCast(@fieldParentPtr("interface", r));
+        const dest = limit.slice(try w.writableSliceGreedy(1));
+        const n = host.ext.read(t.handle, dest.ptr, dest.len);
+        if (n < 0) return error.ReadFailed;
+        if (n == 0) return error.EndOfStream;
+        w.advance(@intCast(n));
+        return @intCast(n);
+    }
+};
+
+// Sends the request and returns once the response head arrives; the caller
+// reads `body.reader` and then calls `body.close()`.
+pub fn open(client: *Client, options: FetchOptions) Error!*Body {
+    const body = try client.allocator.create(Body);
+    errdefer client.allocator.destroy(body);
+    body.allocator = client.allocator;
+    if (comptime is_wasm) try openHost(body, options) else try client.openNative(body, options);
+    return body;
+}
+
+fn openHost(body: *Body, options: FetchOptions) Error!void {
+    var headers_json: std.Io.Writer.Allocating = .init(body.allocator);
+    defer headers_json.deinit();
+    writeHeadersJson(&headers_json.writer, options.headers) catch return error.OutOfMemory;
+    const headers = headers_json.written();
+    const method = options.methodName();
+    const payload = options.payload orelse "";
+
+    var status: u16 = 0;
+    var handle: u32 = 0;
+    const rc = host.ext.open(
+        options.url.ptr,
+        options.url.len,
+        method.ptr,
+        method.len,
+        headers.ptr,
+        headers.len,
+        payload.ptr,
+        payload.len,
+        @backingInt(options.redirect),
+        &status,
+        &handle,
+    );
+    if (rc < 0) return error.NetworkError;
+
+    const t = &body.transport;
+    t.handle = handle;
+    t.interface = .{ .vtable = &.{ .stream = Body.stream }, .buffer = &t.buffer, .seek = 0, .end = 0 };
+    body.status = @fromBackingInt(@intCast(status));
+    body.reader = &t.interface;
+}
+
+fn openNative(client: *Client, body: *Body, options: FetchOptions) Error!void {
+    const uri = std.Uri.parse(options.url) catch return error.InvalidUrl;
+    const t = &body.transport;
+    t.request = (try client.stdClient()).request(options.method, uri, .{
+        .redirect_behavior = switch (options.redirect) {
+            .follow => .init(3),
+            .manual => .unhandled,
+        },
+        // Compressed bodies are only readable once complete.
+        .headers = .{ .accept_encoding = .{ .override = "identity" } },
+        .extra_headers = options.headers,
+    }) catch |err| return mapError(err);
+    errdefer t.request.deinit();
+    try send(&t.request, options.payload);
+
+    t.response = t.request.receiveHead(if (options.redirect == .follow) &t.redirect else &.{}) catch |err| return mapError(err);
+    body.status = t.response.head.status;
+    body.reader = t.response.reader(&t.transfer);
+}
+
+fn send(req: *std.http.Client.Request, payload: ?[]const u8) Error!void {
+    const bytes = payload orelse return req.sendBodiless() catch |err| mapError(err);
+    req.transfer_encoding = .{ .content_length = bytes.len };
+    var body = req.sendBodyUnflushed(&.{}) catch |err| return mapError(err);
+    body.writer.writeAll(bytes) catch return error.NetworkError;
+    body.end() catch return error.NetworkError;
+    req.connection.?.flush() catch return error.NetworkError;
+}
+
 fn stdClient(client: *Client) Error!*std.http.Client {
     if (client._internal.std_client) |sc| return sc;
     const sc = try client.allocator.create(std.http.Client);
@@ -235,16 +341,7 @@ fn fetchUntimed(client: *Client, options: FetchOptions) Error!Result {
         .extra_headers = options.headers,
     }) catch |err| return mapError(err);
     defer req.deinit();
-
-    if (options.payload) |payload| {
-        req.transfer_encoding = .{ .content_length = payload.len };
-        var body = req.sendBodyUnflushed(&.{}) catch |err| return mapError(err);
-        body.writer.writeAll(payload) catch return error.NetworkError;
-        body.end() catch return error.NetworkError;
-        req.connection.?.flush() catch return error.NetworkError;
-    } else {
-        req.sendBodiless() catch |err| return mapError(err);
-    }
+    try send(&req, options.payload);
 
     var redirect_buffer: [8 * 1024]u8 = undefined;
     const response = req.receiveHead(if (options.redirect == .follow) &redirect_buffer else &.{}) catch |err| return mapError(err);
@@ -401,5 +498,22 @@ const host = struct {
         ) i32;
         /// Copies the held response (head then body) into `buf_ptr` and releases it.
         extern "__zx_net" fn take(handle: u32, buf_ptr: [*]u8) void;
+        // Performs the request and holds its body for `read`. Returns 0, or -1 on network failure.
+        extern "__zx_net" fn open(
+            url_ptr: [*]const u8,
+            url_len: usize,
+            method_ptr: [*]const u8,
+            method_len: usize,
+            headers_ptr: [*]const u8,
+            headers_len: usize,
+            body_ptr: [*]const u8,
+            body_len: usize,
+            redirect: u32,
+            status_out: *u16,
+            handle_out: *u32,
+        ) i32;
+        // Copies up to `buf_len` body bytes; 0 at the end, -1 on error.
+        extern "__zx_net" fn read(handle: u32, buf_ptr: [*]u8, buf_len: usize) i32;
+        extern "__zx_net" fn close(handle: u32) void;
     };
 };

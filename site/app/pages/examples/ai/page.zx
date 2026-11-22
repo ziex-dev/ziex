@@ -1,0 +1,78 @@
+pub fn Page(ctx: zx.PageContext) !zx.Component {
+    const prompt = ctx.request.query.get("prompt") orelse "";
+    const image = std.mem.eql(u8, ctx.request.query.get("mode") orelse "text", "image");
+
+    return (
+        <main @allocator={ctx.arena} class="example-page">
+            <header class="example-header">
+                <h1>AI</h1>
+                <p>One <code>zx.ai</code> client for OpenAI, Anthropic or any compatible AI gateway, picked by the <code>.ai</code> feature with credentials from env.</p>
+            </header>
+
+            <section class="example-section">
+                <form method="get">
+                    <input type="text" name="prompt" value={prompt} placeholder="Ask anything..." />
+                    <button name="mode" value="text">Generate text</button>
+                    <button name="mode" value="image">Generate image</button>
+                </form>
+
+                {if (prompt.len > 0 and !image) (
+                    <div @async={.stream} @fallback={(<p>Thinking...</p>)}>
+                        <Answer prompt={prompt} />
+                    </div>
+                )}
+                {if (prompt.len > 0 and image) (
+                    <div @async={.stream} @fallback={(<p>Drawing...</p>)}>
+                        <Picture prompt={prompt} />
+                    </div>
+                )}
+            </section>
+        </main>
+    );
+}
+
+fn Answer(ctx: *zx.ComponentCtx(struct { prompt: []const u8 })) zx.Component {
+    const allocator = ctx.allocator;
+    const stream = zx.ai.gen.stream(allocator, .{
+        .system = "Answer in one short paragraph.",
+        .prompt = ctx.props.prompt,
+        .max_tokens = 300,
+    }) catch |err| return Failed(allocator, .{ .err = err });
+    defer stream.deinit();
+
+    // Each read yields the next delta; flush shows the text so far.
+    var text: std.Io.Writer.Allocating = .init(allocator);
+    while (stream.interface.stream(&text.writer, .unlimited)) |_| {
+        ctx.flush((<p @{allocator}>{text.written()}</p>));
+    } else |err| switch (err) {
+        error.EndOfStream => {},
+        else => return Failed(allocator, .{ .err = stream.err orelse err }),
+    }
+
+    return (
+        <div @{allocator}>
+            <p>{text.written()}</p>
+            <small>{stream.usage.output_tokens} tokens, finished with {@tagName(stream.finish)}</small>
+        </div>
+    );
+}
+
+fn Picture(allocator: zx.Allocator, props: struct { prompt: []const u8 }) zx.Component {
+    const img = zx.ai.gen.image(allocator, .{ .prompt = props.prompt, .size = "1024x1024" }) catch |err|
+        return Failed(allocator, .{ .err = err });
+    const src = std.fmt.allocPrint(allocator, "data:{s};base64,{b64}", .{ img.media_type, img.bytes }) catch |err|
+        return Failed(allocator, .{ .err = err });
+
+    return (<img @{allocator} src={src} width={256} height={256} alt={props.prompt} />);
+}
+
+fn Failed(allocator: zx.Allocator, props: struct { err: anyerror }) zx.Component {
+    return (<p @{allocator}>Generation failed: <code>{@errorName(props.err)}</code></p>);
+}
+
+pub const options = zx.PageOptions{
+    .rendering = .streamed,
+};
+
+const zx = @import("zx");
+const std = @import("std");

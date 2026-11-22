@@ -128,12 +128,30 @@ pub const AppOptions = struct {
             server: ?CacheServerOptions = null,
         };
 
+        // `zx.ai`; key and base URL come from the provider's env, e.g. `OPENAI_API_KEY`, `OPENAI_BASE_URL`.
+        pub const AiOptions = struct {
+            pub const Provider = enum { openai, anthropic };
+            pub const AiServerOptions = struct {
+                pub const enabled: AiServerOptions = .{};
+
+                provider: Provider = .openai,
+                model: ?[]const u8 = null,
+                image_model: ?[]const u8 = null,
+                // An AI gateway or any compatible API.
+                base_url: ?[]const u8 = null,
+            };
+            pub const enabled: AiOptions = .{ .server = .enabled };
+
+            server: ?AiServerOptions = null,
+        };
+
         pub const default = FeatureOptions{};
 
         sqlite: ?SqliteOptions = null,
         postgres: ?PostgresOptions = null,
         kv: ?KvOptions = null,
         cache: ?CacheOptions = null,
+        ai: ?AiOptions = null,
     };
 
     /// Path to the Ziex app source directory.

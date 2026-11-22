@@ -131,6 +131,9 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     const is_dev_build = config.command == .dev;
     const incremental = config.incremental;
 
+    // An edge build with `--prerender` gets its prerendered routes from the
+    // static dir, so the worker never runs them and needn't contain them.
+    const is_edge = if (exe.root_module.resolved_target) |t| t.result.os.tag == .wasi else false;
     const app_opts = addAppOpts(b, .{
         .base_path = opts.base_path,
         .server_port = config.port,
@@ -138,6 +141,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         .cli_command = cli_command,
         .enable_httpz = enable_httpz,
         .features = opts.features,
+        .omit_prerendered = is_edge and config.prerender and config.command == null,
     });
     zx_module.addOptions("app_opts", app_opts);
 
@@ -489,7 +493,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     // Pre-renders static pages from a host build of the app into the same static dir
     // the edge host serves, so prerendered routes skip the worker entirely.
     if (config.prerender and config.command == null) {
-        const prerender_cmd = cliRun(b, zx_cli, opts);
+        const prerender_cmd = appRun(b, zx_cli, opts);
         prerender_cmd.setName("prerender");
         prerender_cmd.setCwd(b.path("."));
         prerender_cmd.addArgs(&.{ "build", "--static", "--prerendered-only", "--zig-path", opts.zig_path });
@@ -518,7 +522,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
     // --- Steps: Serve --- //
     if (opts.steps.serve) |serve_step_name| {
-        const serve_cmd = cliRun(b, zx_cli, opts);
+        const serve_cmd = appRun(b, zx_cli, opts);
         serve_cmd.addArg("serve");
         serve_cmd.addArgs(&.{ "--zig-path", opts.zig_path });
         const serve_step = b.step(serve_step_name, "Run the Ziex app with production behavior");
@@ -528,7 +532,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
     // --- Steps: Dev --- //
     if (opts.steps.dev) |dev_step_name| {
-        const dev_cmd = cliRun(b, zx_cli, opts);
+        const dev_cmd = appRun(b, zx_cli, opts);
         dev_cmd.addArg("dev");
         dev_cmd.addArgs(&.{ "--zig-path", opts.zig_path });
         const dev_step = b.step(dev_step_name, "Run the Ziex app in development mode");
@@ -538,7 +542,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
     // --- Steps: Static --- //
     if (opts.steps.static) |static_step_name| {
-        const static_cmd = cliRun(b, zx_cli, opts);
+        const static_cmd = appRun(b, zx_cli, opts);
         static_cmd.addArgs(&.{ "build", "--static" });
         static_cmd.addArgs(&.{ "--zig-path", opts.zig_path });
         const static_step = b.step(static_step_name, "Build the Ziex app as a static site");
@@ -548,8 +552,8 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
     // --- Steps: Bundle --- //
     if (opts.steps.bundle) |bundle_step_name| {
-        const bundle_cmd = cliRun(b, zx_cli, opts);
-        bundle_cmd.addArgs(&.{"bundle"});
+        const bundle_cmd = appRun(b, zx_cli, opts);
+        bundle_cmd.addArgs(&.{ "bundle", "--zig-path", opts.zig_path });
         const bundle_step = b.step(bundle_step_name, "Bundle the Ziex app for production deployment");
         bundle_step.dependOn(&bundle_cmd.step);
         bundle_cmd.addPassthruArgs();
@@ -683,6 +687,7 @@ const AppOptsParams = struct {
     cli_command: []const u8,
     enable_httpz: bool,
     features: InitOptions.AppOptions.FeatureOptions,
+    omit_prerendered: bool = false,
 };
 
 /// Reads `-Dziex-config`, which the zx CLI sets; a plain `zig build` uses the defaults.
@@ -705,23 +710,36 @@ fn addAppOpts(b: *std.Build, params: AppOptsParams) *std.Build.Step.Options {
     app_opts.addOption(?[]const u8, "server_address", params.server_address);
     app_opts.addOption([]const u8, "cli_command", params.cli_command);
     app_opts.addOption(bool, "enable_httpz", params.enable_httpz);
+    app_opts.addOption(bool, "omit_prerendered", params.omit_prerendered);
     app_opts.addOption(bool, "feat_sqlite_server", if (params.features.sqlite) |s| s.server != null else false);
     app_opts.addOption(bool, "feat_pg_server", if (params.features.postgres) |s| s.server != null else false);
     app_opts.addOption(bool, "feat_kv_server", if (params.features.kv) |k| k.server != null else false);
     app_opts.addOption(bool, "feat_kv_client", if (params.features.kv) |k| k.client != null else false);
     app_opts.addOption(bool, "feat_cache_server", if (params.features.cache) |c| c.server != null else false);
+    const ai: InitOptions.AppOptions.FeatureOptions.AiOptions.AiServerOptions = if (params.features.ai) |a| a.server orelse .{} else .{};
+    app_opts.addOption(bool, "feat_ai_server", if (params.features.ai) |a| a.server != null else false);
+    app_opts.addOption([]const u8, "ai_provider", @tagName(ai.provider));
+    app_opts.addOption(?[]const u8, "ai_model", ai.model);
+    app_opts.addOption(?[]const u8, "ai_image_model", ai.image_model);
+    app_opts.addOption(?[]const u8, "ai_base_url", ai.base_url);
     return app_opts;
 }
 
 fn cliRun(b: *std.Build, zx_exe: *std.Build.Step.Compile, opts: Resolved) *std.Build.Step.Run {
+    const run = appRun(b, zx_exe, opts);
+    run.setEnvironmentVariable("ZIEX_MODULE_PATH", opts.zx_module_path);
+    run.setEnvironmentVariable("ZIEX_ZIG_PATH", opts.zig_path);
+    return run;
+}
+
+// Sets no env: a step's env map is frozen at configure time and replaces the
+// caller's, so the app would miss vars exported later (e.g. API keys).
+fn appRun(b: *std.Build, zx_exe: *std.Build.Step.Compile, opts: Resolved) *std.Build.Step.Run {
     const run = if (opts.cli_path) |cli_path| blk: {
         const r = std.Build.Step.Run.create(b, "run zx");
         r.addFileArg(cli_path);
         break :blk r;
     } else b.addRunArtifact(zx_exe);
-
-    run.setEnvironmentVariable("ZIEX_MODULE_PATH", opts.zx_module_path);
-    run.setEnvironmentVariable("ZIEX_ZIG_PATH", opts.zig_path);
     return run;
 }
 

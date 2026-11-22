@@ -316,13 +316,13 @@ fn streamComponent(ctx: *const Ctx, component: zx.Component) !void {
     ctx.conn.out = out;
     defer ctx.conn.out = null;
 
-    try writeStreamingBody(ctx.allocator, out, shell.written(), async_components);
+    try writeStreamingBody(ctx.io, out, shell.written(), async_components);
     try out.flush();
     if (capture) |*cap| ctx.storePageCache(cap.captured());
 }
 
 fn writeStreamingBody(
-    allocator: std.mem.Allocator,
+    io: std.Io,
     out: *std.Io.Writer,
     shell: []const u8,
     async_components: []render.AsyncComponent,
@@ -334,12 +334,12 @@ fn writeStreamingBody(
 
     try out.writeAll(render.streaming_bootstrap_script);
     try out.flush();
+    render.streamAsync(io, async_components, out, writeFlushed);
+}
 
-    for (async_components) |async_comp| {
-        const script = async_comp.renderScript(allocator) catch continue;
-        try out.writeAll(script);
-        try out.flush();
-    }
+fn writeFlushed(out: *std.Io.Writer, bytes: []const u8) anyerror!void {
+    try out.writeAll(bytes);
+    try out.flush();
 }
 
 // null err: 404, otherwise 500.

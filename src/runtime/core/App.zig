@@ -214,6 +214,9 @@ var db: zx.Db = undefined;
 var kv_fs: zx.Kv.Fs = undefined;
 var cache_fs: zx.Kv.Fs = undefined;
 
+const AiProvider = if (app_opts.feat_ai_server) std.meta.stringToEnum(zx.Ai.Provider, app_opts.ai_provider).?.Type() else void;
+var ai_provider: AiProvider = undefined;
+
 const Resolved = struct {
     datadir: ?[]const u8 = null,
     staticdir: ?[]const u8 = null,
@@ -221,6 +224,8 @@ const Resolved = struct {
     kv_subdir: ?[]const u8 = null,
     cache_subdir: ?[]const u8 = null,
     host: ?[]const u8 = null,
+    ai_api_key: ?[]const u8 = null,
+    ai_base_url: ?[]const u8 = null,
 };
 
 var resolved: Resolved = .{};
@@ -278,6 +283,11 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
                 zx.kv = kv_wasm.kv();
             }
 
+            // Feature ==> zx.ai
+            if (comptime app_opts.feat_ai_server) {
+                if (os == .wasi) initAi(alloc, inita);
+            }
+
             return cfg;
         },
         else => {},
@@ -315,6 +325,9 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
         resolved.db_url = db_url;
     }
 
+    // Feature ==> zx.ai
+    if (comptime app_opts.feat_ai_server) initAi(alloc, inita);
+
     resolved.datadir = datadir;
     resolved.staticdir = staticdir;
 
@@ -324,6 +337,19 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
     }
 
     return cfg;
+}
+
+fn initAi(alloc: std.mem.Allocator, inita: zx.Init) void {
+    resolved.ai_api_key = envVar(alloc, inita, AiProvider.env_api_key);
+    resolved.ai_base_url = envVar(alloc, inita, AiProvider.env_base_url);
+    ai_provider = .{
+        .io = inita.io,
+        .api_key = resolved.ai_api_key,
+        .base_url = resolved.ai_base_url orelse app_opts.ai_base_url orelse AiProvider.default_base_url,
+        .model = app_opts.ai_model,
+    };
+    if (@hasField(AiProvider, "image_model")) ai_provider.image_model = app_opts.ai_image_model;
+    zx.ai = ai_provider.ai();
 }
 
 fn freeResolved(alloc: std.mem.Allocator) void {
@@ -352,13 +378,20 @@ fn freeResolved(alloc: std.mem.Allocator) void {
         if (resolved.kv_subdir) |s| alloc.free(s);
     }
 
+    // Feature ==> zx.ai
+    if (comptime app_opts.feat_ai_server) {
+        zx.ai = .failing;
+        if (resolved.ai_api_key) |s| alloc.free(s);
+        if (resolved.ai_base_url) |s| alloc.free(s);
+    }
+
     if (resolved.staticdir) |s| alloc.free(s);
     if (resolved.datadir) |s| alloc.free(s);
     resolved = .{};
 }
 
 fn envVar(alloc: std.mem.Allocator, inita: zx.Init, name: []const u8) ?[]const u8 {
-    if (platform.os == .freestanding or platform.os == .wasi) return null;
+    if (platform.os == .freestanding) return null;
     const minimal: std.process.Init.Minimal = switch (@TypeOf(inita)) {
         std.process.Init.Minimal => inita,
         std.process.Init => inita.minimal,

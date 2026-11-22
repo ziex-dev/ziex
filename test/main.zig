@@ -23,6 +23,8 @@ test {
     _ = @import("core/wire.zig");
     _ = @import("core/cache.zig");
     _ = @import("core/kv.zig");
+    _ = @import("core/ai.zig");
+    _ = @import("core/stream.zig");
     _ = @import("core/style.zig");
     _ = @import("core/mdzx.zig");
     _ = @import("cli/lsp.zig");

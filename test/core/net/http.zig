@@ -440,3 +440,34 @@ test "io > component context gets the default io" {
     try std.testing.expect(@FieldType(Ctx, "io") == std.Io);
     try std.testing.expect(@hasDecl(Ctx, "fetch") and @hasDecl(Ctx, "fetchThen"));
 }
+
+// --- Streaming bodies --- //
+
+test "open > reads the body as it arrives" {
+    try forEachBackend(struct {
+        fn run(client: *Client, base: []const u8) !void {
+            var buf: [64]u8 = undefined;
+            const body = try client.open(.{ .url = try url(&buf, base, "/echo"), .method = .POST, .payload = "line one\nline two" });
+            defer body.close();
+
+            try std.testing.expectEqual(std.http.Status.ok, body.status);
+            try std.testing.expectEqualStrings("line one", (try body.reader.takeDelimiter('\n')).?);
+            try std.testing.expectEqualStrings("line two", (try body.reader.takeDelimiter('\n')).?);
+            try std.testing.expect(try body.reader.takeDelimiter('\n') == null);
+        }
+    }.run);
+}
+
+test "open > non-2xx keeps its body" {
+    try forEachBackend(struct {
+        fn run(client: *Client, base: []const u8) !void {
+            var buf: [64]u8 = undefined;
+            const body = try client.open(.{ .url = try url(&buf, base, "/headers"), .headers = &.{.{ .name = "x-test", .value = "kept" }} });
+            defer body.close();
+
+            const text = try body.reader.allocRemaining(gpa, .unlimited);
+            defer gpa.free(text);
+            try std.testing.expectEqualStrings("kept", text);
+        }
+    }.run);
+}

@@ -87,7 +87,15 @@ pub fn ComponentCtx(comptime PropsType: type) type {
             component_id: []const u8 = "",
             state_idx: u32 = 0,
             action_idx: u32 = 0,
+            section: ?*zx.server.render.Section = null,
         };
+
+        // Shows `component` in the enclosing @async={.stream} section until this
+        // component finishes; a no-op anywhere else.
+        pub fn flush(self: *Self, component: zx.Component) void {
+            const section = self._internal.section orelse return;
+            section.flush(component);
+        }
 
         pub const fetch = routing.Fetch(Self).fetch;
         pub const fetchThen = routing.Fetch(Self).fetchThen;

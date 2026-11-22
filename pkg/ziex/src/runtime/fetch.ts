@@ -79,7 +79,8 @@ export function fetchMeta(status: number, headLen: number): bigint {
 /**
  * Create the `__zx_net` imports for blocking WASM fetch via JSPI: `fetch` holds the
  * response and returns its length, `take` copies it into wasm memory.
- * When JSPI is unavailable `fetch` always returns -1 (network error).
+ * `open`/`read`/`close` stream a response body chunk by chunk instead.
+ * When JSPI is unavailable `fetch` and `open` always return -1 (network error).
  */
 export function createFetchImports(
     getMemory: () => WebAssembly.Memory,
@@ -130,6 +131,68 @@ export function createFetchImports(
         }
     }
 
+    type Body = { reader: ReadableStreamDefaultReader<Uint8Array>; pending: Uint8Array };
+    const bodies = new Map<number, Body>();
+
+    // Resolves once the head arrives; the body is then pulled with `read`.
+    async function open(
+        url_ptr: number, url_len: number,
+        method_ptr: number, method_len: number,
+        headers_ptr: number, headers_len: number,
+        body_ptr: number, body_len: number,
+        redirect: number,
+        status_out: number,
+        handle_out: number,
+    ): Promise<number> {
+        const url = readStr(url_ptr, url_len);
+        const method = method_len > 0 ? readStr(method_ptr, method_len) : "GET";
+        try {
+            const response = await fetch(resolveFetchUrl(url), {
+                method,
+                headers: parseRequestHeaders(readStr(headers_ptr, headers_len)),
+                body: method !== "GET" && method !== "HEAD" && body_len > 0 ? readBytes(body_ptr, body_len).slice() : undefined,
+                redirect: redirect === 1 ? "manual" : "follow",
+            });
+            const handle = nextHandle++;
+            const reader = (response.body ?? new Blob().stream()).getReader();
+            bodies.set(handle, { reader, pending: new Uint8Array(0) });
+            const view = new DataView(getMemory().buffer);
+            view.setUint16(status_out >>> 0, response.status, true);
+            view.setUint32(handle_out >>> 0, handle, true);
+            return 0;
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`wasm fetch failed: ${url} (${msg})`);
+            return -1;
+        }
+    }
+
+    // Copies up to `buf_len` body bytes; 0 at the end, -1 on error.
+    async function read(handle: number, buf_ptr: number, buf_len: number): Promise<number> {
+        const body = bodies.get(handle);
+        if (!body) return -1;
+        try {
+            while (body.pending.length === 0) {
+                const { done, value } = await body.reader.read();
+                if (done) return 0;
+                body.pending = value;
+            }
+        } catch {
+            return -1;
+        }
+        const n = Math.min(buf_len, body.pending.length);
+        new Uint8Array(getMemory().buffer, buf_ptr >>> 0, n).set(body.pending.subarray(0, n));
+        body.pending = body.pending.subarray(n);
+        return n;
+    }
+
+    const close = (handle: number): void => {
+        const body = bodies.get(handle);
+        if (!body) return;
+        bodies.delete(handle);
+        body.reader.cancel().catch(() => {});
+    };
+
     const take = (handle: number, buf_ptr: number): void => {
         const bytes = held.get(handle);
         if (!bytes) return;
@@ -138,8 +201,9 @@ export function createFetchImports(
     };
 
     if (!Suspending) {
-        return { fetch: (): number => -1, take };
+        return { fetch: (): number => -1, take, open: (): number => -1, read: (): number => -1, close };
     }
 
-    return { fetch: gate ? gate.suspending(doFetch) : new Suspending(doFetch), take };
+    const suspending = <T extends (...args: any[]) => Promise<number>>(fn: T) => gate ? gate.suspending(fn) : new Suspending(fn);
+    return { fetch: suspending(doFetch), take, open: suspending(open), read: suspending(read), close };
 }

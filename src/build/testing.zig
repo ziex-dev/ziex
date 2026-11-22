@@ -19,11 +19,17 @@ pub fn configure(b: *std.Build, zx_mod: *std.Build.Module, opts: Options) *std.B
     app_opts.addOption(?[]const u8, "server_address", opts.server_address);
     app_opts.addOption([]const u8, "cli_command", opts.cli_command);
     app_opts.addOption(bool, "enable_httpz", opts.enable_httpz);
+    app_opts.addOption(bool, "omit_prerendered", false);
     app_opts.addOption(bool, "feat_sqlite_server", false);
     app_opts.addOption(bool, "feat_pg_server", false);
     app_opts.addOption(bool, "feat_kv_server", false);
     app_opts.addOption(bool, "feat_kv_client", false);
     app_opts.addOption(bool, "feat_cache_server", false);
+    app_opts.addOption(bool, "feat_ai_server", false);
+    app_opts.addOption([]const u8, "ai_provider", "openai");
+    app_opts.addOption(?[]const u8, "ai_model", null);
+    app_opts.addOption(?[]const u8, "ai_image_model", null);
+    app_opts.addOption(?[]const u8, "ai_base_url", null);
     zx_mod.addOptions("app_opts", app_opts);
 
     if (opts.enable_httpz) {

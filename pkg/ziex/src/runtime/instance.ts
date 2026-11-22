@@ -14,6 +14,7 @@ import type { Database } from "./db";
 export type ImportsFactory = (mem: () => WebAssembly.Memory) => WebAssembly.Imports;
 
 export type Bindings = {
+    env?: unknown;
     kv: Record<string, KVNamespace>;
     db: Record<string, Database>;
     imports?: ImportsFactory;
@@ -67,6 +68,7 @@ export function instantiate(opts: InstantiateOptions): Instance {
         request: opts.request,
         stdinData: opts.stdinData,
         extraArgs: opts.extraArgs,
+        env: opts.env,
     });
 
     let wasmMemory: WebAssembly.Memory = null!;

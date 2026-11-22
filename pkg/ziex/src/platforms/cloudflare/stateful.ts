@@ -92,6 +92,7 @@ export function createStatefulFetch(
                 module,
                 request,
                 stdinData,
+                env: this.env,
                 kv: options?.kv?.(this.env) ?? defaultKV(),
                 db: options?.db?.(this.env) ?? {},
                 imports: options?.imports,

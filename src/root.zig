@@ -95,10 +95,12 @@ pub const Db = @import("runtime/core/Db.zig");
 pub const Kv = @import("runtime/core/Kv.zig");
 pub const Wire = @import("runtime/core/Wire.zig");
 pub const Cache = @import("runtime/core/Cache.zig");
+pub const Ai = @import("runtime/core/Ai.zig");
 
 pub var db: Db = .failing;
 pub var kv: Kv = .failing;
 pub var cache: Cache = .failing;
+pub var ai: Ai = .failing;
 
 // --- Net --- //
 pub const http = @import("runtime/core/http.zig");

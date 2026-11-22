@@ -1119,106 +1119,12 @@ fn Handler(comptime Ctx: type) type {
                     log.err("sending bootstrap script: {}", .{err});
                     return err;
                 };
-                const AsyncResult = struct {
-                    script: []const u8 = &.{},
-                    done: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
-                };
-
-                const results = std.heap.page_allocator.alloc(AsyncResult, async_components.len) catch |err| {
-                    log.err("allocating results: {}", .{err});
-                    return err;
-                };
-                defer std.heap.page_allocator.free(results);
-
-                for (results) |*result_entry| {
-                    result_entry.* = .{};
-                }
-
-                var remaining = std.atomic.Value(usize).init(async_components.len);
-
-                const TaskContext = struct {
-                    async_comp: rndr.AsyncComponent,
-                    result: *AsyncResult,
-                    remaining_ref: *std.atomic.Value(usize),
-
-                    fn work(ctx: *@This()) void {
-                        defer {
-                            _ = ctx.remaining_ref.fetchSub(1, .seq_cst);
-                            std.heap.page_allocator.destroy(ctx);
-                        }
-
-                        const script = ctx.async_comp.renderScript(std.heap.page_allocator) catch |work_err| {
-                            log.err("rendering async component {d}: {}", .{ ctx.async_comp.id, work_err });
-                            ctx.result.done.store(true, .seq_cst);
-                            return;
-                        };
-
-                        ctx.result.script = script;
-                        ctx.result.done.store(true, .seq_cst);
-                    }
-                };
-
-                var threads = std.heap.page_allocator.alloc(?std.Thread, async_components.len) catch |err| {
-                    log.err("allocating threads: {}", .{err});
-                    return err;
-                };
-                defer std.heap.page_allocator.free(threads);
-
-                for (async_components, 0..) |async_comp, i| {
-                    const ctx = std.heap.page_allocator.create(TaskContext) catch {
-                        threads[i] = null;
-                        continue;
-                    };
-                    ctx.* = .{
-                        .async_comp = async_comp,
-                        .result = &results[i],
-                        .remaining_ref = &remaining,
-                    };
-
-                    threads[i] = std.Thread.spawn(.{}, TaskContext.work, .{ctx}) catch blk: {
-                        std.heap.page_allocator.destroy(ctx);
-                        _ = remaining.fetchSub(1, .seq_cst);
-                        results[i].done.store(true, .seq_cst);
-                        break :blk null;
-                    };
-                }
-
-                var streamed = std.heap.page_allocator.alloc(bool, async_components.len) catch |err| {
-                    log.err("allocating streamed flags: {}", .{err});
-                    return err;
-                };
-                defer std.heap.page_allocator.free(streamed);
-                @memset(streamed, false);
-
-                var completed: usize = 0;
-                var connection_closed = false;
-                while (completed < async_components.len and !connection_closed) {
-                    for (results, 0..) |*result_entry, i| {
-                        if (streamed[i]) continue;
-
-                        if (result_entry.done.load(.seq_cst)) {
-                            if (result_entry.script.len > 0) {
-                                res.chunk(result_entry.script) catch |chunk_err| {
-                                    log.err("streaming async component: {}", .{chunk_err});
-                                    connection_closed = true;
-                                    break;
-                                };
-                            }
-                            streamed[i] = true;
-                            completed += 1;
-                        }
-                    }
-                    if (completed < async_components.len and !connection_closed) {
-                        _ = try std.Io.sleep(self.io, std.Io.Duration.fromMilliseconds(5), .awake);
-                    }
-                }
-
-                for (threads) |maybe_thread| {
-                    if (maybe_thread) |thread| {
-                        thread.join();
-                    }
-                }
+                Pipeline.streamAsync(self.io, async_components, res, chunk);
             }
+        }
+
+        fn chunk(res: *httpz.Response, bytes: []const u8) anyerror!void {
+            return res.chunk(bytes);
         }
 
         pub fn static(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {

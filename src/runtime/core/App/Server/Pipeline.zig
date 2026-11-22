@@ -531,3 +531,4 @@ pub fn socket(h: zx.http.Transport, handlers: ?RouteHandlers) zx.Socket {
 /// Streaming bootstrap script for SSR shells.
 pub const ssr_bootstrap = render.streaming_bootstrap_script;
 pub const AsyncComponent = render.AsyncComponent;
+pub const streamAsync = render.streamAsync;
