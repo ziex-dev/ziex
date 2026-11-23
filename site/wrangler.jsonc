@@ -16,8 +16,8 @@
 	],
 	"build": {
 		"watch_dir": "./app",
-		// "command": "zig build -Dtarget=wasm32-wasi --release=small"
-		"command": "zig build -Dtarget=wasm32-wasi"
+		"command": "zig build -Dtarget=wasm32-wasi --release=small"
+		// "command": "zig build -Dtarget=wasm32-wasi"
 	},
 	"assets": {
 		"directory": "./zig-out/static",
