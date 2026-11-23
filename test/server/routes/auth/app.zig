@@ -40,7 +40,7 @@ const store: Auth.Store.VTable = .{
     .deleteSession = deleteSession,
     .putPasskey = undefined,
     .getPasskey = undefined,
-    .listPasskeys = undefined,
+    .listPasskeys = listPasskeys,
     .usePasskey = undefined,
     .deletePasskey = undefined,
 };
@@ -81,4 +81,8 @@ fn deleteSession(ud: ?*anyopaque, token_hash: []const u8) anyerror!void {
     try mutex.lock(io);
     defer mutex.unlock(io);
     _ = sessions.orderedRemove(token_hash);
+}
+
+fn listPasskeys(_: ?*anyopaque, _: std.mem.Allocator, _: Auth.Account) anyerror![]const Auth.Passkey {
+    return &.{};
 }

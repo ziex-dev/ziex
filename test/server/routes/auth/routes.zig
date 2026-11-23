@@ -2,34 +2,10 @@ const std = @import("std");
 const zx = @import("zx");
 const app = @import("app.zig");
 
-pub const start = struct {
-    pub fn GET(ctx: zx.RouteContext) !void {
-        const auth = try app.of(ctx);
-        const url = try auth.startOAuth(ctx.arena, ctx.request.params.get("provider") orelse "", ctx.request.query.get("next"));
-        ctx.response.redirect(url, .see_other);
-    }
-};
-
-pub const callback = struct {
-    pub fn GET(ctx: zx.RouteContext) !void {
-        const auth = try app.of(ctx);
-        const q = ctx.request.query;
-        const next = auth.finishOAuth(ctx.arena, ctx.request.params.get("provider") orelse "", .{
-            .state = q.get("state"),
-            .code = q.get("code"),
-            .@"error" = q.get("error"),
-        }) catch |err| {
-            ctx.response.setStatus(.forbidden);
-            return ctx.response.text(@errorName(err));
-        };
-        ctx.response.redirect(next, .see_other);
-    }
-};
-
-pub const logout = struct {
-    pub fn POST(ctx: zx.RouteContext) !void {
-        (try app.of(ctx)).signOut();
-        ctx.response.redirect("/auth/me", .see_other);
+// Every sign-in endpoint, through `Auth.handle`.
+pub const handler = struct {
+    pub fn Route(ctx: zx.RouteContext) !void {
+        return (try app.of(ctx)).handle(ctx);
     }
 };
 

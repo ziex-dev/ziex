@@ -330,6 +330,31 @@ test "withNext > percent-encodes the path" {
     try expectEqualStrings("/auth/login?x=1&next=/", try Auth.withNext(arena, "/auth/login?x=1", "/"));
 }
 
+test "urls > endpoints, start, login and error codes" {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var host: Host = .{ .arena = arena };
+    var auth = host.auth();
+    try expectEqualStrings("https://example.com/auth/logout", try auth.url(arena, .logout));
+    try expectEqualStrings("https://example.com/auth/passkey/login/options", try auth.url(arena, .@"passkey/login/options"));
+    try expectEqualStrings("https://example.com/auth/start/github", try auth.startUrl(arena, "github", null));
+    try expectEqualStrings("https://example.com/auth/start/github?next=/admin/x", try auth.startUrl(arena, "github", "/admin/x"));
+    try expectEqualStrings("https://example.com/auth/login?next=/admin", try auth.loginUrl(arena, "/admin"));
+
+    auth.options.path = "/account";
+    auth.options.login_path = "/sign-in";
+    try expectEqualStrings("https://example.com/account/passkey/remove", try auth.url(arena, .@"passkey/remove"));
+    try expectEqualStrings("https://example.com/sign-in", try auth.loginUrl(arena, null));
+    const url = try auth.startOAuth(arena, "github", null);
+    try expect(std.mem.indexOf(u8, url, "redirect_uri=https%3A%2F%2Fexample.com%2Faccount%2Fcallback%2Fgithub") != null);
+
+    try expectEqualStrings("expired", Auth.errorCode(error.Expired));
+    try expectEqualStrings("not_allowed", Auth.errorCode(error.NotAllowed));
+    try expectEqualStrings("failed", Auth.errorCode(error.Unexpected));
+}
+
 // --- OAuth pieces --- //
 
 test "oauth > authorizeUrl" {
@@ -843,13 +868,14 @@ test "http > sign in through a provider, guard a route, sign out" {
 
     // A callback without the cookie is refused, and so is a bad code.
     res = try harness.fetch(arena, .{ .path = try std.fmt.allocPrint(arena, "/auth/callback/fake?state={s}&code=good", .{state}) });
-    try expectEqual(403, res.status);
+    try expectEqual(303, res.status);
+    try expectEqualStrings("/auth/login?err=expired", res.header("location").?);
     res = try harness.fetch(arena, .{
         .path = try std.fmt.allocPrint(arena, "/auth/callback/fake?state={s}&code=bad", .{state}),
         .headers = &.{.{ .name = "Cookie", .value = flow }},
     });
-    try expectEqual(403, res.status);
-    try expectEqualStrings("ProviderFailed", res.body);
+    try expectEqual(303, res.status);
+    try expectEqualStrings("/auth/login?err=provider", res.header("location").?);
 
     // The real callback: token exchange and user lookup go to the provider.
     res = try harness.fetch(arena, .{ .path = "/auth/start/fake?next=/auth/me" });
@@ -872,9 +898,56 @@ test "http > sign in through a provider, guard a route, sign out" {
     try expectEqual(200, res.status);
     try expectEqualStrings("octo", res.body);
 
+    // Signed in, passkey registration can start.
+    res = try harness.fetch(arena, .{ .method = .POST, .path = "/auth/passkey/register/options", .headers = &.{.{ .name = "Cookie", .value = session }} });
+    try expectEqual(200, res.status);
+    try expect(std.mem.startsWith(u8, res.body, "{\"publicKey\":"));
+
     // Sign out ends the session on the server, not just in the browser.
     res = try harness.fetch(arena, .{ .method = .POST, .path = "/auth/logout", .headers = &.{.{ .name = "Cookie", .value = session }} });
     try expectEqual(303, res.status);
+    try expectEqualStrings("/auth/login?ok=signed_out", res.header("location").?);
     res = try harness.fetch(arena, .{ .path = "/auth/me", .headers = &.{.{ .name = "Cookie", .value = session }} });
     try expectEqual(302, res.status);
+}
+
+test "http > handle routes, methods and results" {
+    var harness = try Harness.start(.std, io, gpa, .{ .thread_pool = .{ .count = 2 } });
+    defer harness.stop();
+    @import("app").auth_app.port = harness.tcp.?.port;
+
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    for ([_][]const u8{ "/auth/nope", "/auth/start", "/auth/start/", "/auth/logout/x", "/auth/passkey/login/x" }) |path| {
+        const res = try harness.fetch(arena, .{ .path = path });
+        try expectEqual(404, res.status);
+        try expectEqualStrings("no-store", res.header("cache-control").?);
+    }
+
+    var res = try harness.fetch(arena, .{ .path = "/auth/logout" });
+    try expectEqual(405, res.status);
+    try expectEqualStrings("POST", res.header("allow").?);
+    res = try harness.fetch(arena, .{ .method = .POST, .path = "/auth/start/fake" });
+    try expectEqual(405, res.status);
+
+    res = try harness.fetch(arena, .{ .path = "/auth/start/nope" });
+    try expectEqual(303, res.status);
+    try expectEqualStrings("/auth/login?err=unknown_provider", res.header("location").?);
+
+    // Passkey calls answer the page script in JSON.
+    res = try harness.fetch(arena, .{ .method = .POST, .path = "/auth/passkey/login/options" });
+    try expectEqual(200, res.status);
+    try expect(std.mem.startsWith(u8, res.header("content-type").?, "application/json"));
+    try expect(std.mem.startsWith(u8, res.body, "{\"publicKey\":"));
+    res = try harness.fetch(arena, .{ .method = .POST, .path = "/auth/passkey/login?next=/auth/me", .body = "{}" });
+    try expectEqualStrings("{\"redirect\":\"/auth/login?err=expired\"}", res.body);
+
+    // Signed out, account actions send the browser to sign in first.
+    res = try harness.fetch(arena, .{ .method = .POST, .path = "/auth/passkey/register/options" });
+    try expectEqualStrings("{\"redirect\":\"/auth/login?next=/auth/me\"}", res.body);
+    res = try harness.fetch(arena, .{ .method = .POST, .path = "/auth/passkey/remove" });
+    try expectEqual(303, res.status);
+    try expectEqualStrings("/auth/login?next=/auth/me", res.header("location").?);
 }

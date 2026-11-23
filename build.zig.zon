@@ -24,6 +24,12 @@
             .hash = "lsp_kit-0.1.0-bi_PL9o2DADHS1PDra3MGz1MXnsboN_ewNvrc419z7Fb",
             .lazy = true,
         },
+        // MCP spec, only for `zig build mcpgen -Dmcp-spec`
+        .mcp_spec = .{
+            .url = "git+https://github.com/modelcontextprotocol/modelcontextprotocol?ref=2026-07-28#5f5440bb26a62e2cf3440b92da5a667efa03b267",
+            .hash = "N-V-__8AACfanwK1l2qJCox_t7b7Sz55K3btMW19mNl2BBFD",
+            .lazy = true,
+        },
         .db_sqlite = .{ .path = "pkg/db-sqlite", .lazy = true },
         .db_postgres = .{ .path = "pkg/db-postgres", .lazy = true },
         .zig_js = .{ .path = "vendor/jsz" },

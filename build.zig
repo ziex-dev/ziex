@@ -279,6 +279,38 @@ pub fn build(b: *std.Build) !void {
         tags_gen_step.dependOn(&events_cmd.step);
     }
 
+    // --- Steps: MCP Generator (src/runtime/core/mcp/gen) --- //
+    {
+        const mcp_gen_step = b.step("mcpgen", "Regenerate src/runtime/core/mcp/gen from the MCP spec (requires -Dmcp-spec)");
+        // Lazy so consumers never fetch the spec; the output is committed.
+        if (b.option(bool, "mcp-spec", "Fetch the MCP spec for `zig build mcpgen`") orelse false) {
+            if (b.lazyDependency("mcp_spec", .{})) |spec| {
+                // Newest first; a dual-era server speaks all of them.
+                const spec_versions = .{ "2026-07-28", "2025-11-25" };
+                const mcp_gen_exe = b.addExecutable(.{
+                    .name = "mcpgen",
+                    .root_module = b.createModule(.{
+                        .root_source_file = b.path("tools/codegen/mcp.zig"),
+                        .target = b.graph.host,
+                    }),
+                });
+                const update = b.addUpdateSourceFiles();
+                inline for (.{ "version", "methods", "error_codes", "defs_index" }) |kind| {
+                    const run = b.addRunArtifact(mcp_gen_exe);
+                    run.addArg(kind);
+                    inline for (spec_versions) |v| {
+                        run.addArg(v);
+                        run.addFileArg(spec.path("schema/" ++ v ++ "/schema.json"));
+                    }
+                    update.addCopyFileToSource(run.captureStdOut(.{}), "src/runtime/core/mcp/gen/" ++ kind ++ ".zig");
+                }
+                mcp_gen_step.dependOn(&update.step);
+            }
+        } else {
+            mcp_gen_step.dependOn(&b.addFail("`zig build mcpgen` requires -Dmcp-spec").step);
+        }
+    }
+
     // --- Steps: HTML Docs Generator --- //
     {
         const html_docs_gen_step = b.step("htmldocsgen", "Generate HTML element/attribute docs from VS Code browsers.html-data.json");

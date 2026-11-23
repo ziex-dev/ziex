@@ -108,6 +108,7 @@ pub var flag: Flag = .failing;
 // --- Net --- //
 pub const http = @import("runtime/core/http.zig");
 pub const WebSocket = @import("runtime/core/WebSocket.zig");
+pub const mcp = @import("runtime/core/mcp.zig");
 pub const Socket = routing.Socket;
 
 // --- Values --- //

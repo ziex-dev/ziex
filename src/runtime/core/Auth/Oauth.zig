@@ -19,7 +19,7 @@ pub const Provider = struct {
 
 // Common providers. Each one's account id is the provider's stable, non-reassignable
 // user id, never an email or username, which can change hands. Register the redirect
-// URI `<origin><callback_path><id>` with the provider.
+// URI `<origin><path>/callback/<id>` with the provider (see `Auth.Options.path`).
 pub const providers = struct {
     pub const discord: Provider = .{
         .id = "discord",
@@ -262,6 +262,20 @@ pub fn userRequest(arena: std.mem.Allocator, p: Provider, access_token: []const 
     };
 }
 
+// PKCE S256: base64url(sha256(verifier)), no padding.
+pub fn pkceChallenge(verifier: []const u8) [43]u8 {
+    var digest: [Sha256.digest_length]u8 = undefined;
+    Sha256.hash(verifier, &digest, .{});
+    var out: [43]u8 = undefined;
+    _ = b64.Encoder.encode(&out, &digest);
+    return out;
+}
+
+pub fn verifyPkce(verifier: []const u8, challenge: []const u8) bool {
+    if (challenge.len != 43) return false;
+    return std.crypto.timing_safe.eql([43]u8, pkceChallenge(verifier), challenge[0..43].*);
+}
+
 // One sign-in attempt, kept in a cookie as `<state>.<verifier>.<provider>.<next>`
 // with the last two base64url-encoded. The state ties the callback to this browser,
 // the provider to the one the attempt started with, and the PKCE verifier makes an
@@ -283,11 +297,7 @@ pub const Flow = struct {
     }
 
     pub fn challenge(flow: Flow) [43]u8 {
-        var digest: [Sha256.digest_length]u8 = undefined;
-        Sha256.hash(&flow.verifier, &digest, .{});
-        var out: [43]u8 = undefined;
-        _ = b64.Encoder.encode(&out, &digest);
-        return out;
+        return pkceChallenge(&flow.verifier);
     }
 
     pub fn encode(flow: Flow, arena: std.mem.Allocator) ![]const u8 {

@@ -7,6 +7,13 @@
 //         .site_name = "Example",
 //         .providers = &.{zx.Auth.Oauth.providers.github},
 //     });
+//
+// `handle` serves every sign-in endpoint from one catch-all route:
+//
+//     // app/routes/auth/[..]/route.zig
+//     pub fn Route(ctx: zx.RouteContext) !void {
+//         return (try app.auth(ctx)).handle(ctx);
+//     }
 const Auth = @This();
 
 const std = @import("std");
@@ -31,8 +38,13 @@ pub const Options = struct {
     site_name: []const u8,
     // Where sign-in lands when no usable `next` path is given.
     home: []const u8 = "/",
-    // Joined with the provider id into the OAuth redirect URI.
-    callback_path: []const u8 = "/auth/callback/",
+    // Where `handle` is mounted. The OAuth redirect URI to register with a
+    // provider is `<origin><path>/callback/<provider id>`.
+    path: []const u8 = "/auth",
+    // The app's sign-in page. Failed sign-ins land here with `?err=<code>`.
+    login_path: []const u8 = "/auth/login",
+    // Where adding or removing a passkey lands with `?ok=` or `?err=`; `home` when null.
+    account_path: ?[]const u8 = null,
     providers: []const Oauth.Provider = &.{},
     session_max_age_s: i64 = 14 * std.time.s_per_day,
 };
@@ -129,6 +141,117 @@ pub fn init(ctx: anytype, store: Store, options: Options) !Auth {
     return .{ .io = ctx.io, .http = try .of(ctx), .store = store, .options = options };
 }
 
+// The endpoints `handle` serves under `options.path`.
+pub const Endpoint = enum {
+    // GET, then GET back from the provider; both take the provider id as the last segment.
+    start,
+    callback,
+    // POST from a form; lands on the login page.
+    logout,
+    // POST from the passkey script, answered in JSON: ceremony options, or
+    // `{"redirect": url}` once only a page is left to show.
+    @"passkey/login/options",
+    @"passkey/login",
+    @"passkey/register/options",
+    @"passkey/register",
+    // POST from a form with `credential_id`; lands on the account page.
+    @"passkey/remove",
+
+    pub fn method(e: Endpoint) std.http.Method {
+        return switch (e) {
+            .start, .callback => .GET,
+            else => .POST,
+        };
+    }
+
+    fn takesProvider(e: Endpoint) bool {
+        return e == .start or e == .callback;
+    }
+};
+
+// Serves every `Endpoint` under `options.path`, so one catch-all route is all an
+// app needs. Results come back the way each endpoint's caller expects them: page
+// flows redirect with `?ok=`/`?err=` (see `errorCode`), passkey calls get JSON.
+pub fn handle(auth: Auth, ctx: anytype) !void {
+    const res = ctx.response;
+    res.headers.append("Cache-Control", "no-store");
+    const endpoint, const provider = auth.route(ctx.request.pathname) orelse return res.setStatus(.not_found);
+    if (ctx.request.method != endpoint.method()) {
+        res.headers.append("Allow", @tagName(endpoint.method()));
+        return res.setStatus(.method_not_allowed);
+    }
+
+    const arena = ctx.arena;
+    const q = ctx.request.query;
+    const login = auth.options.login_path;
+    const account_page = auth.options.account_path orelse auth.options.home;
+    switch (endpoint) {
+        .start => redirect(ctx, auth.startOAuth(arena, provider, q.get("next")) catch |err|
+            return redirect(ctx, try auth.failure(arena, login, err))),
+        .callback => redirect(ctx, auth.finishOAuth(arena, provider, .{
+            .state = q.get("state"),
+            .code = q.get("code"),
+            .@"error" = q.get("error"),
+        }) catch |err| return redirect(ctx, try auth.failure(arena, login, err))),
+        .logout => {
+            auth.signOut();
+            redirect(ctx, try withQuery(arena, login, "ok=signed_out"));
+        },
+        .@"passkey/login/options" => json(ctx, try auth.passkeyRequestOptions(arena)),
+        .@"passkey/login" => jsonRedirect(ctx, auth.signInWithPasskey(arena, ctx.request.text() orelse "", q.get("next")) catch |err|
+            try auth.failure(arena, login, err)),
+        .@"passkey/register/options" => json(ctx, auth.passkeyCreationOptions(arena) catch |err|
+            return jsonRedirect(ctx, try auth.failure(arena, account_page, err))),
+        .@"passkey/register" => {
+            const body = ctx.request.text() orelse "";
+            const label = std.json.parseFromSliceLeaky(struct { name: []const u8 = "" }, arena, body, .{ .ignore_unknown_fields = true }) catch
+                return jsonRedirect(ctx, try auth.failure(arena, account_page, error.PasskeyRejected));
+            auth.addPasskey(arena, body, label.name) catch |err|
+                return jsonRedirect(ctx, try auth.failure(arena, account_page, err));
+            jsonRedirect(ctx, try withQuery(arena, account_page, "ok=passkey_added"));
+        },
+        .@"passkey/remove" => {
+            auth.removePasskey(arena, ctx.request.formData().get("credential_id") orelse "") catch |err|
+                return redirect(ctx, try auth.failure(arena, account_page, err));
+            redirect(ctx, try withQuery(arena, account_page, "ok=passkey_removed"));
+        },
+    }
+}
+
+// The `?err=` value `handle` reports for a sign-in error, for the page to explain.
+pub fn errorCode(err: anyerror) []const u8 {
+    return switch (err) {
+        error.UnknownProvider => "unknown_provider",
+        error.NotConfigured => "not_configured",
+        error.Expired => "expired",
+        error.Denied => "denied",
+        error.ProviderFailed => "provider",
+        error.NotAllowed => "not_allowed",
+        error.PasskeyRejected => "passkey",
+        error.UnknownPasskey => "passkey_unknown",
+        error.SignInRequired => "sign_in_required",
+        else => "failed",
+    };
+}
+
+// `<origin><path>/<endpoint>`, e.g. for a form action or the passkey script.
+pub fn url(auth: Auth, arena: std.mem.Allocator, endpoint: Endpoint) ![]const u8 {
+    std.debug.assert(!endpoint.takesProvider());
+    return std.mem.concat(arena, u8, &.{ auth.options.origin, auth.options.path, "/", @tagName(endpoint) });
+}
+
+// Where a "Sign in with <provider>" link points.
+pub fn startUrl(auth: Auth, arena: std.mem.Allocator, provider_id: []const u8, next: ?[]const u8) ![]const u8 {
+    const start = try std.mem.concat(arena, u8, &.{ auth.options.origin, auth.options.path, "/start/", provider_id });
+    return if (next) |n| withNext(arena, start, n) else start;
+}
+
+// The login page on `origin`, coming back to `next` after sign-in.
+pub fn loginUrl(auth: Auth, arena: std.mem.Allocator, next: ?[]const u8) ![]const u8 {
+    const login = try std.mem.concat(arena, u8, &.{ auth.options.origin, auth.options.login_path });
+    return if (next) |n| withNext(arena, login, n) else login;
+}
+
 // A null max age means the session lifetime.
 const CookieSpec = struct { name: []const u8, max_age_s: ?i64 };
 
@@ -177,9 +300,9 @@ pub fn guard(auth: Auth, ctx: anytype, login: []const u8) ?Account {
 }
 
 // `url` with `next` added as a query parameter.
-pub fn withNext(arena: std.mem.Allocator, url: []const u8, next: []const u8) ![]const u8 {
+pub fn withNext(arena: std.mem.Allocator, target: []const u8, next: []const u8) ![]const u8 {
     var out: std.Io.Writer.Allocating = .init(arena);
-    try out.writer.print("{s}{c}next=", .{ url, @as(u8, if (std.mem.indexOfScalar(u8, url, '?') == null) '?' else '&') });
+    try out.writer.print("{s}{c}next=", .{ target, @as(u8, if (std.mem.indexOfScalar(u8, target, '?') == null) '?' else '&') });
     try std.Uri.Component.percentEncode(&out.writer, next, isPathChar);
     return out.toOwnedSlice();
 }
@@ -241,8 +364,8 @@ pub fn passkeyCreationOptions(auth: Auth, arena: std.mem.Allocator) ![]const u8 
     for (exclude, existing) |*id, p| id.* = p.id;
 
     const challenge = try auth.newChallenge(arena);
-    const handle = userHandle(owner);
-    return WebAuthn.creationOptions(arena, try auth.relyingParty(), .{ .handle = &handle, .name = owner.name }, &challenge, exclude);
+    const user_handle = userHandle(owner);
+    return WebAuthn.creationOptions(arena, try auth.relyingParty(), .{ .handle = &user_handle, .name = owner.name }, &challenge, exclude);
 }
 
 // `response` is the browser's `navigator.credentials.create` answer as JSON; `name`
@@ -283,8 +406,8 @@ pub fn signInWithPasskey(auth: Auth, arena: std.mem.Allocator, response: []const
     const challenge = try auth.takeChallenge();
     const assertion = WebAuthn.parseAssertion(arena, response) catch return error.PasskeyRejected;
     const key = try auth.store.vtable.getPasskey(auth.store.userdata, arena, assertion.credential_id) orelse return error.UnknownPasskey;
-    if (assertion.user_handle) |handle| {
-        if (!std.mem.eql(u8, handle, &userHandle(key.owner))) return error.PasskeyRejected;
+    if (assertion.user_handle) |user_handle| {
+        if (!std.mem.eql(u8, user_handle, &userHandle(key.owner))) return error.PasskeyRejected;
     }
     const sign_count = WebAuthn.verifyAssertion(arena, try auth.relyingParty(), challenge, assertion, key.algorithm, key.public_key, key.sign_count) catch |err| {
         log.warn("passkey {s} refused: {t}", .{ key.id, err });
@@ -329,7 +452,46 @@ fn exchange(auth: Auth, arena: std.mem.Allocator, p: Oauth.Provider, cfg: Oauth.
 }
 
 fn callbackUrl(auth: Auth, arena: std.mem.Allocator, p: Oauth.Provider) ![]const u8 {
-    return std.mem.concat(arena, u8, &.{ auth.options.origin, auth.options.callback_path, p.id });
+    return std.mem.concat(arena, u8, &.{ auth.options.origin, auth.options.path, "/callback/", p.id });
+}
+
+fn route(auth: Auth, pathname: []const u8) ?struct { Endpoint, []const u8 } {
+    const base = std.mem.trimEnd(u8, auth.options.path, "/");
+    if (!std.mem.startsWith(u8, pathname, base) or pathname.len <= base.len or pathname[base.len] != '/') return null;
+    const rest = pathname[base.len + 1 ..];
+    if (std.meta.stringToEnum(Endpoint, rest)) |e| return if (e.takesProvider()) null else .{ e, "" };
+    const slash = std.mem.lastIndexOfScalar(u8, rest, '/') orelse return null;
+    const e = std.meta.stringToEnum(Endpoint, rest[0..slash]) orelse return null;
+    const provider = rest[slash + 1 ..];
+    return if (e.takesProvider() and provider.len > 0) .{ e, provider } else null;
+}
+
+// `page?err=<code>`, or the login page when signing in is what's missing.
+fn failure(auth: Auth, arena: std.mem.Allocator, page: []const u8, err: anyerror) ![]const u8 {
+    if (err == error.OutOfMemory) return error.OutOfMemory;
+    if (err == error.SignInRequired) return withNext(arena, auth.options.login_path, page);
+    const code = errorCode(err);
+    if (std.mem.eql(u8, code, "failed")) log.err("{t}", .{err});
+    return withQuery(arena, page, try std.mem.concat(arena, u8, &.{ "err=", code }));
+}
+
+fn withQuery(arena: std.mem.Allocator, page: []const u8, query: []const u8) ![]const u8 {
+    const sep: []const u8 = if (std.mem.indexOfScalar(u8, page, '?') == null) "?" else "&";
+    return std.mem.concat(arena, u8, &.{ page, sep, query });
+}
+
+// 303 so a redirect after a POST is always followed with a GET.
+fn redirect(ctx: anytype, location: []const u8) void {
+    ctx.response.redirect(location, .see_other);
+}
+
+fn json(ctx: anytype, body: []const u8) void {
+    ctx.response.setContentType(.@"application/json");
+    ctx.response.text(body);
+}
+
+fn jsonRedirect(ctx: anytype, location: []const u8) void {
+    ctx.response.json(.{ .redirect = location }, .{}) catch {};
 }
 
 fn relyingParty(auth: Auth) !WebAuthn.RelyingParty {
@@ -348,7 +510,7 @@ fn startSession(auth: Auth, arena: std.mem.Allocator, owner: Account) !void {
 
 // Only the hash is stored, so a leaked session table can't sign anyone in. Tokens
 // are 256 random bits, so a fast hash is enough.
-fn hashToken(token: []const u8) [2 * Sha256.digest_length]u8 {
+pub fn hashToken(token: []const u8) [2 * Sha256.digest_length]u8 {
     var digest: [Sha256.digest_length]u8 = undefined;
     Sha256.hash(token, &digest, .{});
     return std.fmt.bytesToHex(digest, .lower);
