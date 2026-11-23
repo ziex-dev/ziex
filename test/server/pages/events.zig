@@ -1,5 +1,9 @@
 const std = @import("std");
 const zx = @import("zx");
+pub const shared = @import("shared.zig");
+
+// Registers a handler declared in a plain .zig file.
+pub const onShared = shared.onShared;
 
 pub const src = struct {
     pub const ping = pingSrc();
@@ -61,6 +65,7 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
         .children = _zx.chs(.{
             _zx.cmp(Ping, .{ .src = @src() }, .{ .name = "Ping" }, .{}),
             _zx.cmp(Counter, .{ .src = @src() }, .{ .name = "Counter" }, .{}),
+            _zx.cmp(Shared, .{ .src = @src() }, .{ .name = "Shared" }, .{}),
         }),
     });
 }
@@ -73,6 +78,17 @@ pub fn Ping(ctx: *zx.ComponentContext) zx.Component {
             _zx.attr(src.ping, "onclick", ctx.bind(onPing)),
         }),
         .children = _zx.chs(.{_zx.txt("Ping")}),
+    });
+}
+
+pub fn Shared(ctx: *zx.ComponentContext) zx.Component {
+    var _zx = zx.x.allocInit(ctx.allocator, .{ .src = @src() });
+    return _zx.ele(.button, .{
+        .allocator = ctx.allocator,
+        .attributes = _zx.attrs(.{
+            _zx.attr(@src(), "onclick", ctx.bind(shared.onShared)),
+        }),
+        .children = _zx.chs(.{_zx.txt("Shared")}),
     });
 }
 
@@ -107,25 +123,25 @@ pub fn Counter(ctx: *zx.ComponentContext) zx.Component {
     });
 }
 
-fn onPing(e: *zx.server.Event) void {
+pub fn onPing(e: *zx.server.Event) void {
     calls.ping += 1;
     calls.recordValue(e.value());
 }
 
-fn onInc(e: *zx.server.Event.Stateful) void {
+pub fn onInc(e: *zx.server.Event.Stateful) void {
     calls.inc += 1;
     const c = e.state(i32);
     c.set(c.get() + 1);
 }
 
-fn onDec(e: *zx.server.Event.Stateful) void {
+pub fn onDec(e: *zx.server.Event.Stateful) void {
     calls.dec += 1;
     const c = e.state(i32);
     c.set(c.get() - 1);
 }
 
 /// Leaves the first state untouched and writes the event value into the second.
-fn onLabel(e: *zx.server.Event.Stateful) void {
+pub fn onLabel(e: *zx.server.Event.Stateful) void {
     calls.label += 1;
     calls.recordValue(e.value());
     _ = e.state(i32);

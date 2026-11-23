@@ -31,7 +31,7 @@ pub fn AuthForm(ctx: *zx.ComponentContext) zx.Component {
     );
 }
 
-fn handleSubmit(ctx: *zx.server.Action.Stateful) void {
+pub fn handleSubmit(ctx: *zx.server.Action.Stateful) void {
     const auth = ctx.state(AuthState);
     const input = ctx.data(AuthInput);
 

@@ -23,11 +23,11 @@ pub fn LoginForm(ctx: *zx.ComponentContext) zx.Component {
 
 const LoginInput = struct { name: []const u8, id: i32, file: []const u8 };
 
-fn handleLogin(data: LoginInput) void {
+pub fn handleLogin(data: LoginInput) void {
     zx.log.info("\n\nName: {s}\nID: {d}\nFile: {s}\n", .{ data.name, data.id, data.file });
 }
 
-fn handleSubmit(data: LoginInput, sc: *zx.StateContext) void {
+pub fn handleSubmit(data: LoginInput, sc: *zx.StateContext) void {
     sc.state([]const u8).set(sc.fmt("Hello, {s}!", .{data.name}) catch "Err");
     zx.log.info("\n\nName: {s}\nID: {d}\nFile: {s}\n", .{ data.name, data.id, data.file });
 }
@@ -41,7 +41,7 @@ pub fn EventForm(ctx: *zx.ComponentContext) zx.Component {
     );
 }
 
-fn onclick(e: *zx.server.Event.Stateful) void {
+pub fn onclick(e: *zx.server.Event.Stateful) void {
     const c = e.state(i32);
 
     c.set(c.get() + 1);

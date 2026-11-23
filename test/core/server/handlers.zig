@@ -24,7 +24,7 @@ const backends = [_]Backend{ .httpz, .std, .wasm };
 test "event > stateless handler" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const res = try postEvent(h, arena, "/events", idStr(arena, events.src.ping), try eventBody(arena, "hello", &.{}));
+            const res = try postEvent(h, arena, "/events", idStr(arena, events.onPing), try eventBody(arena, "hello", &.{}));
             try expectEqual(@as(u16, 200), res.status);
             try expectEqualStrings("{}", res.body);
             try expectContentType(res, "application/json");
@@ -37,7 +37,7 @@ test "event > stateless handler" {
 test "event > null value" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const res = try postEvent(h, arena, "/events", idStr(arena, events.src.ping), try eventBody(arena, null, &.{}));
+            const res = try postEvent(h, arena, "/events", idStr(arena, events.onPing), try eventBody(arena, null, &.{}));
             try expectEqual(@as(u16, 200), res.status);
             try expectEqual(@as(u32, 1), events.calls.ping);
             try expectEqual(@as(?[]const u8, null), events.calls.lastValue());
@@ -48,7 +48,7 @@ test "event > null value" {
 test "event > stateful round-trip" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const res = try postEvent(h, arena, "/events", idStr(arena, events.src.inc), try eventBody(arena, null, &.{ "41", "\"initial\"" }));
+            const res = try postEvent(h, arena, "/events", idStr(arena, events.onInc), try eventBody(arena, null, &.{ "41", "\"initial\"" }));
             try expectEqual(@as(u16, 200), res.status);
             try expectContentType(res, "application/json");
             try expectStates(arena, res.body, &.{ "42", "\"initial\"" });
@@ -62,13 +62,13 @@ test "event > header id selects sibling" {
         fn run(h: *Harness, arena: Allocator) !void {
             const states = &.{ "41", "\"initial\"" };
 
-            const dec = try postEvent(h, arena, "/events", idStr(arena, events.src.dec), try eventBody(arena, null, states));
+            const dec = try postEvent(h, arena, "/events", idStr(arena, events.onDec), try eventBody(arena, null, states));
             try expectEqual(@as(u16, 200), dec.status);
             try expectStates(arena, dec.body, &.{ "40", "\"initial\"" });
             try expectEqual(@as(u32, 0), events.calls.inc);
             try expectEqual(@as(u32, 1), events.calls.dec);
 
-            const inc = try postEvent(h, arena, "/events", idStr(arena, events.src.inc), try eventBody(arena, null, states));
+            const inc = try postEvent(h, arena, "/events", idStr(arena, events.onInc), try eventBody(arena, null, states));
             try expectEqual(@as(u16, 200), inc.status);
             try expectStates(arena, inc.body, &.{ "42", "\"initial\"" });
             try expectEqual(@as(u32, 1), events.calls.inc);
@@ -80,7 +80,7 @@ test "event > header id selects sibling" {
 test "event > untouched states echoed" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const res = try postEvent(h, arena, "/events", idStr(arena, events.src.label), try eventBody(arena, "typed", &.{ "7", "\"initial\"" }));
+            const res = try postEvent(h, arena, "/events", idStr(arena, events.onLabel), try eventBody(arena, "typed", &.{ "7", "\"initial\"" }));
             try expectEqual(@as(u16, 200), res.status);
             try expectStates(arena, res.body, &.{ "7", "\"typed\"" });
             try expectEqual(@as(u32, 1), events.calls.label);
@@ -94,7 +94,7 @@ test "event > repeated dispatch" {
         fn run(h: *Harness, arena: Allocator) !void {
             var states: []const []const u8 = &.{ "0", "\"initial\"" };
             for (1..4) |expected| {
-                const res = try postEvent(h, arena, "/events", idStr(arena, events.src.inc), try eventBody(arena, null, states));
+                const res = try postEvent(h, arena, "/events", idStr(arena, events.onInc), try eventBody(arena, null, states));
                 try expectEqual(@as(u16, 200), res.status);
                 states = try zxon.parse([]const []const u8, arena, res.body, .{});
                 try expectEqual(@as(i32, @intCast(expected)), try zxon.parse(i32, arena, states[0], .{}));
@@ -128,7 +128,7 @@ test "event > non-numeric id 404" {
 test "event > bad body 404" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const id = idStr(arena, events.src.ping);
+            const id = idStr(arena, events.onPing);
 
             const empty = try postEvent(h, arena, "/events", id, "");
             try expectEqual(@as(u16, 404), empty.status);
@@ -141,20 +141,60 @@ test "event > bad body 404" {
     }.run);
 }
 
-test "event > route scoped ids" {
+test "event > ids dispatch from any page route" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const id = idStr(arena, events.src.ping);
+            const id = idStr(arena, events.onPing);
 
-            const wrong_page = try postEvent(h, arena, "/actions", id, try eventBody(arena, null, &.{}));
-            try expectEqual(@as(u16, 404), wrong_page.status);
-            try expectEqual(@as(u32, 0), events.calls.ping);
-
-            const same_page_other_route = try postEvent(h, arena, "/events/other", id, try eventBody(arena, null, &.{}));
-            try expectEqual(@as(u16, 200), same_page_other_route.status);
+            const other_page = try postEvent(h, arena, "/actions", id, try eventBody(arena, null, &.{}));
+            try expectEqual(@as(u16, 200), other_page.status);
             try expectEqual(@as(u32, 1), events.calls.ping);
+
+            const other_route = try postEvent(h, arena, "/events/other", id, try eventBody(arena, null, &.{}));
+            try expectEqual(@as(u16, 200), other_route.status);
+            try expectEqual(@as(u32, 2), events.calls.ping);
         }
     }.run);
+}
+
+test "event > handler re-exported from a .zig file" {
+    // Bound through its original module, it resolves to the re-export's id.
+    comptime std.debug.assert(zx.server.handlers.id(events.shared.onShared) == zx.server.handlers.id(events.onShared));
+
+    try forEachBackend(struct {
+        fn run(h: *Harness, arena: Allocator) !void {
+            const res = try postEvent(h, arena, "/events", idStr(arena, events.shared.onShared), try eventBody(arena, null, &.{}));
+            try expectEqual(@as(u16, 200), res.status);
+            try expectEqual(@as(u32, 1), events.shared.calls);
+        }
+    }.run);
+}
+
+test "registry > kind by signature" {
+    const handlers = zx.server.handlers;
+    const Upload = struct { name: []const u8, subscribe: bool, age: ?i32 };
+    const Ctx = struct { io: std.Io, allocator: Allocator };
+
+    try expectEqual(handlers.Kind.event, handlers.kind(fn (*zx.server.Event) void).?);
+    try expectEqual(handlers.Kind.event, handlers.kind(fn (*zx.server.Event.Stateful) void).?);
+    try expectEqual(handlers.Kind.action, handlers.kind(fn (*zx.server.Action) void).?);
+    try expectEqual(handlers.Kind.action, handlers.kind(fn (Upload) void).?);
+    try expectEqual(handlers.Kind.action, handlers.kind(fn (Upload, *zx.StateContext) void).?);
+
+    // Client handlers, components and non-form structs are not endpoints.
+    try expectEqual(@as(?handlers.Kind, null), handlers.kind(fn (*zx.client.Event) void));
+    try expectEqual(@as(?handlers.Kind, null), handlers.kind(fn (*zx.server.Action) zx.Component));
+    try expectEqual(@as(?handlers.Kind, null), handlers.kind(fn (zx.PageContext) void));
+    try expectEqual(@as(?handlers.Kind, null), handlers.kind(fn (Ctx) void));
+    try expectEqual(@as(?handlers.Kind, null), handlers.kind(fn (struct {}) void));
+}
+
+test "registry > lookup by kind and id" {
+    const handlers = zx.server.handlers;
+    try expect(handlers.action(handlers.id(actions.onProfile)) != null);
+    try expect(handlers.event(handlers.id(actions.onProfile)) == null);
+    try expect(handlers.event(handlers.id(events.onInc)) != null);
+    try expect(handlers.action(0) == null and handlers.event(0) == null);
 }
 
 test "event > no header renders page" {
@@ -186,7 +226,7 @@ test "action > forms carry id" {
             const res = try h.fetch(arena, .{ .path = "/actions" });
             try expectEqual(@as(u16, 200), res.status);
             try expect(std.mem.indexOf(u8, res.body, "method=\"post\" enctype=\"multipart/form-data\"") != null);
-            inline for (.{ actions.src.profile, actions.src.greet, actions.src.add, actions.src.direct }) |s| {
+            inline for (.{ actions.onProfile, actions.onGreet, actions.onAdd, actions.onDirect }) |s| {
                 const needle = try arena.print("name=\"__$action\" value=\"{s}\"", .{idStr(arena, s)});
                 if (std.mem.indexOf(u8, res.body, needle) == null) {
                     std.debug.print("missing `{s}` in:\n{s}\n", .{ needle, res.body });
@@ -202,7 +242,7 @@ test "action > native multipart" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
             const res = try postMultipart(h, arena, "/actions", null, &.{
-                .{ "__$action", idStr(arena, actions.src.profile) },
+                .{ "__$action", idStr(arena, actions.onProfile) },
                 .{ "name", "Ada Lovelace" },
                 .{ "age", "36" },
                 .{ "subscribe", "on" },
@@ -222,7 +262,7 @@ test "action > native multipart" {
 test "action > native urlencoded" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const body = try arena.print("__%24action={s}&name=Grace+Hopper&age=85", .{idStr(arena, actions.src.profile)});
+            const body = try arena.print("__%24action={s}&name=Grace+Hopper&age=85", .{idStr(arena, actions.onProfile)});
             const res = try h.fetch(arena, .{
                 .method = .POST,
                 .path = "/actions",
@@ -244,7 +284,7 @@ test "action > direct typed attribute" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
             const res = try postMultipart(h, arena, "/actions", null, &.{
-                .{ "__$action", idStr(arena, actions.src.direct) },
+                .{ "__$action", idStr(arena, actions.onDirect) },
                 .{ "name", "Linus" },
                 .{ "age", "21" },
             });
@@ -260,7 +300,7 @@ test "action > direct typed attribute" {
 test "action > progressive StateContext" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const res = try postMultipart(h, arena, "/actions", idStr(arena, actions.src.greet), &.{
+            const res = try postMultipart(h, arena, "/actions", idStr(arena, actions.onGreet), &.{
                 .{ "name", "Ada" },
                 .{ "__$states", try statesJson(arena, &.{"\"Please log in\""}) },
             });
@@ -275,7 +315,7 @@ test "action > progressive StateContext" {
 test "action > progressive Action.Stateful" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const res = try postMultipart(h, arena, "/actions", idStr(arena, actions.src.add), &.{
+            const res = try postMultipart(h, arena, "/actions", idStr(arena, actions.onAdd), &.{
                 .{ "amount", "5" },
                 .{ "__$states", try statesJson(arena, &.{"10"}) },
             });
@@ -289,7 +329,7 @@ test "action > progressive Action.Stateful" {
 test "action > progressive stateless" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const res = try postMultipart(h, arena, "/actions", idStr(arena, actions.src.profile), &.{
+            const res = try postMultipart(h, arena, "/actions", idStr(arena, actions.onProfile), &.{
                 .{ "name", "Ada" },
                 .{ "age", "36" },
             });
@@ -304,8 +344,8 @@ test "action > progressive stateless" {
 test "action > form field beats header" {
     try forEachBackend(struct {
         fn run(h: *Harness, arena: Allocator) !void {
-            const res = try postMultipart(h, arena, "/actions", idStr(arena, actions.src.greet), &.{
-                .{ "__$action", idStr(arena, actions.src.profile) },
+            const res = try postMultipart(h, arena, "/actions", idStr(arena, actions.onGreet), &.{
+                .{ "__$action", idStr(arena, actions.onProfile) },
                 .{ "name", "Ada" },
             });
             try expectEqual(@as(u16, 200), res.status);
@@ -364,12 +404,13 @@ fn runOn(backend: Backend, comptime body: *const fn (*Harness, Allocator) anyerr
 
     events.calls.reset();
     actions.calls.reset();
+    events.shared.calls = 0;
     try body(&harness, arena_state.allocator());
 }
 
 /// Handler/action id the runtime derives from an attribute's `@src()`.
-fn idStr(arena: Allocator, comptime src: std.builtin.SourceLocation) []const u8 {
-    const id = comptime zx.x.Id.extendId(null, src, 0).short();
+fn idStr(arena: Allocator, comptime handler: anytype) []const u8 {
+    const id = comptime zx.server.handlers.id(handler);
     return arena.print("{d}", .{id}) catch @panic("OOM");
 }
 

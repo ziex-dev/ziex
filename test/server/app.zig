@@ -5,6 +5,11 @@ pub const pages = struct {
     pub const actions = @import("pages/actions.zig");
 };
 
+pub const modules = .{
+    .{ "pages/events.zig", pages.events, false },
+    .{ "pages/actions.zig", pages.actions, false },
+};
+
 const auth = @import("routes/auth/routes.zig");
 pub const auth_app = @import("routes/auth/app.zig");
 pub const mcp_oauth = @import("routes/mcp_oauth.zig");

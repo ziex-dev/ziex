@@ -1043,6 +1043,13 @@ fn writeClientComponents(writer: anytype, allocator: std.mem.Allocator, componen
 
 const client_zon = "__zx_client.zon";
 
+/// A module listed in `app.zig` for `zx.server.handlers`; `client` when it holds
+/// `@client` components, the only modules the browser build scans.
+const HandlerModule = struct {
+    path: []const u8,
+    client: bool,
+};
+
 const ModuleClient = struct {
     id: []const u8,
     name: []const u8,
@@ -1181,6 +1188,7 @@ fn readClientZons(
     allocator: std.mem.Allocator,
     dir_path: []const u8,
     out: *std.array_list.Managed(ClientComponentSerializable),
+    modules: *std.array_list.Managed(HandlerModule),
 ) !void {
     var dir = try std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true });
     defer dir.close(io);
@@ -1210,6 +1218,7 @@ fn readClientZons(
             .source = source,
             .diagnostics = &diagnostics,
         });
+        try modules.append(.{ .path = try allocator.dupe(u8, module), .client = parsed.len > 0 });
         for (parsed) |component| {
             try out.append(.{
                 .type = .client,
@@ -1272,7 +1281,7 @@ fn mergeBuildInjectionsFromFile(
     try manifest.mergeBuildInjections(build_injections);
 }
 
-fn genRoutes(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8, _: ?[]const u8, client_components: []const ClientComponentSerializable, manifest: ?*Manifest, verbose: bool) !void {
+fn genRoutes(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8, _: ?[]const u8, client_components: []const ClientComponentSerializable, modules: []const HandlerModule, manifest: ?*Manifest, verbose: bool) !void {
     var routes = std.array_list.Managed(Route).init(allocator);
     defer {
         for (routes.items) |*route| route.deinit(allocator);
@@ -1348,6 +1357,13 @@ fn genRoutes(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8, _
     }
 
     try writeClientComponents(writer, allocator, client_components);
+
+    // Scanned at comptime by `zx.server.handlers` for `pub` server handlers.
+    try writer.writeAll("pub const modules = .{\n");
+    for (modules) |module| {
+        try writer.print("    .{{ \"{s}\", @import(\"{s}\"), {} }},\n", .{ module.path, module.path, module.client });
+    }
+    try writer.writeAll("};\n\n");
     try writer.writeAll("const zx = @import(\"zx\");\n");
 
     const meta_path = try std.fs.path.join(allocator, &.{ output_dir, "app.zig" });
@@ -1752,6 +1768,7 @@ fn transpileDirectory(
     io: std.Io,
     allocator: std.mem.Allocator,
     global_components: *std.array_list.Managed(ClientComponentSerializable),
+    modules: *std.array_list.Managed([]const u8),
     input_files: *std.array_list.Managed([]const u8),
     companions_visited: *std.StringHashMap(void),
     opts: TranspileOptions,
@@ -1814,7 +1831,7 @@ fn transpileDirectory(
         defer allocator.free(rel);
         if (std.mem.eql(u8, rel, "..") or std.mem.startsWith(u8, rel, ".." ++ std.fs.path.sep_str)) continue;
 
-        try transpileSource(io, allocator, global_components, input_files, companions_visited, &pending, opts, input_path, abs_input, rel);
+        try transpileSource(io, allocator, global_components, modules, input_files, companions_visited, &pending, opts, input_path, abs_input, rel);
     }
 
     if (opts.cache_dir) |cache_dir| {
@@ -1830,6 +1847,7 @@ fn transpileSource(
     io: std.Io,
     allocator: std.mem.Allocator,
     global_components: *std.array_list.Managed(ClientComponentSerializable),
+    modules: *std.array_list.Managed([]const u8),
     input_files: *std.array_list.Managed([]const u8),
     companions_visited: *std.StringHashMap(void),
     pending: *std.array_list.Managed([]const u8),
@@ -1900,7 +1918,7 @@ fn transpileSource(
             };
         }
         if (opts.verbose) std.debug.print("Skipped (up-to-date): {s}\n", .{input_path});
-        return;
+        return addModule(allocator, modules, output_rel_path);
     }
 
     const components_before = global_components.items.len;
@@ -1922,6 +1940,14 @@ fn transpileSource(
     writeComponentCache(io, allocator, cache_path, global_components.items[components_before..]) catch |err| {
         std.debug.print("Warning: Failed to write component cache for {s}: {}\n", .{ input_path, err });
     };
+    try addModule(allocator, modules, output_rel_path);
+}
+
+/// Lists a transpiled module in `app.zig` so its `pub` server handlers are registered.
+fn addModule(allocator: std.mem.Allocator, modules: *std.array_list.Managed([]const u8), output_rel_path: []const u8) !void {
+    const path = try allocator.dupe(u8, output_rel_path);
+    std.mem.replaceScalar(u8, path, '\\', '/');
+    try modules.append(path);
 }
 
 const TranspileOptions = struct {
@@ -1987,6 +2013,12 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
         input_files.deinit();
     }
 
+    var modules = std.array_list.Managed([]const u8).init(allocator);
+    defer {
+        for (modules.items) |m| allocator.free(m);
+        modules.deinit();
+    }
+
     var companions_visited = std.StringHashMap(void).init(allocator);
     defer {
         var it = companions_visited.keyIterator();
@@ -2014,7 +2046,7 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
 
     switch (stat.kind) {
         .directory => {
-            try transpileDirectory(io, allocator, &all_client_cmps, &input_files, &companions_visited, opts, progress);
+            try transpileDirectory(io, allocator, &all_client_cmps, &modules, &input_files, &companions_visited, opts, progress);
         },
         .file => {
             const is_zx = std.mem.endsWith(u8, opts.path, ".zx");
@@ -2077,9 +2109,26 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
         }
     }
 
+    var handler_modules = std.array_list.Managed(HandlerModule).init(allocator);
+    defer {
+        for (handler_modules.items) |m| allocator.free(m.path);
+        handler_modules.deinit();
+    }
+    std.mem.sort([]const u8, modules.items, {}, struct {
+        fn less(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.lessThan(u8, a, b);
+        }
+    }.less);
+    for (modules.items, 0..) |module, i| {
+        if (i > 0 and std.mem.eql(u8, module, modules.items[i - 1])) continue;
+        var client = false;
+        for (client_cmps.items) |c| client = client or std.mem.eql(u8, c.path, module);
+        try handler_modules.append(.{ .path = try allocator.dupe(u8, module), .client = client });
+    }
+
     // Generate app.zig with routes and client components
     if (opts.client_dir) |dir| {
-        try readClientZons(io, allocator, dir, &client_cmps);
+        try readClientZons(io, allocator, dir, &client_cmps, &handler_modules);
     }
 
     // Walk order is filesystem-dependent
@@ -2093,7 +2142,7 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
         }
     }.less);
 
-    genRoutes(io, allocator, opts.outdir, opts.base_path, client_cmps.items, if (manifest) |*m| m else null, opts.verbose) catch |err| switch (err) {
+    genRoutes(io, allocator, opts.outdir, opts.base_path, client_cmps.items, handler_modules.items, if (manifest) |*m| m else null, opts.verbose) catch |err| switch (err) {
         error.NoPagesOrRoutes => {}, // No routes to generate is not an error
         else => std.debug.print("Warning: Failed to generate app.zig: {}\n", .{err}),
     };

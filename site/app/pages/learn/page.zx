@@ -613,6 +613,7 @@ fn Interactivity(allocator: zx.Allocator, props: InteractivityProps) zx.Componen
             <p>Use <code>zx.server.Action</code> when the form should be handled on the server. Point <code>action</code>{" "}at the handler directly (no <code>ctx.bind()</code>{" "}needed for a plain server action):</p>
             <CodeBlock code={props.server_action_example} filename="login_form.zx" />
             <p>Server actions also expose <code>request</code>, <code>response</code>, and <code>arena</code>. Use <code>*zx.server.Action.Stateful</code>{" "}with <code>ctx.bind()</code>{" "}when the handler needs component state. See the <a href="/reference#form-actions">Form Actions reference</a>{" "}for details.</p>
+            <p>Server handlers must be <code>pub</code>{" "}functions in a <code>.zx</code>{" "}file: they are registered at compile time and can be called from any route. To use one declared in a <code>.zig</code>{" "}file, re-export it from the <code>.zx</code>{" "}file with <code>pub const handleLogin = handlers.handleLogin;</code>.</p>
         </section>
     );
 }

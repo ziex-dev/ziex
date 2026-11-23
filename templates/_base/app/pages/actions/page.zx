@@ -33,7 +33,7 @@ pub fn LoginForm(ctx: *zx.ComponentCtx(LoginInput)) zx.Component {
     );
 }
 
-fn handleLogin(data: LoginInput) void {
+pub fn handleLogin(data: LoginInput) void {
     zx.log.info("\nName: {s}\nID: {d}\n", .{ data.name, data.id });
 }
 

@@ -1138,7 +1138,7 @@ pub fn LoginForm(allocator: zx.Allocator) zx.Component {
     );
 }
 
-fn onLogin(a: zx.server.Action) void {
+pub fn onLogin(a: zx.server.Action) void {
     const data = a.data(struct { username: []const u8 });
     zx.log.info("username: {s}", .{data.username});
 }
@@ -1318,20 +1318,20 @@ fn onSendStateful(a: *zx.client.Action.Stateful) void {
 }
 
 // --- Signature: server actions ---
-fn onSave(a: zx.server.Action) void {
+pub fn onSave(a: zx.server.Action) void {
     _ = a.data(struct { title: []const u8 });
 }
 
-fn onSaveStateful(a: *zx.server.Action.Stateful) void {
+pub fn onSaveStateful(a: *zx.server.Action.Stateful) void {
     _ = a.data(struct { title: []const u8 });
 }
 
 // --- Signature: server events ---
-fn onRefresh(e: *zx.server.Event) void {
+pub fn onRefresh(e: *zx.server.Event) void {
     _ = e;
 }
 
-fn onRefreshStateful(e: *zx.server.Event.Stateful) void {
+pub fn onRefreshStateful(e: *zx.server.Event.Stateful) void {
     _ = e;
 }
 

@@ -45,7 +45,7 @@ pub fn ServerEvent(ctx: *zx.ComponentContext) zx.Component {
     );
 }
 
-fn onServer(e: *zx.server.Event.Stateful) void {
+pub fn onServer(e: *zx.server.Event.Stateful) void {
     const c = e.state(i32);
     c.set(c.get() + 1);
     zx.log.info("Server> {d}\n", .{c.get()});

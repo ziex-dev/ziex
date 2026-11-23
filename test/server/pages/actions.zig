@@ -28,8 +28,8 @@ pub const ProfileInput = struct {
     nickname: ?[]const u8,
 };
 
-const GreetInput = struct { name: []const u8 };
-const AmountInput = struct { amount: i32 };
+pub const GreetInput = struct { name: []const u8 };
+pub const AmountInput = struct { amount: i32 };
 
 /// Observed handler invocations, reset by tests between cases.
 pub const calls = struct {
@@ -148,23 +148,23 @@ pub fn DirectForm(ctx: *zx.ComponentContext) zx.Component {
     });
 }
 
-fn onProfile(ctx: *zx.server.Action) void {
+pub fn onProfile(ctx: *zx.server.Action) void {
     calls.profile += 1;
     calls.record(ctx.data(ProfileInput));
 }
 
-fn onGreet(data: GreetInput, sc: *zx.StateContext) void {
+pub fn onGreet(data: GreetInput, sc: *zx.StateContext) void {
     calls.greet += 1;
     sc.state([]const u8).set(sc.fmt("Hello, {s}!", .{data.name}) catch "Err");
 }
 
-fn onAdd(ctx: *zx.server.Action.Stateful) void {
+pub fn onAdd(ctx: *zx.server.Action.Stateful) void {
     calls.add += 1;
     const total = ctx.state(i32);
     total.set(total.get() + ctx.data(AmountInput).amount);
 }
 
-fn onDirect(data: ProfileInput) void {
+pub fn onDirect(data: ProfileInput) void {
     calls.direct += 1;
     calls.record(data);
 }

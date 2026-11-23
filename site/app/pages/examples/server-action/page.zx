@@ -73,7 +73,7 @@ fn clientEvent(ctx: zx.client.Event) void {
 }
 
 // This runs on the server
-fn serverEvent(ctx: zx.server.Event) void {
+pub fn serverEvent(ctx: zx.server.Event) void {
     const val = ctx.value() orelse "";
     log.debug("onclick: {s}", .{val});
 }
@@ -85,25 +85,25 @@ fn clientIncrement(ctx: *zx.client.Event.Stateful) void {
     log.debug("increment: {d}", .{val.get()});
 }
 
-fn serverIncrement(e: *zx.server.Event.Stateful) void {
+pub fn serverIncrement(e: *zx.server.Event.Stateful) void {
     const val = e.state(i32);
     val.set(val.get() + 1);
     log.debug("increment: {d}", .{val.get()});
 }
 
-fn serverAgeIncrement(e: *zx.server.Event.Stateful) void {
+pub fn serverAgeIncrement(e: *zx.server.Event.Stateful) void {
     _ = e.state(i32);
     const val = e.state(i32);
     val.set(val.get() + 1);
 }
 
-fn serverSIncrementHandler(e: *zx.server.Event.Stateful) void {
+pub fn serverSIncrementHandler(e: *zx.server.Event.Stateful) void {
     const val = e.state(i32);
     val.set(val.get() + 1);
     log.debug("increment: {d}", .{val.get()});
 }
 
-fn serverStateUpdateHandler(e: *zx.server.Event.Stateful) void {
+pub fn serverStateUpdateHandler(e: *zx.server.Event.Stateful) void {
     _ = e.state(i32);
     _ = e.state(i32);
     var person = e.state(Person);
@@ -117,7 +117,7 @@ fn serverStateUpdateHandler(e: *zx.server.Event.Stateful) void {
 }
 
 // This should be a server action
-fn handleSubmit(ctx: zx.server.Action) void {
+pub fn handleSubmit(ctx: zx.server.Action) void {
     // const formdata = ctx.request.formData();
     // const username = formdata.get("username") orelse "";
     // log.debug("server form handler username: {s}", .{username});
@@ -141,14 +141,14 @@ const FormData = struct {
 };
 
 // This should be a server action
-fn typedform(ctx: zx.server.Action) void {
+pub fn typedform(ctx: zx.server.Action) void {
     const data = ctx.data(FormData);
 
     log.debug("server form handler name: {s}, id: {d}", .{ data.name, data.id });
 }
 
 // This should be a server action
-fn directtypedform(data: FormData) void {
+pub fn directtypedform(data: FormData) void {
     log.debug("server form handler name: {s}, id: {d}", .{ data.name, data.id });
 }
 

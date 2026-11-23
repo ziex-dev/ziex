@@ -19,7 +19,7 @@ pub fn LoginForm(ctx: *zx.ComponentContext) zx.Component {
 }
 
 const LoginInput = struct { name: []const u8, id: i32 };
-fn handleSubmit(ctx: *zx.server.Action.Stateful) void {
+pub fn handleSubmit(ctx: *zx.server.Action.Stateful) void {
     const data = ctx.data(LoginInput);
     const msg = ctx.state([]const u8);
 

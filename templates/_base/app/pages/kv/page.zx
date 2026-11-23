@@ -29,7 +29,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
 
 const MessageInput = struct { message: []const u8 };
 
-fn saveMessage(data: MessageInput) void {
+pub fn saveMessage(data: MessageInput) void {
     zx.kv.put("message", data.message, .{ .ttl = .fromSeconds(60) }) catch {};
 }
 

@@ -29,7 +29,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
 const Note = struct { id: i64, text: []const u8 };
 const NoteInput = struct { text: []const u8 };
 
-fn addNote(data: NoteInput) void {
+pub fn addNote(data: NoteInput) void {
     _ = zx.db.run("INSERT INTO notes (text) VALUES (?)", .{data.text}) catch {};
 }
 

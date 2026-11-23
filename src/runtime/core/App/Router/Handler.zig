@@ -108,7 +108,6 @@ pub fn handlePage(
     io: std.Io,
     app_ctx: ?*anyopaque,
     proxy_state_ptr: ?*const anyopaque,
-    base_path: ?[]const u8,
 ) !PageResult {
     const app_ptr: ?*const anyopaque = if (app_ctx) |p| @ptrCast(p) else null;
     const pagectx = zx.PageContext.init(request, response, allocator, io);
@@ -116,30 +115,25 @@ pub fn handlePage(
     const page_fn = route.page orelse return .not_found;
 
     // -- Server action dispatch --
-    switch (try server_dispatch.dispatchAction(request, response, allocator, arena, route.path, pagectx, page_fn, app_ptr, proxy_state_ptr, base_path)) {
+    switch (try server_dispatch.dispatchAction(request, response, allocator, arena, pagectx)) {
         .not_triggered => {},
         .ok => |r| return .{ .action_handled = .{ .body = r.body } },
         .ok_native => {},
         .not_found => return .action_not_found,
-        .page_error => |err| return .{ .page_error = err },
     }
 
     // -- Server event dispatch --
-    switch (try server_dispatch.dispatchServerEvent(request, allocator, arena, route.path, pagectx, page_fn, app_ptr, proxy_state_ptr, base_path)) {
+    switch (try server_dispatch.dispatchServerEvent(request, allocator, arena, pagectx)) {
         .not_triggered => {},
         .ok => |r| return .{ .event_handled = .{ .body = r.body } },
         .ok_native => {},
         .not_found => return .event_not_found,
-        .page_error => |err| return .{ .page_error = err },
     }
 
     if (!pageMethodAllowed(route, request.method)) return .not_found;
 
     // -- Render page --
-    render.current_route_path = route.path;
-
     var page_component = page_fn(pagectx, app_ptr, proxy_state_ptr) catch |err| {
-        render.current_route_path = null;
         return .{ .page_error = err };
     };
 

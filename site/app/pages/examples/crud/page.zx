@@ -125,7 +125,7 @@ pub fn TaskRow(ctx: *zx.ComponentCtx(struct { task: Task })) ?zx.Component {
 
 const CreateInput = struct { title: []const u8 };
 
-fn handleCreate(data: CreateInput, sc: *zx.StateContext) void {
+pub fn handleCreate(data: CreateInput, sc: *zx.StateContext) void {
     if (data.title.len == 0) return;
 
     zx.log.info("create: title: {s}", .{data.title});
@@ -148,7 +148,7 @@ fn handleCreate(data: CreateInput, sc: *zx.StateContext) void {
     tasks.set(next);
 }
 
-fn handleToggle(e: *zx.server.Event.Stateful) void {
+pub fn handleToggle(e: *zx.server.Event.Stateful) void {
     const task_state = e.state(Task);
     var task = task_state.get();
 
@@ -165,7 +165,7 @@ fn handleToggle(e: *zx.server.Event.Stateful) void {
     task_state.set(task);
 }
 
-fn handleRename(e: *zx.server.Event.Stateful) void {
+pub fn handleRename(e: *zx.server.Event.Stateful) void {
     const task_state = e.state(Task);
     var task = task_state.get();
 
@@ -178,7 +178,7 @@ fn handleRename(e: *zx.server.Event.Stateful) void {
     task_state.set(task);
 }
 
-fn handleDelete(e: *zx.server.Event.Stateful) void {
+pub fn handleDelete(e: *zx.server.Event.Stateful) void {
     const task_state = e.state(Task);
     var task = task_state.get();
 

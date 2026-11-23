@@ -1,11 +1,6 @@
 const std = @import("std");
 const zx = @import("../../root.zig");
-const registry = @import("registry.zig");
 const html_util = zx.util.html;
-
-/// Set by the server request handler before calling render/stream so that any ActionContext
-/// handlers encountered during the render pass are registered for this route.
-pub var current_route_path: ?[]const u8 = null;
 
 // `$ZX(id, html, 1)` shows partial content; `$ZX(id, html)` replaces the placeholder.
 pub const streaming_bootstrap_script =
@@ -290,18 +285,10 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
 
                 for (attributes) |attribute| {
                     if (attribute.handler) |handler| {
-                        // Register ActionContext handlers so the server can dispatch them.
-                        if (handler.action_fn) |action_fn| {
-                            if (current_route_path) |rp| {
-                                action_id = registry.register(rp, handler.handler_id, action_fn);
-                            }
+                        // Server actions are dispatched by their static registry id.
+                        if (handler.action_fn != null) {
+                            action_id = handler.handler_id;
                             has_action_handler = true;
-                        }
-
-                        if (handler.server_event_fn) |action_fn| {
-                            if (current_route_path) |rp| {
-                                registry.registerEvent(rp, handler.handler_id, action_fn);
-                            }
                         }
                     } else {
                         if (std.mem.eql(u8, attribute.name, "method")) {

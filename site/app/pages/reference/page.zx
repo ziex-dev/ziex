@@ -324,6 +324,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                 <CodeBlock code={server_action_example} />
                 <p>Handler signatures. Use the <code>Stateful</code>{" "}form with <code>ctx.bind()</code>{" "}to update bound component state on the server:</p>
                 <CodeBlock code={server_action_signatures} />
+                <p>Server action and event handlers must be <code>pub</code>{" "}functions in a <code>.zx</code>{" "}file; they are registered at compile time and reachable from any route. Re-export handlers declared in <code>.zig</code>{" "}files: <code>pub const save = handlers.save;</code>. A handler bound inside a <code>@client</code>{" "}component must be declared or re-exported in that component's own <code>.zx</code>{" "}file.</p>
                 <p>Supported <code>data(T)</code>{" "}field types include <code>[]const u8</code>, integers, floats, bools, optionals, <code>[]const []const u8</code>{" "}for multi-value fields, and on the server <code>zx.http.File</code>{" "}/ <code>?zx.http.File</code>{" "}for multipart uploads.</p>
 
                 <h4 id="server-events">Server events <Experimental /></h4>

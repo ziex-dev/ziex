@@ -192,11 +192,11 @@ pub fn ComponentCtx(comptime PropsType: type) type {
                     fn (ClientActionContext) void => zx.EventHandler.actionClient(handler),
 
                     // Server action/event dispatchers
-                    fn (*ServerEvent.Stateful) void => zx.EventHandler.serverEventStub(alloc, collectBoundStates(alloc, self)),
-                    fn (*ServerEvent) void => zx.EventHandler.serverEventStub(alloc, &.{}),
-                    fn (*ActionContext.Stateful) void => zx.EventHandler.serverActionStub(alloc, collectBoundStates(alloc, self)),
-                    fn (ActionContext, *StateContext) void => zx.EventHandler.serverActionStub(alloc, collectBoundStates(alloc, self)),
-                    fn (*ActionContext) void => zx.EventHandler.serverActionStub(alloc, &.{}),
+                    fn (*ServerEvent.Stateful) void => zx.EventHandler.serverEventStub(handler, alloc, collectBoundStates(alloc, self)),
+                    fn (*ServerEvent) void => zx.EventHandler.serverEventStub(handler, alloc, &.{}),
+                    fn (*ActionContext.Stateful) void => zx.EventHandler.serverActionStub(handler, alloc, collectBoundStates(alloc, self)),
+                    fn (ActionContext, *StateContext) void => zx.EventHandler.serverActionStub(handler, alloc, collectBoundStates(alloc, self)),
+                    fn (*ActionContext) void => zx.EventHandler.serverActionStub(handler, alloc, &.{}),
                     else => bindClientFallback(handler, alloc, self, HandlerType, params),
                 },
             };
@@ -220,13 +220,13 @@ fn bindServerFallback(comptime handler: anytype, alloc: Allocator, ctx: anytype,
     @compileError(BindSignMsg ++ @typeName(HandlerType));
 }
 
-fn bindClientFallback(comptime _: anytype, alloc: Allocator, ctx: anytype, comptime HandlerType: type, comptime params: []const ?type) zx.EventHandler {
+fn bindClientFallback(comptime handler: anytype, alloc: Allocator, ctx: anytype, comptime HandlerType: type, comptime params: []const ?type) zx.EventHandler {
     if (comptime isServerEventHandler(params)) {
-        return zx.EventHandler.serverEventStub(alloc, &.{});
+        return zx.EventHandler.serverEventStub(handler, alloc, &.{});
     }
 
     if (comptime isStructuredServerActionHandler(params)) {
-        return zx.EventHandler.serverActionStub(alloc, collectBoundStates(alloc, ctx));
+        return zx.EventHandler.serverActionStub(handler, alloc, collectBoundStates(alloc, ctx));
     }
 
     @compileError(BindSignMsg ++ @typeName(HandlerType));
@@ -263,13 +263,14 @@ fn actionBind(comptime handler: anytype, alloc: Allocator, ctx: anytype) zx.Even
     const arg0 = params[0].?;
 
     if (comptime params.len == 1 and arg0 == *ActionContext) {
+        const hid = zx.server.handlers.id(handler);
         const ec = alloc.create(zx.EventHandler.Context) catch @panic("OOM");
-        // handler_id is added later in `x.Context.attr` from the attribute @src().
-        ec.* = .{ .handler_id = 0, .bound_states = &.{} };
+        ec.* = .{ .handler_id = hid, .bound_states = &.{} };
         return .{
             .callback = &zx.EventHandler.actionHandler,
             .context = @ptrCast(ec),
             .action_fn = &handler,
+            .handler_id = hid,
         };
     }
 
@@ -289,13 +290,14 @@ fn actionBind(comptime handler: anytype, alloc: Allocator, ctx: anytype) zx.Even
             }
         };
         const bound = collectBoundStates(alloc, ctx);
+        const hid = zx.server.handlers.id(handler);
         const ec = alloc.create(zx.EventHandler.Context) catch @panic("OOM");
-        // handler_id is stamped later in `x.Context.attr` from the attribute @src().
-        ec.* = .{ .handler_id = 0, .bound_states = bound };
+        ec.* = .{ .handler_id = hid, .bound_states = bound };
         return zx.EventHandler{
             .callback = &zx.EventHandler.actionHandler,
             .context = @ptrCast(ec),
             .action_fn = &FormActionWrapper.wrap,
+            .handler_id = hid,
             .bound_states = bound,
         };
     }
