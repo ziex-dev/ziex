@@ -15,6 +15,7 @@ pub const std_options = std.Options{
     .log_level = .warn, // Suppress debug and info logs
     .log_scope_levels = &[_]std.log.ScopeLevel{
         .{ .scope = .zx_transpiler, .level = .warn }, // Only show warnings and errors for zx_transpiler
+        .{ .scope = .auth, .level = .err }, // Refused sign-ins are expected in auth tests
     },
 };
 

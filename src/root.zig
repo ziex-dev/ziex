@@ -97,6 +97,7 @@ pub const Wire = @import("runtime/core/Wire.zig");
 pub const Cache = @import("runtime/core/Cache.zig");
 pub const Ai = @import("runtime/core/Ai.zig");
 pub const Flag = @import("runtime/core/Flag.zig");
+pub const Auth = @import("runtime/core/Auth.zig");
 
 pub var db: Db = .failing;
 pub var kv: Kv = .failing;
