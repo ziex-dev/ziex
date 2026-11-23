@@ -109,7 +109,7 @@ pub fn run(
     }
 
     const is_wasm = builtin.cpu.arch.isWasm();
-    var spinner: if (is_wasm) void else Spinner = if (is_wasm) {} else .init(writer, reader, allocator, .{});
+    var spinner: if (is_wasm) void else Spinner = if (is_wasm) {} else .init(app.io, writer, reader, allocator, .{});
     defer if (!is_wasm) spinner.deinit();
     if (!is_wasm) spinner.interactive = std.Io.File.stdout().isTty(app.io) catch false;
 

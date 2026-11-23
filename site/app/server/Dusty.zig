@@ -206,7 +206,7 @@ pub fn Backend(comptime H: type) type {
 
                 var chunk_buf: [16 * 1024]u8 = undefined;
                 var body = try ctx.res.stream(&chunk_buf);
-                Pipeline.renderHtml(&body.interface, component, Pipeline.opts.base_path) catch {
+                Pipeline.renderHtml(ctx.server.io, &body.interface, component, Pipeline.opts.base_path) catch {
                     try body.end();
                     return;
                 };
@@ -232,7 +232,7 @@ pub fn Backend(comptime H: type) type {
                     try body.interface.writeAll(Pipeline.ssr_bootstrap);
                     try body.interface.flush();
                     for (async_components) |async_comp| {
-                        const script = async_comp.renderScript(ctx.arena) catch continue;
+                        const script = async_comp.renderScript(ctx.server.io, ctx.arena) catch continue;
                         try body.interface.writeAll(script);
                         try body.interface.flush();
                     }

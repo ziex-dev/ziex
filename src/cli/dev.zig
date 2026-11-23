@@ -35,10 +35,8 @@ const children = struct {
     /// Lock-free copies for `forceKill`, which runs in signal context.
     var force_groups: [2]std.atomic.Value(i32) = .{ .init(0), .init(0) };
 
-    const lock_io = std.Io.Threaded.global_single_threaded.io();
-
     fn onSignal(signal: std.posix.SIG) void {
-        mutex.lockUncancelable(lock_io);
+        mutex.lockUncancelable(io);
         std.debug.print("\n{s}Stopping dev server...{s}\n", .{ Colors.gray, Colors.reset });
         if (runner) |id| {
             closeRunnerStdin();
@@ -84,15 +82,15 @@ const children = struct {
     }
 
     fn setBuilder(id: ?std.process.Child.Id) void {
-        mutex.lockUncancelable(lock_io);
-        defer mutex.unlock(lock_io);
+        mutex.lockUncancelable(io);
+        defer mutex.unlock(io);
         builder = id;
         mirror();
     }
 
     fn spawnRunner(options: std.process.SpawnOptions) !std.process.Child {
-        mutex.lockUncancelable(lock_io);
-        defer mutex.unlock(lock_io);
+        mutex.lockUncancelable(io);
+        defer mutex.unlock(io);
         var child = try std.process.spawn(io, options);
         runner = child.id;
         runner_stdin = child.stdin;
@@ -102,8 +100,8 @@ const children = struct {
     }
 
     fn watchRunnerOutput(output: *const RunnerOutput) void {
-        mutex.lockUncancelable(lock_io);
-        defer mutex.unlock(lock_io);
+        mutex.lockUncancelable(io);
+        defer mutex.unlock(io);
         runner_done = output.doneFlag();
     }
 
@@ -121,12 +119,12 @@ const children = struct {
 
     fn stopRunner(child: *std.process.Child) void {
         if (child.id == null) return;
-        mutex.lockUncancelable(lock_io);
+        mutex.lockUncancelable(io);
         closeRunnerStdin();
-        mutex.unlock(lock_io);
+        mutex.unlock(io);
         Process.waitOrKill(child, io, if (awaitRunnerOutput(3000)) 1000 else 0);
-        mutex.lockUncancelable(lock_io);
-        defer mutex.unlock(lock_io);
+        mutex.lockUncancelable(io);
+        defer mutex.unlock(io);
         runner = null;
         runner_done = null;
         mirror();
@@ -318,6 +316,7 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
                 defer build_result.deinit();
 
                 Diagnostics.remap(allocator, build_result.diagnostics, .{
+                    .io = io,
                     .transpile_dir = transpile_dir,
                 });
                 const deduped = Diagnostics.dedupe(allocator, build_result.diagnostics);
@@ -334,7 +333,7 @@ fn runNative(ctx: CommandContext, args: anytype) !void {
                     last_error_formatted = try allocator.dupe(u8, identical_check);
                 }
 
-                const formatted_oxlint = try Diagnostics.formatOxlint(allocator, deduped);
+                const formatted_oxlint = try Diagnostics.formatOxlint(io, allocator, deduped);
                 defer allocator.free(formatted_oxlint);
 
                 if (rebuild_timer != null) {
@@ -620,7 +619,7 @@ fn notifyBuildError(
     diagnostics: []const Builder.Diagnostic,
 ) void {
     if (diagnostics.len > 0) {
-        const notification_diagnostics = buildNotificationDiagnostics(allocator, diagnostics) catch null;
+        const notification_diagnostics = buildNotificationDiagnostics(dev_server.io, allocator, diagnostics) catch null;
         if (notification_diagnostics) |items| {
             defer freeNotificationDiagnostics(allocator, items);
             dev_server.notify(.{
@@ -642,6 +641,7 @@ fn notifyBuildError(
 }
 
 fn buildNotificationDiagnostics(
+    io: std.Io,
     allocator: std.mem.Allocator,
     diagnostics: []const Builder.Diagnostic,
 ) ![]DevServer.Notification.Diagnostic {
@@ -663,8 +663,8 @@ fn buildNotificationDiagnostics(
         };
 
         if (d.kind == .@"error") {
-            items[idx].source = Diagnostics.readSourceContext(allocator, d.file, d.line, 3);
-            items[idx].source_html = Diagnostics.readHighlightedSourceContext(allocator, d.file, d.line, 3, Highlight.highlightZx) catch null;
+            items[idx].source = Diagnostics.readSourceContext(io, allocator, d.file, d.line, 3);
+            items[idx].source_html = Diagnostics.readHighlightedSourceContext(io, allocator, d.file, d.line, 3, Highlight.highlightZx) catch null;
         }
     }
 

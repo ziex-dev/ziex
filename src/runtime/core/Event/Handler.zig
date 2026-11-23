@@ -580,9 +580,9 @@ fn eventHandler(ctx: *anyopaque, event: zx.client.Event) void {
     }
 }
 
-/// Client for requests back to the current page (`url = ""`).
+/// Client for requests back to the current page (`url = ""`), on the browser's `Io`.
 fn pageClient() zx.http.Client {
-    return .{ .io = zx.Io.default(), .allocator = getGlobalAllocator() };
+    return .{ .io = zx.Io.Web.io(), .allocator = getGlobalAllocator() };
 }
 
 fn onActionResponse(_: void, _: zx.http.Client.Error!zx.http.Client.Result) void {}

@@ -48,7 +48,7 @@ pub fn applyCors(http: zx.http.Transport) void {
     }
 }
 
-pub fn componentOptions(http: zx.http.Transport) zx.util.devtool.SerializeOptions {
+pub fn componentOptions(http: zx.http.Transport, io: std.Io) zx.util.devtool.SerializeOptions {
     const include_native = !std.mem.eql(u8, http.reqHeaderGet(header_include_native) orelse "1", "0");
     const include_props = !std.mem.eql(u8, http.reqHeaderGet(header_include_props) orelse "1", "0");
     const include_attributes = !std.mem.eql(u8, http.reqHeaderGet(header_include_attributes) orelse "1", "0");
@@ -56,6 +56,7 @@ pub fn componentOptions(http: zx.http.Transport) zx.util.devtool.SerializeOption
         .only_components = !include_native,
         .include_props = include_props,
         .include_attributes = include_attributes,
+        .io = io,
     };
 }
 

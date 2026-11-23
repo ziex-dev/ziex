@@ -53,7 +53,7 @@ fn errors(ctx: CommandContext) !void {
     try w.print("{s}{s}✖ {s}Error building{s}\n", .{ clear_line, Colors.red, Colors.bold, Colors.reset });
 
     var reader: std.Io.Reader = .fixed(stderr);
-    if (try Diagnostics.formatFromReader(allocator, &reader, .{ .transpile_dir = "" })) |formatted| {
+    if (try Diagnostics.formatFromReader(allocator, &reader, .{ .io = ctx.app.io, .transpile_dir = "" })) |formatted| {
         defer allocator.free(formatted);
         try w.writeAll(formatted);
     } else {

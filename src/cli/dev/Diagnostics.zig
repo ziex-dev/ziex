@@ -110,6 +110,7 @@ pub const RemappedLocation = struct {
 };
 
 pub const RemapOptions = struct {
+    io: std.Io,
     require_mapping: bool = true,
     transpile_dir: []const u8 = CliConstant.default_transpile_dir,
 };
@@ -123,7 +124,7 @@ pub fn remapLocation(
     col: u32,
     options: RemapOptions,
 ) !?RemappedLocation {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = options.io;
 
     // Compiler diagnostics already carry a readable cache path; `@src().file`
     // from DevTools is often a short module path (e.g. `pages/foo.zig`).
@@ -195,8 +196,7 @@ fn zigPathCandidates(allocator: std.mem.Allocator, file: []const u8, transpile_d
 }
 
 /// Read a few lines of source context around a given line number.
-pub fn readSourceContext(allocator: std.mem.Allocator, file_path: []const u8, target_line: u32, context_lines: u32) ?[]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
+pub fn readSourceContext(io: std.Io, allocator: std.mem.Allocator, file_path: []const u8, target_line: u32, context_lines: u32) ?[]const u8 {
     const source = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(10 * 1024 * 1024)) catch return null;
     defer allocator.free(source);
 
@@ -228,13 +228,13 @@ pub fn readSourceContext(allocator: std.mem.Allocator, file_path: []const u8, ta
 }
 
 pub fn readHighlightedSourceContext(
+    io: std.Io,
     allocator: std.mem.Allocator,
     file_path: []const u8,
     target_line: u32,
     context_lines: u32,
-    highlightFn: fn (std.mem.Allocator, []const u8) anyerror![]u8,
+    highlightFn: fn (std.Io, std.mem.Allocator, []const u8) anyerror![]u8,
 ) !?[]u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
     const source = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(10 * 1024 * 1024)) catch return null;
     defer allocator.free(source);
 
@@ -262,7 +262,7 @@ pub fn readHighlightedSourceContext(
         try snippet.appendSlice(allocator, line);
     }
 
-    const highlighted = highlightFn(allocator, snippet.items) catch try escapeHtmlAlloc(allocator, snippet.items);
+    const highlighted = highlightFn(io, allocator, snippet.items) catch try escapeHtmlAlloc(allocator, snippet.items);
     defer allocator.free(highlighted);
 
     return try wrapHighlightedLines(allocator, highlighted, start_line, target_line);
@@ -323,7 +323,7 @@ fn escapeHtmlAlloc(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
 }
 
 /// Build a structured JSON payload for the error overlay.
-pub fn toJson(allocator: std.mem.Allocator, diagnostics: []const Builder.Diagnostic) ![]u8 {
+pub fn toJson(io: std.Io, allocator: std.mem.Allocator, diagnostics: []const Builder.Diagnostic) ![]u8 {
     var buf = std.ArrayList(u8).empty;
     errdefer buf.deinit(allocator);
 
@@ -353,7 +353,7 @@ pub fn toJson(allocator: std.mem.Allocator, diagnostics: []const Builder.Diagnos
 
         // Add source context for error diagnostics
         if (d.kind == .@"error") {
-            if (readSourceContext(allocator, d.file, d.line, 3)) |ctx| {
+            if (readSourceContext(io, allocator, d.file, d.line, 3)) |ctx| {
                 defer allocator.free(ctx);
                 try buf.appendSlice(allocator, ",\"source\":\"");
                 try jsonEscapeAppend(allocator, &buf, ctx);
@@ -481,9 +481,7 @@ fn colorizeErrorLine(allocator: std.mem.Allocator, result: *std.ArrayList(u8), l
 }
 
 /// Helper to get a single line from a file without loading the whole file every time
-pub fn getLineFromFile(allocator: std.mem.Allocator, file_path: []const u8, line_num: u32) !?[]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
-
+pub fn getLineFromFile(io: std.Io, allocator: std.mem.Allocator, file_path: []const u8, line_num: u32) !?[]const u8 {
     const source = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .unlimited) catch return null;
     defer allocator.free(source);
 
@@ -545,10 +543,10 @@ pub fn formatFromReader(allocator: std.mem.Allocator, reader: *std.Io.Reader, op
     const deduped = dedupe(allocator, diagnostics.items);
     diagnostics.shrinkRetainingCapacity(deduped.len);
 
-    return try formatOxlint(allocator, deduped);
+    return try formatOxlint(options.io, allocator, deduped);
 }
 
-pub fn formatOxlint(allocator: std.mem.Allocator, diagnostics: []const Builder.Diagnostic) ![]u8 {
+pub fn formatOxlint(io: std.Io, allocator: std.mem.Allocator, diagnostics: []const Builder.Diagnostic) ![]u8 {
     var buf = std.Io.Writer.Allocating.init(allocator);
     defer buf.deinit();
 
@@ -591,7 +589,7 @@ pub fn formatOxlint(allocator: std.mem.Allocator, diagnostics: []const Builder.D
         var owned_caret = false;
 
         if (source_line == null) {
-            source_line = getLineFromFile(allocator, d.file, d.line) catch null;
+            source_line = getLineFromFile(io, allocator, d.file, d.line) catch null;
             if (source_line != null) owned_source = true;
         }
 

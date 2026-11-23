@@ -336,7 +336,7 @@ fn appendLeakSummary(state: *State, out: *std.ArrayList(u8)) void {
         }) catch {};
     }
 
-    const formatted = Diagnostics.formatOxlint(allocator, diagnostics.items) catch return;
+    const formatted = Diagnostics.formatOxlint(state.io, allocator, diagnostics.items) catch return;
     defer allocator.free(formatted);
     out.appendSlice(allocator, formatted) catch {};
 
@@ -357,7 +357,7 @@ fn leakLocation(state: *State, frames: []const LeakReport.Frame) ?LeakLocation {
     const allocator = state.allocator;
     for (frames) |f| {
         if (f.line == 0) continue;
-        if (Diagnostics.remapLocation(allocator, f.file, f.line, f.col, .{ .transpile_dir = state.transpile_dir }) catch null) |m| {
+        if (Diagnostics.remapLocation(allocator, f.file, f.line, f.col, .{ .io = state.io, .transpile_dir = state.transpile_dir }) catch null) |m| {
             const rel = projectPath(state, m.file, false) orelse return .{ .file = m.file, .line = m.line, .col = m.col, .function = f.function };
             allocator.free(m.file);
             return .{ .file = rel, .line = m.line, .col = m.col, .function = f.function };

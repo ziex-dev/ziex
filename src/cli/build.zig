@@ -105,9 +105,9 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
             .errors => |result_val| {
                 var build_result = result_val;
                 defer build_result.deinit();
-                Diagnostics.remap(allocator, build_result.diagnostics, .{});
+                Diagnostics.remap(allocator, build_result.diagnostics, .{ .io = io });
                 const deduped = Diagnostics.dedupe(allocator, build_result.diagnostics);
-                error_output = try Diagnostics.formatOxlint(allocator, deduped);
+                error_output = try Diagnostics.formatOxlint(io, allocator, deduped);
                 failed = true;
                 break;
             },

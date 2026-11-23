@@ -991,6 +991,7 @@ fn handleOpenInEditor(ds: *DevServer, target: []const u8) !void {
         defer if (remapped_owned) |p| ds.gpa.free(p);
 
         if (Diagnostics.remapLocation(ds.gpa, decoded_file, l_num, c_num, .{
+            .io = ds.io,
             .require_mapping = false,
             .transpile_dir = ds.transpile_dir,
         })) |maybe| {

@@ -374,7 +374,7 @@ test "keyed component_fn children preserve keys through resolve" {
     const allocator = testing.allocator;
 
     const Row = struct {
-        fn call(_: ?*const anyopaque, _: std.mem.Allocator, _: ?[]const u8, _: ?*zx.Component.ComponentFn.Section) anyerror!zx.Component {
+        fn call(_: ?*const anyopaque, _: std.mem.Allocator, _: ?[]const u8, _: ?*zx.Component.ComponentFn.Section, _: ?std.Io) anyerror!zx.Component {
             return .{ .element = .{ .tag = .tr, .children = &[_]zx.Component{.{ .text = "row" }} } };
         }
         fn destroy(_: ?*const anyopaque, _: std.mem.Allocator) void {}

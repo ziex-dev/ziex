@@ -43,7 +43,9 @@ pub fn Backend(comptime H: type) type {
         queue_mu: std.Io.Mutex = .init,
         queue_not_empty: std.Io.Condition = .init,
         queue_not_full: std.Io.Condition = .init,
-        workers: []std.Thread = &.{},
+        workers: std.Io.Group = .init,
+        // No concurrency available: connections are served on the accept loop.
+        serve_inline: bool = false,
 
         live_connections: con = .{},
 
@@ -132,6 +134,10 @@ pub fn Backend(comptime H: type) type {
                     stream.close(self.io);
                     return;
                 }
+                if (self.serve_inline) {
+                    self.handleConnection(stream);
+                    continue;
+                }
                 self.enqueue(stream) catch {
                     stream.close(self.io);
                     return;
@@ -145,31 +151,19 @@ pub fn Backend(comptime H: type) type {
             self.queue_head = 0;
             self.queue_len = 0;
 
-            self.workers = try self.allocator.alloc(std.Thread, self.worker_count);
-            errdefer self.allocator.free(self.workers);
-
-            var spawned: usize = 0;
-            errdefer {
-                self.shutting_down.store(true, .release);
-                self.wakeQueueWaiters();
-                var i: usize = 0;
-                while (i < spawned) : (i += 1) self.workers[i].join();
-            }
-
+            self.workers = .init;
+            var spawned: u32 = 0;
             while (spawned < self.worker_count) : (spawned += 1) {
-                self.workers[spawned] = try std.Thread.spawn(.{}, workerMain, .{self});
+                self.workers.concurrent(self.io, workerMain, .{self}) catch break;
             }
+            self.serve_inline = spawned == 0;
         }
 
         fn shutdownWorkers(self: *Self) void {
             self.shutting_down.store(true, .release);
             self.live_connections.shutdownAll(self.io);
             self.wakeQueueWaiters();
-            for (self.workers) |*t| t.join();
-            if (self.workers.len != 0) {
-                self.allocator.free(self.workers);
-                self.workers = &.{};
-            }
+            self.workers.await(self.io) catch {};
 
             // Close any connections still sitting in the queue.
             self.queue_mu.lockUncancelable(self.io);
@@ -220,7 +214,7 @@ pub fn Backend(comptime H: type) type {
                 if (self.shutting_down.load(.acquire)) return null;
                 self.queue_not_empty.waitTimeout(self.io, &self.queue_mu, .{
                     .duration = .{ .raw = .fromMilliseconds(50), .clock = .awake },
-                }) catch {};
+                }) catch |err| if (err == error.Canceled) return null;
             }
 
             const stream = self.queue_buf[self.queue_head];
@@ -374,7 +368,7 @@ pub fn Backend(comptime H: type) type {
                         .extra_headers = headers,
                     },
                 });
-                Pipeline.renderHtml(&body.writer, component, Pipeline.opts.base_path) catch {
+                Pipeline.renderHtml(ctx.server.io, &body.writer, component, Pipeline.opts.base_path) catch {
                     try body.end();
                     return;
                 };

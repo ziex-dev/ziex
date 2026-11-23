@@ -40,10 +40,9 @@ const HighlightCache = struct {
     }
 };
 
-pub fn highlightZx(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
+pub fn highlightZx(io: std.Io, allocator: std.mem.Allocator, source: []const u8) ![]u8 {
     if (platform_mod.platform.role == .client) return try allocator.dupe(u8, source);
 
-    const io = std.Io.Threaded.global_single_threaded.io();
     const cache = try HighlightCache.getOrInit(std.heap.page_allocator);
     try cache.mutex.lock(io);
     defer cache.mutex.unlock(io);

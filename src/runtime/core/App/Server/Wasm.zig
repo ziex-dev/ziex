@@ -284,7 +284,7 @@ fn emitComponent(ctx: *const Ctx, component: *zx.Component) !void {
     ctx.conn.out = out;
     defer ctx.conn.out = null;
 
-    core_handler.renderHtmlDocument(out, component, base_path) catch |err| {
+    core_handler.renderHtmlDocument(ctx.io, out, component, base_path) catch |err| {
         // Already committed: only the body can change.
         return writeErrorBody(ctx, if (err == error.NotFound) null else err);
     };
@@ -294,7 +294,7 @@ fn emitComponent(ctx: *const Ctx, component: *zx.Component) !void {
 
 fn streamComponent(ctx: *const Ctx, component: zx.Component) !void {
     var shell: std.Io.Writer.Allocating = .init(ctx.allocator);
-    const async_components = Router.streamComponent(component, ctx.allocator, &shell.writer, base_path) catch |err| switch (err) {
+    const async_components = Router.streamComponent(ctx.io, component, ctx.allocator, &shell.writer, base_path) catch |err| switch (err) {
         error.NotFound => {
             const not_found = core_handler.prepareNotFound(ctx.http, ctx.pathname, ctx.request, ctx.response, ctx.allocator, ctx.io, ctx.matched_route);
             return sendComponentOrBody(ctx, not_found);
@@ -364,7 +364,7 @@ fn sendBody(ctx: *const Ctx) !void {
 fn writeComponentOrBody(ctx: *const Ctx, component: ?zx.Component) !void {
     if (component) |cmp| {
         var page = cmp;
-        core_handler.renderHtmlDocument(ctx.out, &page, base_path) catch {};
+        core_handler.renderHtmlDocument(ctx.io, ctx.out, &page, base_path) catch {};
     } else {
         try ctx.out.writeAll(ctx.conn.bodySlice());
     }

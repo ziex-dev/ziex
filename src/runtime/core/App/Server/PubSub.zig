@@ -116,8 +116,7 @@ pub const Hub = struct {
     }
 
     /// Fan-out `message` to topic subscribers. Returns how many writes succeeded.
-    pub fn publish(self: *Hub, sender: ?*Subscriber, topic: []const u8, message: []const u8) usize {
-        const io = if (sender) |s| s.io else std.Io.Threaded.global_single_threaded.io();
+    pub fn publish(self: *Hub, io: std.Io, sender: ?*Subscriber, topic: []const u8, message: []const u8) usize {
         self.lock.lockSharedUncancelable(io);
         defer self.lock.unlockShared(io);
 
@@ -149,5 +148,5 @@ pub fn hub() *Hub {
 }
 
 pub fn publish(sender: *Subscriber, topic: []const u8, message: []const u8) usize {
-    return hub().publish(sender, topic, message);
+    return hub().publish(sender.io, sender, topic, message);
 }

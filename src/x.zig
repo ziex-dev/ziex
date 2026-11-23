@@ -580,11 +580,6 @@ const Context = struct {
             const id_copy = allocator.alloc(u8, client_opts.id.len) catch @panic("OOM");
             @memcpy(id_copy, client_opts.id);
 
-            // Call the component function to get SSR content
-            const rendered = comp_fn.call() catch @panic("Component call failed");
-            const children_ptr = allocator.create(Component) catch @panic("OOM");
-            children_ptr.* = rendered;
-
             // Serialize full props (with defaults) to ZXON for the hydration marker
             const hydrate_props = blk: {
                 if (first_is_ctx_ptr) {
@@ -608,7 +603,6 @@ const Context = struct {
             comp_fn.island = .{
                 .id = id_copy,
                 .props = hydrate_props,
-                .children = children_ptr,
             };
             return .{ .component_fn = comp_fn };
         }

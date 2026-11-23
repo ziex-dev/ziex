@@ -216,7 +216,7 @@ fn runOutcome(
                     try respondDevtoolComponents(ctx, backend, http, &component, transport);
                     return .{};
                 }
-                core_handler.injectDevScript(ctx.arena, &component);
+                core_handler.injectDevScript(ctx.arena, ctx.io, &component);
             }
             if (http.resHeaderGet("Content-Type") == null) backend.setContentTypeStr("text/html");
             if (c.streaming) {
@@ -253,7 +253,7 @@ fn runOutcome(
             }
             if (nf.component) |cmp| {
                 var page = cmp;
-                if (comptime o.is_dev) core_handler.injectDevScript(ctx.arena, &page);
+                if (comptime o.is_dev) core_handler.injectDevScript(ctx.arena, ctx.io, &page);
                 if (http.resHeaderGet("Content-Type") == null) backend.setContentTypeStr("text/html");
                 try transport.html(transport.ptr, backend, &page);
             } else {
@@ -277,7 +277,7 @@ fn streamComponentSsr(
     transport: Transport,
 ) !void {
     var shell_writer = std.Io.Writer.Allocating.init(ctx.arena);
-    const async_components = Router.streamComponent(component, ctx.arena, &shell_writer.writer, o.base_path) catch |stream_err| {
+    const async_components = Router.streamComponent(ctx.io, component, ctx.arena, &shell_writer.writer, o.base_path) catch |stream_err| {
         var page = component;
         switch (stream_err) {
             error.NotFound => {
@@ -338,7 +338,7 @@ fn respondDevtoolComponents(
 ) !void {
     Devtool.applyCors(http);
     var aw: std.Io.Writer.Allocating = .init(ctx.arena);
-    try Devtool.writeComponents(component.*, Devtool.componentOptions(http), &aw.writer);
+    try Devtool.writeComponents(component.*, Devtool.componentOptions(http, ctx.io), &aw.writer);
     backend.setContentTypeStr("application/json");
     try transport.write(transport.ptr, backend, aw.written());
 }

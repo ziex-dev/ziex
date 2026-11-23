@@ -62,11 +62,11 @@ fn formatErrorFromStdin(io: std.Io, allocator: std.mem.Allocator, writer: *std.I
 
     if (diagnostics.items.len == 0) return;
 
-    Diagnostics.remap(allocator, diagnostics.items, .{});
+    Diagnostics.remap(allocator, diagnostics.items, .{ .io = io });
     const deduped = Diagnostics.dedupe(allocator, diagnostics.items);
     diagnostics.shrinkRetainingCapacity(deduped.len);
 
-    const formatted = try Diagnostics.formatOxlint(allocator, deduped);
+    const formatted = try Diagnostics.formatOxlint(io, allocator, deduped);
     defer allocator.free(formatted);
 
     try writer.writeAll(formatted);

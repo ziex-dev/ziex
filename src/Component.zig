@@ -17,7 +17,7 @@ pub const Component = union(enum) {
     component_fn: ComponentFn,
 
     pub const ComponentFn = struct {
-        pub const Caller = *const fn (data: ?*const anyopaque, allocator: Allocator, owner_id: ?[]const u8, section: ?*Section) anyerror!Component;
+        pub const Caller = *const fn (data: ?*const anyopaque, allocator: Allocator, owner_id: ?[]const u8, section: ?*Section, io: ?std.Io) anyerror!Component;
         pub const Section = @import("runtime/server/render.zig").Section;
         pub const Destroyer = *const fn (data: ?*const anyopaque, allocator: Allocator) void;
 
@@ -38,8 +38,6 @@ pub const Component = union(enum) {
             id: []const u8,
             /// Pre-serialized ZXON props for the hydration marker.
             props: ?[]const u8 = null,
-            /// SSR-rendered content for hydration.
-            children: *const Component,
         };
 
         vtable: *const VTable,
@@ -101,7 +99,8 @@ pub const Component = union(enum) {
                 // allocator.create() does NOT run field default initializers, so explicitly
                 // set all fields that ComponentCtx defines with defaults.
                 ctx.allocator = allocator;
-                ctx.io = zx.Io.default();
+                // The browser's only `Io`; on the server the render's `Io` replaces `failing`.
+                ctx.io = if (comptime zx.platform.role == .client) zx.Io.Web.io() else std.Io.failing;
                 if (@hasField(CtxType, "_internal")) ctx._internal = .{};
                 ctx.children = if (@hasField(@TypeOf(props), "children")) props.children else null;
                 if (@hasField(CtxType, "props")) {
@@ -136,7 +135,7 @@ pub const Component = union(enum) {
                     return result;
                 }
 
-                fn callImpl(erased: ?*const anyopaque, alloc: Allocator, owner_id: ?[]const u8, section: ?*Section) anyerror!Component {
+                fn callImpl(erased: ?*const anyopaque, alloc: Allocator, owner_id: ?[]const u8, section: ?*Section, io: ?std.Io) anyerror!Component {
                     if (first_is_ctx_ptr) {
                         const CtxType = @typeInfo(FirstPropType).pointer.child;
                         const ctx_ptr: *CtxType = @ptrCast(@alignCast(@constCast(erased orelse @panic("ctx is null"))));
@@ -146,6 +145,7 @@ pub const Component = union(enum) {
                             if (owner_id) |oid| ctx_ptr._internal.component_id = oid;
                             if (@hasField(@FieldType(CtxType, "_internal"), "section")) ctx_ptr._internal.section = section;
                         }
+                        if (io) |i| ctx_ptr.io = i;
                         return normalize(func(ctx_ptr));
                     }
                     if (first_is_allocator and param_count == 1) {
@@ -210,16 +210,17 @@ pub const Component = union(enum) {
         }
 
         pub fn call(self: ComponentFn) anyerror!Component {
-            return self.vtable.call(self.data, self.allocator, null, null);
+            return self.vtable.call(self.data, self.allocator, null, null, null);
         }
 
         pub fn callOwned(self: ComponentFn, owner_id: []const u8) anyerror!Component {
-            return self.vtable.call(self.data, self.allocator, owner_id, null);
+            return self.vtable.call(self.data, self.allocator, owner_id, null, null);
         }
 
-        // Calls within an @async={.stream} section, which `ctx.flush` writes to.
-        pub fn callIn(self: ComponentFn, section: ?*Section) anyerror!Component {
-            return self.vtable.call(self.data, self.allocator, null, section);
+        // Calls within an @async={.stream} section, which `ctx.flush` writes to,
+        // with the request `io` when rendering on the server.
+        pub fn callIn(self: ComponentFn, section: ?*Section, io: ?std.Io) anyerror!Component {
+            return self.vtable.call(self.data, self.allocator, null, section, io);
         }
 
         pub fn isIsland(self: ComponentFn) bool {

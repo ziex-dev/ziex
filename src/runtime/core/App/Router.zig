@@ -798,7 +798,7 @@ pub fn handle(comptime options: core_handler.Options, opts: HandleOptions) !Hand
     return .{ .outcome = .{ .not_found = .{ .component = nf_component } }, .proxy = proxy_result };
 }
 
-pub fn streamComponent(component: Component, allocator: std.mem.Allocator, writer: *std.Io.Writer, base_path: ?[]const u8) ![]render.AsyncComponent {
+pub fn streamComponent(io: std.Io, component: Component, allocator: std.mem.Allocator, writer: *std.Io.Writer, base_path: ?[]const u8) ![]render.AsyncComponent {
     render.current_route_path = null;
-    return render.stream(component, allocator, writer, .{ .base_path = base_path });
+    return render.stream(component, allocator, writer, .{ .base_path = base_path, .io = io });
 }

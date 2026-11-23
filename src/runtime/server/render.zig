@@ -17,15 +17,15 @@ pub const AsyncComponent = struct {
     id: u32,
     component: zx.Component,
 
-    pub fn renderScript(self: AsyncComponent, allocator: std.mem.Allocator) ![]const u8 {
-        return script(allocator, self.id, self.component, null, false);
+    pub fn renderScript(self: AsyncComponent, io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
+        return script(io, allocator, self.id, self.component, null, false);
     }
 };
 
-fn script(allocator: std.mem.Allocator, id: u32, component: zx.Component, section: ?*Section, partial: bool) ![]const u8 {
+fn script(io: std.Io, allocator: std.mem.Allocator, id: u32, component: zx.Component, section: ?*Section, partial: bool) ![]const u8 {
     var aw = std.Io.Writer.Allocating.init(allocator);
     defer aw.deinit();
-    try render(component, &aw.writer, .{ .section = section });
+    try render(component, &aw.writer, .{ .section = section, .io = io });
 
     var out = std.Io.Writer.Allocating.init(allocator);
     errdefer out.deinit();
@@ -99,7 +99,7 @@ pub const Section = struct {
 
         var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
         defer arena.deinit();
-        s.out.send(script(arena.allocator(), s.id, component, null, true) catch return);
+        s.out.send(script(s.out.io, arena.allocator(), s.id, component, null, true) catch return);
     }
 };
 
@@ -107,7 +107,7 @@ fn renderSection(out: *Out, component: AsyncComponent) void {
     var section: Section = .{ .out = out, .id = component.id };
     var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
     defer arena.deinit();
-    const bytes = script(arena.allocator(), component.id, component.component, &section, false) catch |err| {
+    const bytes = script(out.io, arena.allocator(), component.id, component.component, &section, false) catch |err| {
         std.log.err("rendering async component {d}: {}", .{ component.id, err });
         return;
     };
@@ -126,6 +126,7 @@ pub fn stream(self: zx.Component, allocator: std.mem.Allocator, writer: *std.Io.
         .async_components = &async_components,
         .async_counter = &counter,
         .base_path = options.base_path,
+        .io = options.io,
     });
     return async_components.toOwnedSlice();
 }
@@ -136,6 +137,8 @@ pub const RenderOptions = struct {
     async_counter: ?*u32 = null,
     base_path: ?[]const u8 = null,
     section: ?*Section = null,
+    // Request `Io`, handed to `*ComponentContext` and the action registry.
+    io: ?std.Io = null,
 };
 
 pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions) !void {
@@ -161,7 +164,8 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
                 }
                 try writer.writeAll("-->");
 
-                try render(island.children.*, writer, options);
+                // SSR runs here, not at construction, so the component gets the render's `io`.
+                try render(try func.callIn(options.section, options.io), writer, options);
 
                 try writer.writeAll("<!--/$");
                 try writer.writeAll(island.id);
@@ -202,7 +206,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
 
                     // Render to buffer for caching
                     var buf_writer = std.Io.Writer.Allocating.init(func.allocator);
-                    const component = try func.call();
+                    const component = try func.callIn(options.section, options.io);
                     try render(component, &buf_writer.writer, options);
 
                     const rendered = buf_writer.written();
@@ -217,7 +221,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
             }
 
             // No caching or cache miss - render directly
-            const component = try func.callIn(options.section);
+            const component = try func.callIn(options.section, options.io);
             try render(component, writer, options);
         },
         .element => |elem| {
@@ -257,6 +261,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
                         .async_counter = options.async_counter,
                         .base_path = options.base_path,
                         .section = options.section,
+                        .io = options.io,
                     };
                     for (children) |child| {
                         try render(child, writer, child_options);
@@ -353,6 +358,7 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
                     .async_counter = options.async_counter,
                     .base_path = options.base_path,
                     .section = options.section,
+                    .io = options.io,
                 };
                 for (children) |child| {
                     try render(child, writer, child_options);

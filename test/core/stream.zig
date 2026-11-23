@@ -106,3 +106,59 @@ test "flush outside a section is a no-op" {
     try x.cmp(Ticker, .{}, .{}, TickerProps{ .steps = 2, .pause = 0 }).render(&out.writer, .{});
     try std.testing.expectEqualStrings("done", out.written());
 }
+
+var seen_io: ?std.Io = null;
+
+fn IoProbe(ctx: *zx.ComponentCtx(struct {})) zx.Component {
+    seen_io = ctx.io;
+    return .none;
+}
+
+test "render hands its io to component contexts" {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var x = zx.x.allocInit(arena.allocator(), .{});
+    seen_io = null;
+
+    var out: std.Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    try x.cmp(IoProbe, .{}, .{}, .{}).render(&out.writer, .{ .io = io });
+    try std.testing.expectEqual(io.userdata, seen_io.?.userdata);
+}
+
+test "async sections hand the stream io to component contexts" {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var x = zx.x.allocInit(arena.allocator(), .{});
+    var sink: Sink = .{};
+    defer sink.deinit();
+    seen_io = null;
+
+    render.streamAsync(io, &.{.{ .id = 0, .component = x.cmp(IoProbe, .{}, .{}, .{}) }}, &sink, Sink.write);
+    try std.testing.expectEqual(io.userdata, seen_io.?.userdata);
+}
+
+test "islands render with the render io" {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var x = zx.x.allocInit(arena.allocator(), .{});
+    seen_io = null;
+
+    var out: std.Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    const island = x.cmp(IoProbe, .{}, .{ .name = "IoProbe", .client = .{ .name = "IoProbe", .id = "p" } }, .{});
+    try island.render(&out.writer, .{ .io = io });
+    try std.testing.expectEqual(io.userdata, seen_io.?.userdata);
+}
+
+test "without a render io, component contexts get std.Io.failing" {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var x = zx.x.allocInit(arena.allocator(), .{});
+    seen_io = null;
+
+    var out: std.Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    try x.cmp(IoProbe, .{}, .{}, .{}).render(&out.writer, .{});
+    try std.testing.expectEqual(std.Io.failing.vtable, seen_io.?.vtable);
+}

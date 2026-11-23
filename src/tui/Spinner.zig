@@ -9,7 +9,6 @@ const styles = spinner_styles.styles;
 const Io = std.Io;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
-const Thread = std.Thread;
 
 pub const SpinnerStyles = union(enum) {
     pub const none = &.{""};
@@ -69,9 +68,10 @@ message: []const u8,
 is_spinning: std.atomic.Value(bool),
 frame_index: std.atomic.Value(usize),
 allocator: Allocator,
+io: Io,
 writer: *Io.Writer,
 reader: *Io.Reader,
-thread: ?Thread = null,
+task: ?Io.Future(void) = null,
 mutex: Io.Mutex = .init,
 interactive: bool = true,
 
@@ -81,8 +81,9 @@ interactive: bool = true,
 ///
 /// Use `Spinner.SpinnerStyles.[option]` or pass in `.{ .frames = " []const []const u8 " }` for a custom style.
 ///
-pub fn init(writer: *Io.Writer, reader: *Io.Reader, allocator: Allocator, options: SpinnerOptions) Spinner {
+pub fn init(io: Io, writer: *Io.Writer, reader: *Io.Reader, allocator: Allocator, options: SpinnerOptions) Spinner {
     return Spinner{
+        .io = io,
         .writer = writer,
         .reader = reader,
         .allocator = allocator,
@@ -107,9 +108,8 @@ pub fn print(self: *Spinner, comptime format: []const u8, args: anytype) !void {
 }
 
 pub fn start(self: *Spinner, comptime format: []const u8, args: anytype) !void {
-    const io = std.Io.Threaded.global_single_threaded.io();
-    self.mutex.lockUncancelable(io);
-    defer self.mutex.unlock(io);
+    self.mutex.lockUncancelable(self.io);
+    defer self.mutex.unlock(self.io);
 
     const message = try self.allocator.print(format, args);
     if (self.message.len > 0) {
@@ -126,19 +126,19 @@ pub fn start(self: *Spinner, comptime format: []const u8, args: anytype) !void {
         return;
     }
 
-    // WASI / single-threaded builds cannot spawn spinner threads.
+    // Without concurrency (WASI, single-threaded) the spinner stays static.
     if (comptime builtin.single_threaded) return;
 
-    self.thread = try Thread.spawn(.{}, spinLoop, .{self});
+    self.task = self.io.concurrent(spinLoop, .{self}) catch null;
 }
 
 pub fn stop(self: *Spinner) void {
     if (!self.is_spinning.load(.monotonic)) return;
     self.is_spinning.store(false, .release);
 
-    if (self.thread) |t| {
-        t.join();
-        self.thread = null;
+    if (self.task) |*t| {
+        t.cancel(self.io);
+        self.task = null;
     }
 }
 
@@ -149,9 +149,8 @@ pub fn clear(self: *Spinner) void {
 }
 
 pub fn updateStyle(self: *Spinner, options: SpinnerOptions) void {
-    const io = std.Io.Threaded.global_single_threaded.io();
-    self.mutex.lockUncancelable(io);
-    defer self.mutex.unlock(io);
+    self.mutex.lockUncancelable(self.io);
+    defer self.mutex.unlock(self.io);
 
     self.frame_index.store(0, .release);
 
@@ -162,9 +161,8 @@ pub fn updateStyle(self: *Spinner, options: SpinnerOptions) void {
 pub fn updateMessage(self: *Spinner, comptime format: []const u8, args: anytype) !void {
     const message = try self.allocator.print(format, args);
 
-    const io = std.Io.Threaded.global_single_threaded.io();
-    self.mutex.lockUncancelable(io);
-    defer self.mutex.unlock(io);
+    self.mutex.lockUncancelable(self.io);
+    defer self.mutex.unlock(self.io);
 
     if (self.message.len > 0) {
         self.allocator.free(self.message);
@@ -179,9 +177,8 @@ pub fn isSpinning(self: *const Spinner) bool {
 /// Writes `bytes` to `file` above the spinner line, then redraws the spinner
 /// below it so other output never shares a line with the spinner.
 pub fn writeAbove(self: *Spinner, io: Io, file: Io.File, bytes: []const u8) void {
-    const lock_io = std.Io.Threaded.global_single_threaded.io();
-    self.mutex.lockUncancelable(lock_io);
-    defer self.mutex.unlock(lock_io);
+    self.mutex.lockUncancelable(self.io);
+    defer self.mutex.unlock(self.io);
 
     if (!self.is_spinning.load(.acquire) or !self.interactive) {
         file.writeStreamingAll(io, bytes) catch {};
@@ -241,7 +238,7 @@ fn clearLine(self: *Spinner) void {
 }
 
 fn spinLoop(self: *Spinner) void {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = self.io;
     while (self.is_spinning.load(.acquire)) {
         {
             self.mutex.lockUncancelable(io);

@@ -923,14 +923,13 @@ fn Handler(comptime Ctx: type) type {
         }
 
         fn emitHtmlOrPlain(self: *Self, req: *httpz.Request, res: *httpz.Response, component: ?Component) !void {
-            _ = self;
             if (component) |cmp| {
                 var page_component = cmp;
-                if (comptime is_dev) core_handler.injectDevScript(req.arena, &page_component);
+                if (comptime is_dev) core_handler.injectDevScript(req.arena, self.io, &page_component);
 
                 res.clearWriter();
                 const writer = res.writer();
-                core_handler.renderHtmlDocument(writer, &page_component, app_opts.app_base_path) catch {
+                core_handler.renderHtmlDocument(self.io, writer, &page_component, app_opts.app_base_path) catch {
                     if (res.body.len == 0) {
                         res.body = if (res.status == 404) "404 Not Found" else "500 Internal Server Error";
                     }
@@ -1022,17 +1021,17 @@ fn Handler(comptime Ctx: type) type {
                     if (comptime is_dev) {
                         if (Devtool.isComponentsMode(req.header(Devtool.header_mode))) {
                             res.content_type = .JSON;
-                            try Devtool.writeComponents(page_component, Devtool.componentOptions(http), res.writer());
+                            try Devtool.writeComponents(page_component, Devtool.componentOptions(http, self.io), res.writer());
                             return;
                         }
-                        core_handler.injectDevScript(req.arena, &page_component);
+                        core_handler.injectDevScript(req.arena, self.io, &page_component);
                     }
 
                     if (c.streaming) {
                         try self.renderStreaming(res, &page_component, req.arena);
                     } else {
                         const writer = &res.buffer.writer;
-                        core_handler.renderHtmlDocument(writer, &page_component, app_opts.app_base_path) catch |err| switch (err) {
+                        core_handler.renderHtmlDocument(self.io, writer, &page_component, app_opts.app_base_path) catch |err| switch (err) {
                             error.NotFound => return self.notFound(req, res),
                             else => {
                                 log.err("rendering page: {}", .{err});
@@ -1100,7 +1099,7 @@ fn Handler(comptime Ctx: type) type {
         /// Sends the initial shell immediately, then streams async components as they complete
         fn renderStreaming(self: *Self, res: *httpz.Response, page_component: *Component, arena: std.mem.Allocator) !void {
             var shell_writer = std.Io.Writer.Allocating.init(arena);
-            const async_components = rndr.stream(page_component.*, arena, &shell_writer.writer, .{ .base_path = app_opts.app_base_path }) catch |err| {
+            const async_components = rndr.stream(page_component.*, arena, &shell_writer.writer, .{ .base_path = app_opts.app_base_path, .io = self.io }) catch |err| {
                 log.err("streaming page: {}", .{err});
                 return err;
             };

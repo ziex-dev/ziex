@@ -8,6 +8,8 @@ pub const SerializeOptions = struct {
     only_components: bool = true,
     include_attributes: bool = true,
     include_props: bool = true,
+    // Handed to `*ComponentContext` components when they are resolved.
+    io: ?std.Io = null,
 };
 
 pub fn format(component: zx.Component, w: *std.Io.Writer) error{WriteFailed}!void {
@@ -433,7 +435,7 @@ pub const ComponentSerializable = struct {
                     .{ null, 0 };
                 const is_client = comp_fn.isIsland();
                 if (comp_fn.isIsland()) {
-                    const island_children = comp_fn.island.?.children.*;
+                    const island_children = try comp_fn.callIn(null, options.io);
                     const children_slice = try allocator.alloc(ComponentSerializable, 1);
                     children_slice[0] = try ComponentSerializable.init(allocator, island_children, options);
                     break :blk .{
@@ -447,7 +449,7 @@ pub const ComponentSerializable = struct {
                     };
                 }
 
-                const resolved = try comp_fn.call();
+                const resolved = try comp_fn.callIn(null, options.io);
                 if (resolved == .none) {
                     break :blk .{
                         .component = comp_fn.name,

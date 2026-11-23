@@ -5,7 +5,7 @@ const ElementTag = zx.ElementTag;
 
 /// Recursively search for an element by tag name.
 /// Resolves component_fn lazily during search.
-pub fn getElementByName(self: *Component, allocator: std.mem.Allocator, tag: ElementTag) ?*Component {
+pub fn getElementByName(self: *Component, allocator: std.mem.Allocator, io: std.Io, tag: ElementTag) ?*Component {
     switch (self.*) {
         .element => |*elem| {
             if (elem.tag == tag) return self;
@@ -14,16 +14,16 @@ pub fn getElementByName(self: *Component, allocator: std.mem.Allocator, tag: Ele
                 @memcpy(mutable_children, children);
                 elem.children = mutable_children;
                 for (0..mutable_children.len) |i| {
-                    if (getElementByName(&mutable_children[i], allocator, tag)) |found| return found;
+                    if (getElementByName(&mutable_children[i], allocator, io, tag)) |found| return found;
                 }
             }
             return null;
         },
         .component_fn => |*func| {
             if (func.isIsland()) return null;
-            const resolved = func.call() catch return null;
+            const resolved = func.callIn(null, io) catch return null;
             self.* = resolved;
-            return getElementByName(self, allocator, tag);
+            return getElementByName(self, allocator, io, tag);
         },
         .none, .text => return null,
     }

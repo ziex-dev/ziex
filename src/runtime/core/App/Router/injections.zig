@@ -13,7 +13,7 @@ const SlotPiece = struct {
     pathname: Build.AddElementOptions.Pathname,
 };
 
-pub fn inject(allocator: Allocator, page: *Component, pathname: []const u8) void {
+pub fn inject(allocator: Allocator, io: std.Io, page: *Component, pathname: []const u8) void {
     const pieces = comptime .{
         .head_starting = collectSlot(.head, .starting),
         .head_ending = collectSlot(.head, .ending),
@@ -22,19 +22,19 @@ pub fn inject(allocator: Allocator, page: *Component, pathname: []const u8) void
     };
 
     if (joinMatching(allocator, pieces.head_starting, pathname)) |html| {
-        if (tree.getElementByName(page, allocator, .head)) |el|
+        if (tree.getElementByName(page, allocator, io, .head)) |el|
             tree.prependChild(el, allocator, unescapedHtml(allocator, html)) catch {};
     }
     if (joinMatching(allocator, pieces.head_ending, pathname)) |html| {
-        if (tree.getElementByName(page, allocator, .head)) |el|
+        if (tree.getElementByName(page, allocator, io, .head)) |el|
             tree.appendChild(el, allocator, unescapedHtml(allocator, html)) catch {};
     }
     if (joinMatching(allocator, pieces.body_starting, pathname)) |html| {
-        if (tree.getElementByName(page, allocator, .body)) |el|
+        if (tree.getElementByName(page, allocator, io, .body)) |el|
             tree.prependChild(el, allocator, unescapedHtml(allocator, html)) catch {};
     }
     if (joinMatching(allocator, pieces.body_ending, pathname)) |html| {
-        if (tree.getElementByName(page, allocator, .body)) |el|
+        if (tree.getElementByName(page, allocator, io, .body)) |el|
             tree.appendChild(el, allocator, unescapedHtml(allocator, html)) catch {};
     }
 }

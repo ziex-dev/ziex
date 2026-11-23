@@ -159,7 +159,7 @@ pub fn handlePage(
         if (comptime options.is_dev) &used_layout else null,
     );
 
-    injectZxInjections(arena, &page_component, request.pathname);
+    injectZxInjections(arena, pagectx.io, &page_component, request.pathname);
 
     if (comptime options.is_dev) {
         if (used_layout) {
@@ -281,21 +281,21 @@ pub fn prepareError(
 }
 
 /// Write `<!DOCTYPE html>` followed by the rendered component.
-pub fn renderHtmlDocument(writer: *std.Io.Writer, component: *Component, base_path: ?[]const u8) !void {
+pub fn renderHtmlDocument(io: std.Io, writer: *std.Io.Writer, component: *Component, base_path: ?[]const u8) !void {
     try writer.writeAll("<!DOCTYPE html>\n");
-    try component.render(writer, .{ .base_path = base_path });
+    try component.render(writer, .{ .base_path = base_path, .io = io });
 }
 
 /// Inject build-time HTML (scripts, styles, etc.) into head/body elements.
 /// See `injections.zig` for the comptime rendering of structured injections.
 /// Only injections whose `pathname` filter matches are applied.
-pub fn injectZxInjections(allocator: Allocator, page: *Component, pathname: []const u8) void {
-    injections.inject(allocator, page, pathname);
+pub fn injectZxInjections(allocator: Allocator, io: std.Io, page: *Component, pathname: []const u8) void {
+    injections.inject(allocator, io, page, pathname);
 }
 
 /// Inject the DevServer client script (`/.well-known/_zx/devscript.js`) into `<body>`.
-pub fn injectDevScript(allocator: Allocator, page: *Component) void {
-    const body_element = tree.getElementByName(page, allocator, .body) orelse return;
+pub fn injectDevScript(allocator: Allocator, io: std.Io, page: *Component) void {
+    const body_element = tree.getElementByName(page, allocator, io, .body) orelse return;
     const attributes = allocator.alloc(zx.Element.Attribute, 1) catch return;
     attributes[0] = .{ .name = "src", .value = "/.well-known/_zx/devscript.js" };
     const script_element = Component{ .element = .{ .tag = .script, .attributes = attributes } };

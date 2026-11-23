@@ -22,6 +22,8 @@ pub const Wasm = Server.Wasm;
 server: Server = .failing,
 alloc: std.mem.Allocator = undefined,
 config: Config = .{},
+// The `Io` passed to `init`, on native servers.
+io: ?std.Io = null,
 
 default_create: ?*const fn (userdata: ?*anyopaque) anyerror!Server = null,
 default_destroy: ?*const fn (userdata: ?*anyopaque, alloc: std.mem.Allocator) void = null,
@@ -84,6 +86,7 @@ pub fn init(inita: zx.Init, process_io: anytype, alloc: std.mem.Allocator, confi
                     .server = .failing,
                     .alloc = alloc,
                     .config = cfg,
+                    .io = io_value,
                     .default_create = &State.create,
                     .default_destroy = &State.destroy,
                     .default_userdata = state,
@@ -103,7 +106,7 @@ pub fn start(self: *App) !void {
                 const app: *App = @ptrCast(@alignCast(ctx));
                 app.server.stop();
             }
-        }.call);
+        }.call, self.io);
         defer disarmSignal();
         try self.server.start();
         return;
@@ -149,24 +152,32 @@ fn clearDefaultFactory(self: *App) void {
     self.default_userdata = null;
 }
 
-pub fn armSignal(instance: *anyopaque, on_stop: *const fn (ctx: *anyopaque) void) void {
+pub fn armSignal(instance: *anyopaque, on_stop: *const fn (ctx: *anyopaque) void, io: ?std.Io) void {
     stop_ctx = instance;
     stop_fn = on_stop;
     stopping.store(false, .release);
     sig.install(onSignal) catch {};
-    if (stop_on_eof) if (std.Thread.spawn(.{}, stopOnStdinEof, .{})) |t| t.detach() else |_| {};
+    if (stop_on_eof) if (io) |i| {
+        eof_watch = .{ .io = i, .future = i.concurrent(stopOnStdinEof, .{i}) catch return };
+    };
 }
 
 /// `zx dev` closes our stdin to stop us: unlike signals, that works on Windows.
-fn stopOnStdinEof() void {
-    // Not `io()`: that is torn down in `release` while this thread may still block.
-    const stdin_io = std.Io.Threaded.global_single_threaded.io();
+fn stopOnStdinEof(io: std.Io) void {
     var buf: [256]u8 = undefined;
-    while (true) _ = std.Io.File.stdin().readStreaming(stdin_io, &.{&buf}) catch break;
+    while (true) _ = std.Io.File.stdin().readStreaming(io, &.{&buf}) catch |err| {
+        if (err == error.Canceled) return;
+        break;
+    };
     onSignal(.TERM);
 }
 
 pub fn disarmSignal() void {
+    // Cancel before `release` tears the `Io` down.
+    if (eof_watch) |*w| {
+        w.future.cancel(w.io);
+        eof_watch = null;
+    }
     sig.uninstall();
     stop_ctx = null;
     stop_fn = null;
@@ -186,6 +197,7 @@ pub fn assertNoLeaks() void {
 }
 
 var stop_on_eof = false;
+var eof_watch: ?struct { io: std.Io, future: std.Io.Future(void) } = null;
 var stopping: std.atomic.Value(bool) = .init(false);
 var stop_ctx: ?*anyopaque = null;
 var stop_fn: ?*const fn (ctx: *anyopaque) void = null;

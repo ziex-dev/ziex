@@ -34,7 +34,12 @@ fn LinearMap(comptime V: type) type {
     };
 }
 
-var mu: std.Io.Mutex = .init;
+// Spin lock: critical sections are short and never do I/O, so it works under any `Io`.
+var mu: std.atomic.Mutex = .unlocked;
+
+fn lock() void {
+    while (!mu.tryLock()) std.atomic.spinLoopHint();
+}
 var event_map: LinearMap(ServerEventFn) = .{};
 
 const ActionEntry = struct {
@@ -47,8 +52,8 @@ var action_entries: std.ArrayList(ActionEntry) = .empty;
 
 /// Register an action handler for a route and return its stable action ID.
 pub fn register(route_path: []const u8, preferred_action_id: u32, action_fn: ActionFn) u32 {
-    mu.lockUncancelable(std.Io.Threaded.global_single_threaded.io());
-    defer mu.unlock(std.Io.Threaded.global_single_threaded.io());
+    lock();
+    defer mu.unlock();
 
     if (preferred_action_id != 0) {
         for (action_entries.items) |*entry| {
@@ -83,8 +88,8 @@ pub fn register(route_path: []const u8, preferred_action_id: u32, action_fn: Act
 }
 
 pub fn registerEvent(route_path: []const u8, handler_id: u32, event_fn: ServerEventFn) void {
-    mu.lockUncancelable(std.Io.Threaded.global_single_threaded.io());
-    defer mu.unlock(std.Io.Threaded.global_single_threaded.io());
+    lock();
+    defer mu.unlock();
 
     // Composite key: "route_path:handler_id"
     var buf: [1024]u8 = undefined;
@@ -104,8 +109,8 @@ pub fn registerEvent(route_path: []const u8, handler_id: u32, event_fn: ServerEv
 }
 
 pub fn getEvent(route_path: []const u8, handler_id: u32) ?ServerEventFn {
-    mu.lockUncancelable(std.Io.Threaded.global_single_threaded.io());
-    defer mu.unlock(std.Io.Threaded.global_single_threaded.io());
+    lock();
+    defer mu.unlock();
 
     var buf: [1024]u8 = undefined;
     const key = std.fmt.bufPrint(&buf, "{s}:{d}", .{ route_path, handler_id }) catch return null;
@@ -115,8 +120,8 @@ pub fn getEvent(route_path: []const u8, handler_id: u32) ?ServerEventFn {
 
 /// Look up a registered action handler by route path and action ID.
 pub fn get(route_path: []const u8, action_id: u32) ?ActionFn {
-    mu.lockUncancelable(std.Io.Threaded.global_single_threaded.io());
-    defer mu.unlock(std.Io.Threaded.global_single_threaded.io());
+    lock();
+    defer mu.unlock();
 
     for (action_entries.items) |entry| {
         if (entry.action_id == action_id and std.mem.eql(u8, entry.route_path, route_path)) {

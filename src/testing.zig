@@ -292,7 +292,7 @@ fn fetchWasm(io: std.Io, arena: Allocator, opts: FetchOptions) !FetchResult {
         .component => |c| {
             var page = c.component;
             var aw: std.Io.Writer.Allocating = .init(arena);
-            zx.App.Server.Handler.renderHtmlDocument(&aw.writer, &page, app_opts.app_base_path) catch {};
+            zx.App.Server.Handler.renderHtmlDocument(io, &aw.writer, &page, app_opts.app_base_path) catch {};
             conn.deferred_body = aw.written();
         },
         .not_found => |nf| {
@@ -300,7 +300,7 @@ fn fetchWasm(io: std.Io, arena: Allocator, opts: FetchOptions) !FetchResult {
             if (nf.component) |cmp| {
                 var page = cmp;
                 var aw: std.Io.Writer.Allocating = .init(arena);
-                zx.App.Server.Handler.renderHtmlDocument(&aw.writer, &page, app_opts.app_base_path) catch {};
+                zx.App.Server.Handler.renderHtmlDocument(io, &aw.writer, &page, app_opts.app_base_path) catch {};
                 conn.deferred_body = aw.written();
             } else {
                 conn.deferred_body = "404 Not Found";

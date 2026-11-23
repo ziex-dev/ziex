@@ -64,7 +64,7 @@ fn slowPathRender(
     var page_component = page_fn(pagectx, app_ptr, state_ptr) catch |err| return err;
     var discard = std.Io.Writer.Allocating.init(arena);
     render.current_route_path = route_path;
-    page_component.render(&discard.writer, .{ .base_path = base_path }) catch {};
+    page_component.render(&discard.writer, .{ .base_path = base_path, .io = pagectx.io }) catch {};
     render.current_route_path = null;
     return null;
 }

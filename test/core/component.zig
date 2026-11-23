@@ -58,7 +58,7 @@ test "fn > contexted call" {
     try testing.expectEqualStrings("owner-1", ctx._internal.component_id);
 }
 
-test "island > cmp builds hydrate_id + zxon props + ssr children" {
+test "island > cmp builds hydrate_id + zxon props, ssr runs at render" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -77,7 +77,10 @@ test "island > cmp builds hydrate_id + zxon props + ssr children" {
     try testing.expectEqualStrings("hid123", cf.island.?.id);
     try testing.expectEqualStrings("WithCtx", cf.name);
     try testing.expectEqualStrings("[\"Main Counter\",5]", cf.island.?.props.?);
-    try testing.expectEqualStrings("Main Counter", cf.island.?.children.text);
+
+    var aw = std.Io.Writer.Allocating.init(a);
+    try Component.render(island, &aw.writer, .{ .io = std.testing.io });
+    try testing.expectEqualStrings("<!--$hid123 [\"Main Counter\",5]-->Main Counter<!--/$hid123-->", aw.written());
 }
 
 test "island > render emits comment markers and ssr body" {
