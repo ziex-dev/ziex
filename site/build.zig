@@ -2,7 +2,6 @@ const std = @import("std");
 const ziex = @import("ziex");
 
 const build_zon = @import("build.zig.zon");
-const ziex_version = 16; // Increment this when site js changes
 
 const ServerBackend = enum {
     std,
@@ -425,8 +424,43 @@ pub fn build(b: *std.Build) !void {
     }
 }
 
+// Cache-busting id: hash of the sources packed into / compiled for the playground and client assets
 fn assetId(b: *std.Build, _: std.builtin.Optimize) []const u8 {
-    return b.allocator.print("{x}", .{99999999 + ziex_version}) catch "0";
+    const io = b.graph.io;
+    const dirs = [_][]const u8{ "../src", "../vendor/jsz/src", "../pkg/ziex/src" };
+    var hasher = std.hash.Wyhash.init(0);
+    for (dirs) |sub| {
+        var dir = b.root.openDir(io, sub, .{ .iterate = true }) catch |err|
+            std.debug.panic("unable to open {s}: {t}", .{ sub, err });
+        defer dir.close(io);
+        b.dependOnDirectoryContents(b.path(sub));
+
+        var files: std.ArrayList([]const u8) = .empty;
+        var walker = dir.walk(b.allocator) catch @panic("OOM");
+        defer walker.deinit();
+        while (walker.next(io) catch |err| std.debug.panic("unable to walk {s}: {t}", .{ sub, err })) |entry| switch (entry.kind) {
+            .directory => b.dependOnDirectoryContents(b.path(b.pathJoin(&.{ sub, entry.path }))),
+            .file => files.append(b.allocator, b.dupe(entry.path)) catch @panic("OOM"),
+            else => {},
+        };
+        // Walk order is fs-dependent
+        std.mem.sort([]const u8, files.items, {}, struct {
+            fn less(_: void, a: []const u8, c: []const u8) bool {
+                return std.mem.order(u8, a, c) == .lt;
+            }
+        }.less);
+
+        for (files.items) |rel| {
+            const data = dir.readFileAlloc(io, rel, b.allocator, .unlimited) catch |err|
+                std.debug.panic("unable to read {s}/{s}: {t}", .{ sub, rel, err });
+            b.dependOnFileContents(b.path(b.pathJoin(&.{ sub, rel })));
+            hasher.update(rel);
+            hasher.update(&.{0});
+            hasher.update(data);
+            b.allocator.free(data);
+        }
+    }
+    return b.fmt("{x:0>8}", .{@as(u32, @truncate(hasher.final()))});
 }
 
 fn addGeistFontsModule(b: *std.Build) *std.Build.Module {
