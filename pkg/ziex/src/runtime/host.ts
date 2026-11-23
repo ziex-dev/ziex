@@ -36,6 +36,7 @@ export const ops = [
     "db_all",
     "db_values",
     "env_call",
+    "email_send",
 ] as const;
 
 export type Op = (typeof ops)[number];

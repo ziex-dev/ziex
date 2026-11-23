@@ -25,6 +25,7 @@ test {
     _ = @import("core/kv.zig");
     _ = @import("core/ai.zig");
     _ = @import("core/flag.zig");
+    _ = @import("core/email.zig");
     _ = @import("core/auth.zig");
     _ = @import("core/mcp.zig");
     _ = @import("core/stream.zig");

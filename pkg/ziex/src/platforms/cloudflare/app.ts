@@ -30,6 +30,7 @@ export function stateful<Env>(app: Ziex<Env>, options: StatefulOptions<Env>) {
     return createStatefulFetch(host.module, {
         kv: (env) => host.kv(env as Env) ?? defaultKV(),
         db: (env) => host.db(env as Env) ?? {},
+        email: (env) => host.email(env as Env),
         imports: host.imports,
     });
 }

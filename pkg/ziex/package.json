@@ -17,7 +17,8 @@
     "./aws-lambda": "./platforms/aws-lambda/index.js",
     "./vercel": "./platforms/vercel/index.js",
     "./kv": "./runtime/kv.js",
-    "./db": "./runtime/db.js"
+    "./db": "./runtime/db.js",
+    "./email": "./runtime/email.js"
   },
   "homepage": "https://ziex.dev",
   "repository": {

@@ -4,6 +4,7 @@ import { defaultKV, instantiate, isProcExit, type ImportsFactory } from "../../r
 import { hasJspi, promising } from "../../runtime/jspi";
 import type { KVNamespace } from "../../runtime/kv";
 import type { Database } from "../../runtime/db";
+import type { EmailBinding } from "../../runtime/email";
 
 type ConnState = WsState & { topics: Set<string> };
 
@@ -64,6 +65,7 @@ export function createStatefulFetch(
     options?: {
         kv?: (env: any) => Record<string, KVNamespace>;
         db?: (env: any) => Record<string, Database>;
+        email?: (env: any) => Record<string, EmailBinding> | undefined;
         imports?: ImportsFactory;
     },
 ) {
@@ -95,6 +97,7 @@ export function createStatefulFetch(
                 env: this.env,
                 kv: options?.kv?.(this.env) ?? defaultKV(),
                 db: options?.db?.(this.env) ?? {},
+                email: options?.email?.(this.env),
                 imports: options?.imports,
                 http: newHttpState(),
                 ws: conn,

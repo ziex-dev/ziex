@@ -2,6 +2,7 @@ import { run } from "./runtime";
 import type { StickyNamespace } from "./runtime";
 import type { KVNamespace } from "./runtime/kv";
 import type { Database } from "./runtime/db";
+import type { EmailBinding } from "./runtime/email";
 import type { WASI } from "./runtime/wasi";
 
 /**
@@ -74,6 +75,11 @@ type DBKey<Env> = {
     [K in keyof Env]-?: Env[K] extends { prepare(query: string): any } ? K : never;
 }[keyof Env];
 
+/** Keys of `Env` with an email `send()` binding (e.g. Cloudflare `send_email`). */
+type EmailKey<Env> = {
+    [K in keyof Env]-?: Env[K] extends { send(message: any): any } ? K : never;
+}[keyof Env];
+
 export type ZiexOptions<Env = Record<string, unknown>> = {
     /** WASM module - accepts any {@link WasmInput}. Resolved and cached on first request. */
     module: WasmInput;
@@ -104,6 +110,16 @@ export type ZiexOptions<Env = Record<string, unknown>> = {
      * - `{ default: "DB", analytics: "ANALYTICS_DB" }` maps multiple bindings.
      */
     db?: DBKey<Env> | Record<string, DBKey<Env>>;
+    /**
+     * Email bindings behind `zx.email` with the wasm provider. Same shape as `kv`:
+     *
+     * - `"EMAIL"` maps `env.EMAIL` to the `"default"` binding.
+     * - `{ default: "EMAIL", alerts: "ALERTS_EMAIL" }` maps multiple bindings.
+     *
+     * A Cloudflare `send_email` binding works as is; elsewhere provide any
+     * {@link EmailBinding} on `env`.
+     */
+    email?: EmailKey<Env> | Record<string, EmailKey<Env>>;
     /**
      * Keep initialized instances alive and serve later requests on them instead of
      * instantiating the module per request. Needs JSPI and a module that exports
@@ -191,6 +207,7 @@ export class Ziex<Env = Record<string, unknown>> {
             imports: this.options.imports,
             kv: (env: Env) => this.resolveKV(env),
             db: (env: Env) => this.resolveDB(env),
+            email: (env: Env) => this.resolveEmail(env),
         };
     }
 
@@ -220,6 +237,19 @@ export class Ziex<Env = Record<string, unknown>> {
         return { default: env[db as keyof Env] as unknown as Database };
     }
 
+    private resolveEmail(env: Env): Record<string, EmailBinding> | undefined {
+        const { email } = this.options;
+        if (email === undefined) return undefined;
+        if (typeof email === "object" && email !== null) {
+            const result: Record<string, EmailBinding> = {};
+            for (const [name, key] of Object.entries(email)) {
+                result[name] = env[key as keyof Env] as unknown as EmailBinding;
+            }
+            return result;
+        }
+        return { default: env[email as keyof Env] as unknown as EmailBinding };
+    }
+
     /**
      * Fetch handler called by the runtime on every request.
      *
@@ -243,6 +273,7 @@ export class Ziex<Env = Record<string, unknown>> {
             imports,
             kv: this.resolveKV(env),
             db: this.resolveDB(env),
+            email: this.resolveEmail(env),
             sticky:
                 sticky !== undefined
                     ? (env[sticky as keyof Env] as unknown as StickyNamespace)

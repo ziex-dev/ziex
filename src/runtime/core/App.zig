@@ -221,6 +221,11 @@ const FlagProvider = if (app_opts.feat_flag_server) std.meta.stringToEnum(zx.Fla
 var flag_provider: FlagProvider = undefined;
 var flag_env: std.heap.ArenaAllocator = undefined;
 
+var email_resend: zx.Email.Resend = undefined;
+var email_wasm: zx.Email.Wasm = undefined;
+var email_memory: ?zx.Email.Memory = null;
+var email_env: std.heap.ArenaAllocator = undefined;
+
 const Resolved = struct {
     datadir: ?[]const u8 = null,
     staticdir: ?[]const u8 = null,
@@ -297,6 +302,11 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
                 if (os == .wasi) initFlag(alloc, inita);
             }
 
+            // Feature ==> zx.email
+            if (comptime app_opts.feat_email_server) {
+                if (os == .wasi) initEmail(alloc, inita);
+            }
+
             return cfg;
         },
         else => {},
@@ -339,6 +349,9 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
 
     // Feature ==> zx.flag
     if (comptime app_opts.feat_flag_server) initFlag(alloc, inita);
+
+    // Feature ==> zx.email
+    if (comptime app_opts.feat_email_server) initEmail(alloc, inita);
 
     resolved.datadir = datadir;
     resolved.staticdir = staticdir;
@@ -387,6 +400,40 @@ fn initFlag(alloc: std.mem.Allocator, inita: zx.Init) void {
     zx.flag = flag_provider.flag();
 }
 
+fn initEmail(alloc: std.mem.Allocator, inita: zx.Init) void {
+    email_env = .init(alloc);
+    const env = email_env.allocator();
+    const provider = comptime std.meta.stringToEnum(zx.Email.Provider, app_opts.email_provider).?;
+    zx.email = switch (provider) {
+        .resend => blk: {
+            email_resend = .{
+                .io = inita.io,
+                .api_key = envVar(env, inita, zx.Email.Resend.env_api_key),
+                .base_url = envVar(env, inita, zx.Email.Resend.env_base_url) orelse app_opts.email_base_url orelse zx.Email.Resend.default_base_url,
+            };
+            break :blk email_resend.email();
+        },
+        // No host binding natively, so messages are kept and logged instead.
+        .wasm => if (platform.os == .wasi) blk: {
+            email_wasm = .{ .binding = app_opts.email_binding orelse "default" };
+            break :blk email_wasm.email();
+        } else initEmailMemory(alloc, inita),
+        .memory => initEmailMemory(alloc, inita),
+    };
+
+    const from = envVar(env, inita, "EMAIL_FROM") orelse app_opts.email_from orelse return;
+    zx.email.from = zx.Email.Address.parse(from) catch {
+        std.log.scoped(.zx_email).warn("invalid sender address: {s}", .{from});
+        return;
+    };
+}
+
+fn initEmailMemory(alloc: std.mem.Allocator, inita: zx.Init) zx.Email {
+    email_memory = .init(alloc, inita.io);
+    email_memory.?.log = true;
+    return email_memory.?.email();
+}
+
 fn freeResolved(alloc: std.mem.Allocator) void {
     if (resolved.host) |s| alloc.free(s);
     resolved.host = null;
@@ -424,6 +471,14 @@ fn freeResolved(alloc: std.mem.Allocator) void {
     if (comptime app_opts.feat_flag_server) {
         zx.flag = .failing;
         flag_env.deinit();
+    }
+
+    // Feature ==> zx.email
+    if (comptime app_opts.feat_email_server) {
+        zx.email = .failing;
+        if (email_memory) |*m| m.deinit();
+        email_memory = null;
+        email_env.deinit();
     }
 
     if (resolved.staticdir) |s| alloc.free(s);

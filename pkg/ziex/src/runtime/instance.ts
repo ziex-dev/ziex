@@ -5,6 +5,7 @@ import { createIoHandlers } from "./io";
 import { createKvHandlers } from "./kv/extern";
 import { createDbHandlers } from "./db/extern";
 import { createEnvHandlers } from "./env";
+import { createEmailHandlers, type EmailBinding } from "./email";
 import { createHostImports, type Handlers } from "./host";
 import { createWasiImports, ProcExit, type WASI } from "./wasi";
 import { createHttpHandlers, type HttpState } from "./http";
@@ -20,6 +21,7 @@ export type Bindings = {
     env?: unknown;
     kv: Record<string, KVNamespace>;
     db: Record<string, Database>;
+    email?: Record<string, EmailBinding>;
     imports?: ImportsFactory;
     wasi?: WASI;
 };
@@ -82,6 +84,7 @@ export function instantiate(opts: InstantiateOptions): Instance {
         ...createHttpHandlers(memory, opts.http),
         ...createFetchHandlers(memory),
         ...createEnvHandlers(opts.getEnv ?? (() => opts.env), memory, allocRef),
+        ...createEmailHandlers(opts.email, memory, allocRef),
     };
     if (typeof __FEAT_KV_SERVER__ === "undefined" || __FEAT_KV_SERVER__) {
         Object.assign(handlers, createKvHandlers(opts.kv, memory, allocRef));

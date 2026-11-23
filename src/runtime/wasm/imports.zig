@@ -38,6 +38,7 @@ pub const Op = enum(u32) {
     db_all,
     db_values,
     env_call,
+    email_send,
 };
 
 // Returned by hosts that don't implement an op.

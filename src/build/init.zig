@@ -728,6 +728,12 @@ fn addAppOpts(b: *std.Build, params: AppOptsParams) *std.Build.Step.Options {
     app_opts.addOption(?[]const u8, "flag_base_url", flag.base_url);
     app_opts.addOption(?[]const u8, "flag_app_id", flag.app_id);
     app_opts.addOption(?[]const u8, "flag_binding", flag.binding);
+    const email: InitOptions.AppOptions.FeatureOptions.EmailOptions.EmailServerOptions = if (params.features.email) |e| e.server orelse .{} else .{};
+    app_opts.addOption(bool, "feat_email_server", if (params.features.email) |e| e.server != null else false);
+    app_opts.addOption([]const u8, "email_provider", @tagName(email.provider));
+    app_opts.addOption(?[]const u8, "email_from", email.from);
+    app_opts.addOption(?[]const u8, "email_base_url", email.base_url);
+    app_opts.addOption(?[]const u8, "email_binding", email.binding);
     return app_opts;
 }
 

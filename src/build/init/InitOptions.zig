@@ -164,6 +164,27 @@ pub const AppOptions = struct {
             server: ?FlagServerOptions = null,
         };
 
+        // `zx.email`. Resend reads `RESEND_API_KEY`; `EMAIL_FROM` overrides `from`.
+        // `.wasm` sends through the edge host's email binding (e.g. `new Ziex({ email: "EMAIL" })`)
+        // and keeps messages in memory, logged, on native.
+        pub const EmailOptions = struct {
+            pub const Provider = enum { resend, wasm, memory };
+            pub const EmailServerOptions = struct {
+                pub const enabled: EmailServerOptions = .{};
+
+                provider: Provider = .resend,
+                // Default sender, e.g. `Acme <hello@acme.com>`.
+                from: ?[]const u8 = null,
+                // Resend only.
+                base_url: ?[]const u8 = null,
+                // Wasm only: the host binding name.
+                binding: ?[]const u8 = null,
+            };
+            pub const enabled: EmailOptions = .{ .server = .enabled };
+
+            server: ?EmailServerOptions = null,
+        };
+
         pub const default = FeatureOptions{};
 
         sqlite: ?SqliteOptions = null,
@@ -172,6 +193,7 @@ pub const AppOptions = struct {
         cache: ?CacheOptions = null,
         ai: ?AiOptions = null,
         flag: ?FlagOptions = null,
+        email: ?EmailOptions = null,
     };
 
     /// Path to the Ziex app source directory.
