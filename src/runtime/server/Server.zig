@@ -5,6 +5,7 @@ const app = @import("app");
 const zx = @import("../../root.zig");
 const constants = @import("../core/constants.zig");
 const AppConfig = @import("../core/App/Config.zig");
+const validate = @import("validate.zig");
 
 const Allocator = std.mem.Allocator;
 const Component = zx.Component;
@@ -697,6 +698,7 @@ pub const ServerApp = struct {
 const server_routes = blk: {
     var routes: [app.routes.len]ServerApp.Route = undefined;
     for (app.routes, 0..) |route, i| {
+        validateRoute(route);
         const rendering = resolveRendering(route.path, route);
         // Served from the static dir: drop the handlers (and all they pull in).
         const omit = @import("app_opts").omit_prerendered and rendering.prerender;
@@ -724,6 +726,16 @@ const server_routes = blk: {
 
     break :blk routes;
 };
+
+// Signature checks with route-specific messages (see `validate.zig`).
+fn validateRoute(comptime route: zx.App.Route) void {
+    if (route.page) |m| validate.page(route.path, m);
+    if (route.layout) |m| validate.layout(route.path, m);
+    if (route.notfound) |m| validate.notfound(route.path, m);
+    if (route.@"error") |m| validate.@"error"(route.path, m);
+    if (route.route) |m| validate.route(route.path, m);
+    if (route.proxy) |m| validate.proxy(route.path, m);
+}
 
 fn withoutStatic(opts: anytype, omit: bool) @TypeOf(opts) {
     var o = opts orelse return null;

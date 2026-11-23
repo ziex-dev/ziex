@@ -656,7 +656,7 @@ fn buildNotificationDiagnostics(
             .kind = switch (d.kind) {
                 .@"error" => .@"error",
                 .warning => .warning,
-                .note => .note,
+                .note, .reference => .note,
             },
             .message = d.message,
             .source = null,

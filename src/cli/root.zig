@@ -118,6 +118,10 @@ pub const build: Command = .{
             .default_value = false,
             .help = "Pre-render every route to static HTML in --outdir instead of building a server (can't be combined with --target)",
         }),
+        Argument.init(.check, bool, .{
+            .default_value = false,
+            .help = "Only type-check the app (server and client), reporting errors without emitting binaries",
+        }),
         Argument.init(.outdir, []const u8, .{
             .default_value = "",
             .short = 'o',

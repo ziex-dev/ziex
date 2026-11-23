@@ -9,6 +9,7 @@ const Diagnostics = @import("dev/Diagnostics.zig");
 const tui = @import("../tui/main.zig");
 const cli_args = @import("root.zig");
 const static_cmd = @import("static.zig");
+const check = @import("shared/check.zig");
 
 const CommandContext = context.CommandContext;
 const Colors = tui.Colors;
@@ -22,6 +23,14 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     if (!args.static and args.outdir.len > 0) {
         std.log.err("--outdir only applies to --static builds", .{});
         std.process.exit(1);
+    }
+
+    if (args.check) {
+        if (args.static or args.prerender) {
+            std.log.err("--check can't be combined with --static or --prerender", .{});
+            std.process.exit(1);
+        }
+        return runCheck(ctx, args);
     }
 
     if (args.static) {
@@ -131,4 +140,45 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     }
 
     try spinner.succeed("{s}Built {s}({d:.2}s){s}", .{ Colors.green, Colors.gray, elapsed_s, Colors.reset });
+}
+
+fn runCheck(ctx: CommandContext, args: anytype) !void {
+    const io = ctx.app.io;
+    const allocator = ctx.allocator;
+
+    var build_args = std.ArrayList([]const u8).empty;
+    defer build_args.deinit(allocator);
+    const target_arg = if (args.target.len > 0) try allocator.print("-Dtarget={s}", .{args.target}) else null;
+    defer if (target_arg) |t| allocator.free(t);
+    if (target_arg) |t| try build_args.append(allocator, t);
+    var extra = std.mem.tokenizeScalar(u8, args.@"build-args", ' ');
+    while (extra.next()) |arg| try build_args.append(allocator, arg);
+
+    const root = try std.process.currentPathAlloc(io, allocator);
+    defer allocator.free(root);
+
+    var spinner = ctx.spinner;
+    spinner.updateStyle(.{ .frames = tui.Spinner.SpinnerStyles.dots2, .refresh_rate_ms = 80 });
+    try spinner.start("{s}{s}Checking...{s}", .{ Colors.cyan, Colors.bold, Colors.reset });
+    const start_ts = std.Io.Timestamp.now(io, .awake);
+
+    var result = check.run(io, allocator, .{
+        .root = root,
+        .zig_path = args.@"zig-path",
+        .environ_map = ctx.app.environ_map,
+        .build_args = build_args.items,
+    }) catch |err| util.exitZigSpawnFailed(args.@"zig-path", err);
+    defer result.deinit();
+
+    const elapsed_ms: u64 = @intCast(start_ts.durationTo(std.Io.Timestamp.now(io, .awake)).toMilliseconds());
+    const elapsed_s = @as(f64, @floatFromInt(elapsed_ms)) / 1000.0;
+
+    if (result.failed()) {
+        try spinner.fail("{s}Check failed {s}({d:.2}s){s}", .{ Colors.red, Colors.gray, elapsed_s, Colors.reset });
+        const output = try Diagnostics.formatOxlint(io, allocator, result.diagnostics);
+        defer allocator.free(output);
+        try ctx.writer.writeAll(output);
+        std.process.exit(1);
+    }
+    try spinner.succeed("{s}No errors {s}({d:.2}s){s}", .{ Colors.green, Colors.gray, elapsed_s, Colors.reset });
 }

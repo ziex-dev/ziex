@@ -9,11 +9,13 @@ const Colors = tui.Colors;
 const log = std.log.scoped(.diagnostics);
 const sourcemap = lang.sourcemap;
 
+/// Also drops reference-trace entries, which only serve `relocate`.
 pub fn dedupe(allocator: std.mem.Allocator, diagnostics: []Builder.Diagnostic) []Builder.Diagnostic {
     var write: usize = 0;
     for (0..diagnostics.len) |read| {
-        var is_dup = false;
+        var is_dup = diagnostics[read].kind == .reference;
         for (0..write) |prev| {
+            if (is_dup) break;
             if (diagnostics[read].line == diagnostics[prev].line and
                 diagnostics[read].col == diagnostics[prev].col and
                 diagnostics[read].kind == diagnostics[prev].kind and
@@ -59,6 +61,109 @@ pub fn dedupe(allocator: std.mem.Allocator, diagnostics: []Builder.Diagnostic) [
 
 /// Remap diagnostics from generated .zig files back to original .zx source files
 /// using inlined position maps. Modifies diagnostics in-place (replaces file/line/col).
+/// Moves errors raised inside framework code (route validation, the server
+/// handler registry) onto user code: the `module.Decl` a message names, else the
+/// first note or reference-trace entry inside `root`. Run before `remap`.
+pub fn relocate(io: std.Io, allocator: std.mem.Allocator, root: []const u8, diagnostics: []Builder.Diagnostic) void {
+    for (diagnostics, 0..) |*d, i| {
+        if (d.kind != .@"error" or isProjectPath(root, d.file)) continue;
+        const rest = diagnostics[i + 1 ..];
+        const end = for (rest, 0..) |next, j| {
+            if (next.kind == .@"error" or next.kind == .warning) break j;
+        } else rest.len;
+        const trail = rest[0..end];
+
+        if (declLocation(io, allocator, root, d.message)) |loc| {
+            moveTo(allocator, d, loc.file, loc.line, loc.col);
+        } else for (trail) |next| {
+            if (!isProjectPath(root, next.file)) continue;
+            const file = allocator.dupe(u8, next.file) catch break;
+            moveTo(allocator, d, file, next.line, next.col);
+            break;
+        } else continue;
+
+        // Its notes point into framework internals; `dedupe` drops `.reference`.
+        for (trail) |*note| note.kind = .reference;
+    }
+}
+
+fn moveTo(allocator: std.mem.Allocator, d: *Builder.Diagnostic, file: []u8, line: u32, col: u32) void {
+    allocator.free(d.file);
+    d.file = file;
+    d.line = line;
+    d.col = col;
+    if (d.source_line) |sl| allocator.free(sl);
+    d.source_line = null;
+    if (d.caret_line) |cl| allocator.free(cl);
+    d.caret_line = null;
+}
+
+/// Inside the build root, excluding dependencies and build-system outputs.
+fn isProjectPath(root: []const u8, file: []const u8) bool {
+    if (file.len == 0) return false;
+    const rel = if (std.fs.path.isAbsolute(file)) blk: {
+        if (!std.mem.startsWith(u8, file, root) or file.len <= root.len) return false;
+        if (file[root.len] != '/' and file[root.len] != '\\') return false;
+        break :blk file[root.len + 1 ..];
+    } else file;
+    if (std.mem.startsWith(u8, rel, "..")) return false;
+    if (std.mem.indexOf(u8, rel, "zig-pkg") != null) return false;
+    return !std.mem.startsWith(u8, rel, ".zig-cache/o/");
+}
+
+const DeclLocation = struct { file: []u8, line: u32, col: u32 };
+
+/// Route validation names `module.Decl` in its first backticked token, e.g.
+/// `pages.about.page.Page` -> `app/pages/about/page.zx`, at the `Page` declaration.
+fn declLocation(io: std.Io, allocator: std.mem.Allocator, root: []const u8, message: []const u8) ?DeclLocation {
+    const open = std.mem.indexOfScalar(u8, message, '`') orelse return null;
+    const close = std.mem.indexOfScalarPos(u8, message, open + 1, '`') orelse return null;
+    const token = message[open + 1 .. close];
+    const dot = std.mem.lastIndexOfScalar(u8, token, '.') orelse return null;
+    for (token) |c| if (!std.ascii.isAlphanumeric(c) and c != '_' and c != '.' and c != '-') return null;
+    const module = token[0..dot];
+    const decl = token[dot + 1 ..];
+    if (module.len == 0 or decl.len == 0) return null;
+
+    for ([_][]const u8{ ".zx", ".zig", ".mdzx" }) |ext| {
+        const rel = std.mem.concat(allocator, u8, &.{ "app/", module, ext }) catch return null;
+        std.mem.replaceScalar(u8, rel[4 .. rel.len - ext.len], '.', '/');
+        const abs = std.fs.path.join(allocator, &.{ root, rel }) catch {
+            allocator.free(rel);
+            return null;
+        };
+        defer allocator.free(abs);
+        const source = std.Io.Dir.cwd().readFileAlloc(io, abs, allocator, .limited(16 << 20)) catch {
+            allocator.free(rel);
+            continue;
+        };
+        defer allocator.free(source);
+        const pos = declPosition(source, decl);
+        return .{ .file = rel, .line = pos[0], .col = pos[1] };
+    }
+    return null;
+}
+
+// 1-based line/column of `fn decl(` or `const decl`, else the file start.
+fn declPosition(source: []const u8, decl: []const u8) struct { u32, u32 } {
+    var lines = std.mem.splitScalar(u8, source, '\n');
+    var line: u32 = 1;
+    while (lines.next()) |text| : (line += 1) {
+        for ([_][]const u8{ "fn ", "const " }) |kw| {
+            var from: usize = 0;
+            while (std.mem.indexOfPos(u8, text, from, kw)) |at| {
+                from = at + kw.len;
+                const name_at = at + kw.len;
+                if (!std.mem.startsWith(u8, text[name_at..], decl)) continue;
+                const after = name_at + decl.len;
+                if (after < text.len and (std.ascii.isAlphanumeric(text[after]) or text[after] == '_')) continue;
+                return .{ line, @intCast(name_at + 1) };
+            }
+        }
+    }
+    return .{ 1, 1 };
+}
+
 pub fn remap(allocator: std.mem.Allocator, diagnostics: []Builder.Diagnostic, options: RemapOptions) void {
     for (diagnostics) |*d| {
         remapSingle(allocator, d, options) catch |err| {
@@ -344,7 +449,7 @@ pub fn toJson(io: std.Io, allocator: std.mem.Allocator, diagnostics: []const Bui
         const kind_str: []const u8 = switch (d.kind) {
             .@"error" => "error",
             .warning => "warning",
-            .note => "note",
+            .note, .reference => "note",
         };
         try buf.appendSlice(allocator, kind_str);
         try buf.appendSlice(allocator, "\",\"message\":\"");
@@ -559,12 +664,12 @@ pub fn formatOxlint(io: std.Io, allocator: std.mem.Allocator, diagnostics: []con
             // .warning => Colors.yellow ++ "⚠" ++ Colors.reset,
             .warning => Colors.yellow ++ "" ++ Colors.reset,
             // .note => Colors.cyan ++ "ℹ" ++ Colors.reset,
-            .note => Colors.cyan ++ "" ++ Colors.reset,
+            .note, .reference => Colors.cyan ++ "" ++ Colors.reset,
         };
         const kind_text = switch (d.kind) {
             .@"error" => Colors.red ++ Colors.bold ++ "error" ++ Colors.reset,
             .warning => Colors.yellow ++ Colors.bold ++ "warning" ++ Colors.reset,
-            .note => Colors.cyan ++ Colors.bold ++ "note" ++ Colors.reset,
+            .note, .reference => Colors.cyan ++ Colors.bold ++ "note" ++ Colors.reset,
         };
 
         // Header: Icon kind: message

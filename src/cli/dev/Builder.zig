@@ -27,7 +27,8 @@ pub const VTable = struct {
     child: *const fn (userdata: ?*anyopaque) *std.process.Child,
 };
 
-pub const DiagKind = enum { @"error", warning, note };
+/// `reference`: a reference-trace entry of the preceding error (not rendered; used to locate user code).
+pub const DiagKind = enum { @"error", warning, note, reference };
 
 pub const Diagnostic = struct {
     file: []const u8,
@@ -90,6 +91,8 @@ pub const InitOptions = struct {
     argv: []const []const u8,
     environ_map: ?*std.process.Environ.Map = null,
     watch: bool = true,
+    /// Build root; the current directory when null.
+    cwd: ?[]const u8 = null,
 };
 
 pub fn deinit(self: Builder, io: std.Io) void {
@@ -125,7 +128,7 @@ pub fn formatDiagnostics(allocator: std.mem.Allocator, diagnostics: []const Diag
         const kind_str: []const u8 = switch (d.kind) {
             .@"error" => "error",
             .warning => "warning",
-            .note => "note",
+            .note, .reference => "note",
         };
         const line = try allocator.print("{s}:{d}:{d}: {s}: {s}\n", .{
             d.file, d.line, d.col, kind_str, d.message,

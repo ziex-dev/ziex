@@ -9,6 +9,7 @@ const html_hover = @import("features/hover.zig");
 const html_complete = @import("features/autocomplete.zig");
 const text = @import("text.zig");
 pub const Zls = @import("Handler/Zls.zig");
+pub const Checker = @import("Handler/Checker.zig");
 
 const ByteRange = struct {
     start: usize,
@@ -96,6 +97,7 @@ transport: *lsp.Transport,
 io: std.Io,
 offset_encoding: lsp.offsets.Encoding,
 zx_files: std.StringHashMap(ZxFileState),
+checker: Checker,
 ptr: *anyopaque,
 vtable: *const VTable,
 
@@ -110,6 +112,7 @@ pub fn init(
         .io = io,
         .offset_encoding = .@"utf-16",
         .zx_files = std.StringHashMap(ZxFileState).init(allocator),
+        .checker = .init(allocator, io, transport),
         .ptr = noop_ptr,
         .vtable = &noop_vtable,
     };
@@ -125,6 +128,7 @@ pub fn setBacking(handler: *Handler, ptr: *anyopaque, vtable: *const VTable) voi
 }
 
 pub fn deinit(handler: *Handler) void {
+    handler.checker.deinit();
     var it = handler.zx_files.iterator();
     while (it.next()) |entry| {
         handler.allocator.free(entry.key_ptr.*);
@@ -462,16 +466,7 @@ fn publishZxDiagnostics(handler: *Handler, uri: []const u8, source: []const u8, 
     for (zx_diags, 0..) |d, i| lsp_diags[i] = toLspDiagnostic(source, d, "zx", encoding);
     for (zig_diags, zx_diags.len..) |d, i| lsp_diags[i] = toLspDiagnostic(source, d, "zig", encoding);
 
-    handler.transport.writeNotification(
-        handler.io,
-        arena,
-        "textDocument/publishDiagnostics",
-        lsp.types.flat.PublishDiagnosticsParams,
-        .{ .uri = uri, .diagnostics = lsp_diags },
-        .{ .emit_null_optional_fields = false },
-    ) catch |err| {
-        std.log.err("Failed to write publishDiagnostics: {}", .{err});
-    };
+    handler.checker.publish(uri, lsp_diags);
 }
 
 fn toLspDiagnostic(
@@ -538,6 +533,7 @@ pub fn initialize(
 ) lsp.types.flat.InitializeResult {
     const client_encoding = choosePositionEncodingKind(request);
     handler.offset_encoding = toOffsetEncoding(client_encoding);
+    handler.checker.encoding = handler.offset_encoding;
 
     var backing_request = request;
     if (backing_request.capabilities.textDocument) |*text_document| {
@@ -708,6 +704,8 @@ pub fn @"textDocument/didSave"(
     arena: std.mem.Allocator,
     params: lsp.types.flat.DidSaveTextDocumentParams,
 ) !void {
+    // Compile errors (route signatures, server handler registration, ...) need a build.
+    if (uriToPath(params.textDocument.uri)) |path| handler.checker.request(path);
     if (isZxUri(params.textDocument.uri)) {
         handler.sendNotificationSync(arena, "textDocument/didSave", .{
             .textDocument = .{ .uri = handler.getZlsUri(params.textDocument.uri) },
@@ -724,14 +722,7 @@ pub fn @"textDocument/didClose"(
     params: lsp.types.flat.DidCloseTextDocumentParams,
 ) !void {
     if (isZxUri(params.textDocument.uri)) {
-        handler.transport.writeNotification(
-            handler.io,
-            arena,
-            "textDocument/publishDiagnostics",
-            lsp.types.flat.PublishDiagnosticsParams,
-            .{ .uri = params.textDocument.uri, .diagnostics = &.{} },
-            .{ .emit_null_optional_fields = false },
-        ) catch {};
+        handler.checker.close(params.textDocument.uri);
 
         if (handler.zx_files.fetchRemove(params.textDocument.uri)) |old| {
             const zig_uri = old.value.zig_uri;

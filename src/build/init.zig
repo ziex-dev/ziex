@@ -349,6 +349,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     b.installArtifact(exe);
 
     // --- Ziex WASM Main Executable --- //
+    var client_root: ?*std.Build.Module = null;
     const clients: ?*Clients = if (build_client_wasm) try b.allocator.create(Clients) else null;
     const manifest_path: LazyPath = if (build_client_wasm) blk: {
         const wasm_exe = b.addExecutable(.{
@@ -431,6 +432,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
         wasm_exe.root_module.addImport("zx", wasm_app_module);
         wasm_exe.step.dependOn(&transpile_cmd.step);
+        client_root = wasm_exe.root_module;
 
         const wasm_binpath = wasm_exe.getEmittedBin();
         const zxjs_path = opts.ziex_js_root.path(b, if (is_dev_build) "wasm/init.dev.js" else "wasm/init.js");
@@ -518,6 +520,23 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         const zx_cmd = cliRun(b, zx_cli, opts);
         zx_step.dependOn(&zx_cmd.step);
         zx_cmd.addPassthruArgs();
+    }
+
+    // --- `zx build --check`: type-check server and client without emitting binaries --- //
+    // Only defined in check mode, where it replaces the default step.
+    if (config.command == .check) {
+        const check_step = b.step("check", "Type-check the app without emitting binaries");
+        const server_check = b.addExecutable(.{ .name = "check-server", .root_module = exe.root_module });
+        server_check.step.dependOn(&transpile_cmd.step);
+        check_step.dependOn(&server_check.step);
+        if (client_root) |root| {
+            const client_check = b.addExecutable(.{ .name = "check-client", .root_module = root });
+            client_check.entry = .disabled;
+            client_check.rdynamic = true;
+            client_check.step.dependOn(&transpile_cmd.step);
+            check_step.dependOn(&client_check.step);
+        }
+        b.default_step = check_step;
     }
 
     // --- Steps: Serve --- //

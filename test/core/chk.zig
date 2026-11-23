@@ -558,6 +558,108 @@ test "sema > known builtin shorthand is fine" {
     try testing.expect(!hasMessage(diags, "unknown ZX builtin attribute"));
 }
 
+test "visibility > @client component must be pub" {
+    const allocator = std.testing.allocator;
+    var diags = try validateSource(allocator,
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (<div @allocator={a}><Counter @client /><Label @client /></div>);
+        \\}
+        \\fn Counter(ctx: *zx.ComponentContext) zx.Component {
+        \\    return (<p @allocator={ctx.allocator}>0</p>);
+        \\}
+        \\pub fn Label(ctx: *zx.ComponentContext) zx.Component {
+        \\    return (<p @allocator={ctx.allocator}>x</p>);
+        \\}
+        \\const zx = @import("zx");
+    );
+    defer diags.deinit();
+
+    try testing.expectEqual(1, countWithMessage(diags, "is a @client component and must be `pub`"));
+    try testing.expect(hasMessage(diags, "'Counter' is a @client component"));
+}
+
+test "visibility > bound server handlers must be pub" {
+    const allocator = std.testing.allocator;
+    var diags = try validateSource(allocator,
+        \\pub fn Page(ctx: *zx.ComponentContext) zx.Component {
+        \\    return (
+        \\        <div @allocator={ctx.allocator}>
+        \\            <button onclick={ctx.bind(onSave)}>a</button>
+        \\            <button onclick={ctx.bind(&onSave)}>b</button>
+        \\            <button onclick={ctx.sbind(onInc, .{})}>c</button>
+        \\            <form action={ctx.action(onSubmit, .{})}></form>
+        \\            <form action={ctx.bind(onTyped)}></form>
+        \\            <button onclick={ctx.bind(onPub)}>d</button>
+        \\        </div>
+        \\    );
+        \\}
+        \\fn onSave(_: *zx.server.Event) void {}
+        \\fn onInc(_: *Event.Stateful) void {}
+        \\fn onSubmit(_: *zx.server.Action.Stateful) void {}
+        \\fn onTyped(_: Input, _: *zx.StateContext) void {}
+        \\pub fn onPub(_: *zx.server.Event) void {}
+        \\const Input = struct { name: []const u8 };
+        \\const Event = zx.server.Event;
+        \\const zx = @import("zx");
+    );
+    defer diags.deinit();
+
+    // One report per handler, however often it is bound.
+    try testing.expectEqual(4, countWithMessage(diags, "must be `pub` to be registered"));
+    try testing.expect(hasMessage(diags, "'onSave'"));
+    try testing.expect(hasMessage(diags, "'onInc'"));
+    try testing.expect(hasMessage(diags, "'onSubmit'"));
+    try testing.expect(hasMessage(diags, "'onTyped'"));
+    try testing.expect(!hasMessage(diags, "'onPub'"));
+}
+
+test "visibility > direct action attribute" {
+    const allocator = std.testing.allocator;
+    var diags = try validateSource(allocator,
+        \\pub fn Page(a: zx.Allocator) zx.Component {
+        \\    return (
+        \\        <div @allocator={a}>
+        \\            <form action={onLogin}></form>
+        \\            <form action={onClientForm}></form>
+        \\            <button onclick={onServer}>s</button>
+        \\        </div>
+        \\    );
+        \\}
+        \\fn onLogin(_: LoginInput) void {}
+        \\fn onClientForm(_: zx.client.Action) void {}
+        \\fn onServer(_: zx.server.Event) void {}
+        \\const LoginInput = struct { name: []const u8 };
+        \\const zx = @import("zx");
+    );
+    defer diags.deinit();
+
+    try testing.expectEqual(2, countWithMessage(diags, "must be `pub` to be registered"));
+    try testing.expect(hasMessage(diags, "'onLogin'"));
+    try testing.expect(hasMessage(diags, "'onServer'"));
+}
+
+test "visibility > client handlers may stay private" {
+    const allocator = std.testing.allocator;
+    var diags = try validateSource(allocator,
+        \\pub fn Page(ctx: *zx.ComponentContext) zx.Component {
+        \\    return (
+        \\        <div @allocator={ctx.allocator}>
+        \\            <button onclick={ctx.bind(onClick)}>a</button>
+        \\            <form action={ctx.bind(onForm)}></form>
+        \\            <input oninput={onInput} />
+        \\        </div>
+        \\    );
+        \\}
+        \\fn onClick(_: *zx.client.Event.Stateful) void {}
+        \\fn onForm(_: *zx.client.Action) void {}
+        \\fn onInput(_: zx.client.Event) void {}
+        \\const zx = @import("zx");
+    );
+    defer diags.deinit();
+
+    try testing.expectEqual(0, diags.items.len);
+}
+
 test "sema > skipped when syntax errors present" {
     const allocator = std.testing.allocator;
     // Unknown tag <blah> would normally be flagged, but the unclosed tag is a

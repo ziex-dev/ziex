@@ -31,10 +31,13 @@ fn runStdio(ctx: CommandContext, zx_module: ?[]const u8) !void {
 
     var read_buffer: [256]u8 = undefined;
     var stdio_transport: lsp.Transport.Stdio = .init(&read_buffer, .stdin(), .stdout());
-    const transport: *lsp.Transport = &stdio_transport.transport;
+    // Writes come from the request loop and from background `zx check` runs.
+    var safe_transport: lsp.ThreadSafeTransport(.{ .thread_safe_read = false, .thread_safe_write = true }) = .init(&stdio_transport.transport);
+    const transport: *lsp.Transport = &safe_transport.transport;
 
     var handler: Handler = .init(gpa, transport, io);
     defer handler.deinit();
+    handler.checker.environ_map = environ_map;
 
     if (comptime Handler.Zls.enabled) {
         const backing = try Handler.Zls.create(.{

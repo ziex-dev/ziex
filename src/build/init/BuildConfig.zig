@@ -7,7 +7,7 @@ const std = @import("std");
 
 pub const option_name = "ziex-config";
 
-pub const Command = enum { dev, serve, static };
+pub const Command = enum { dev, serve, static, check };
 
 /// CLI command the build is for; null for a plain `zig build`.
 command: ?Command = null,

@@ -75,6 +75,7 @@ pub fn validate(allocator: std.mem.Allocator, parser: *Parse) !DiagnosticList {
         var seen_ids: std.StringHashMapUnmanaged(void) = .empty;
         defer seen_ids.deinit(allocator);
         try validateSemantics(allocator, root, parser.source, &list, &seen_ids);
+        try validateVisibility(allocator, root, parser.source, &list);
     }
 
     return DiagnosticList{
@@ -384,6 +385,234 @@ fn validateBuiltinShorthand(
         "unknown ZX builtin attribute '@{s}'",
         .{name},
     );
+}
+
+// ---------------------------------------------------------------------------
+// Visibility: `@client` components and server handlers must be `pub`
+// ---------------------------------------------------------------------------
+
+const TopDecl = struct {
+    node: ts.Node,
+    name_node: ts.Node,
+    is_pub: bool,
+    is_fn: bool,
+};
+
+const Visibility = struct {
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    list: *std.ArrayList(Diagnostic),
+    decls: std.StringHashMapUnmanaged(TopDecl) = .empty,
+    // `const Action = zx.server.Action;` -> "zx.server.Action"
+    aliases: std.StringHashMapUnmanaged([]const u8) = .empty,
+    reported: std.StringHashMapUnmanaged(void) = .empty,
+
+    fn deinit(v: *Visibility) void {
+        v.decls.deinit(v.allocator);
+        v.aliases.deinit(v.allocator);
+        v.reported.deinit(v.allocator);
+    }
+};
+
+/// Same-file check of what the compiler requires: `@client` components are
+/// imported by the generated `app.zig`, and server handlers are registered
+/// from `pub` declarations (`zx.server.handlers`).
+fn validateVisibility(
+    allocator: std.mem.Allocator,
+    root: ts.Node,
+    source: []const u8,
+    list: *std.ArrayList(Diagnostic),
+) AllocError!void {
+    var v: Visibility = .{ .allocator = allocator, .source = source, .list = list };
+    defer v.deinit();
+
+    const count = root.childCount();
+    var i: u32 = 0;
+    while (i < count) : (i += 1) {
+        const child = root.child(i) orelse continue;
+        const kind = child.kind();
+        const is_fn = std.mem.eql(u8, kind, "function_declaration");
+        if (!is_fn and !std.mem.eql(u8, kind, "variable_declaration")) continue;
+
+        const name_node = (if (is_fn) child.childByFieldName("name") else childOfKind(child, .identifier)) orelse continue;
+        const first = child.child(0) orelse continue;
+        try v.decls.put(allocator, nodeText(name_node, source), .{
+            .node = child,
+            .name_node = name_node,
+            .is_pub = std.mem.eql(u8, first.kind(), "pub"),
+            .is_fn = is_fn,
+        });
+        if (!is_fn) if (declValue(child)) |value| {
+            try v.aliases.put(allocator, nodeText(name_node, source), compact(nodeText(value, source)));
+        };
+    }
+    if (v.decls.count() == 0) return;
+
+    try walkVisibility(&v, root);
+}
+
+fn walkVisibility(v: *Visibility, node: ts.Node) AllocError!void {
+    switch (Parse.NodeKind.fromNode(node)) {
+        .zx_element => if (childOfKind(node, .zx_start_tag)) |tag| try checkClientComponent(v, tag),
+        .zx_self_closing_element => try checkClientComponent(v, node),
+        .zx_regular_attribute => try checkHandlerAttribute(v, node),
+        else => if (std.mem.eql(u8, node.kind(), "call_expression")) try checkBindCall(v, node),
+    }
+
+    const count = node.childCount();
+    var i: u32 = 0;
+    while (i < count) : (i += 1) {
+        const child = node.child(i) orelse continue;
+        try walkVisibility(v, child);
+    }
+}
+
+/// `<Counter @client />` where `Counter` is a non-`pub` fn in this file.
+fn checkClientComponent(v: *Visibility, tag: ts.Node) AllocError!void {
+    const name_node = tag.childByFieldName("name") orelse return;
+    if (!hasBuiltin(tag, v.source, "@client")) return;
+
+    const name = nodeText(name_node, v.source);
+    const decl = v.decls.get(name) orelse return;
+    if (!decl.is_fn or decl.is_pub) return;
+    try appendError(v.allocator, name_node, v.list, "'{s}' is a @client component and must be `pub`", .{name});
+}
+
+fn hasBuiltin(tag: ts.Node, source: []const u8, builtin: []const u8) bool {
+    const count = tag.childCount();
+    var i: u32 = 0;
+    while (i < count) : (i += 1) {
+        const child = tag.child(i) orelse continue;
+        if (Parse.NodeKind.fromNode(child) != .zx_attribute) continue;
+        const attr = child.child(0) orelse continue;
+        if (Parse.NodeKind.fromNode(attr) != .zx_builtin_attribute) continue;
+        const name_node = attr.childByFieldName("name") orelse continue;
+        if (std.mem.eql(u8, nodeText(name_node, source), builtin)) return true;
+    }
+    return false;
+}
+
+/// `action={handle}` / `onclick={handle}`: a fn referenced directly.
+fn checkHandlerAttribute(v: *Visibility, attr: ts.Node) AllocError!void {
+    const name_node = attr.childByFieldName("name") orelse return;
+    const value = attr.childByFieldName("value") orelse return;
+    const name = nodeText(name_node, v.source);
+    const is_action = std.mem.eql(u8, name, "action");
+    if (!is_action and !std.mem.startsWith(u8, name, "on")) return;
+
+    const text = std.mem.trim(u8, nodeText(value, v.source), " \t\r\n");
+    if (text.len < 2 or text[0] != '{' or text[text.len - 1] != '}') return;
+    try checkServerHandler(v, text[1 .. text.len - 1], is_action);
+}
+
+/// `ctx.bind(handle)`, `ctx.sbind(handle, ...)` and `ctx.action(handle, ...)`.
+fn checkBindCall(v: *Visibility, call: ts.Node) AllocError!void {
+    const callee = call.childByFieldName("function") orelse return;
+    if (Parse.NodeKind.fromNode(callee) != .field_expression) return;
+    const member = callee.childByFieldName("member") orelse return;
+    const method = nodeText(member, v.source);
+    if (!std.mem.eql(u8, method, "bind") and !std.mem.eql(u8, method, "sbind") and !std.mem.eql(u8, method, "action")) return;
+
+    const args = call.childByFieldName("arguments") orelse return;
+    const first = args.namedChild(0) orelse return;
+    try checkServerHandler(v, nodeText(first, v.source), false);
+}
+
+fn checkServerHandler(v: *Visibility, expr: []const u8, is_action_attr: bool) AllocError!void {
+    var name = std.mem.trim(u8, expr, " \t\r\n");
+    if (std.mem.startsWith(u8, name, "&")) name = std.mem.trimStart(u8, name[1..], " \t");
+    if (!isIdentifier(name)) return;
+
+    const decl = v.decls.get(name) orelse return;
+    if (!decl.is_fn or decl.is_pub) return;
+    if (!isServerHandler(v, decl.node, is_action_attr)) return;
+
+    const gop = try v.reported.getOrPut(v.allocator, name);
+    if (gop.found_existing) return;
+    try appendError(
+        v.allocator,
+        decl.name_node,
+        v.list,
+        "server handler '{s}' must be `pub` to be registered",
+        .{name},
+    );
+}
+
+/// Mirrors `zx.server.handlers.kind` from the signature text: a `void` fn taking
+/// a server Action/Event (or `*Stateful`), or `(T, *StateContext)`. A typed
+/// `fn(T) void` passed straight to `action={}` is a server form action too.
+fn isServerHandler(v: *Visibility, fn_node: ts.Node, is_action_attr: bool) bool {
+    const ret = fn_node.childByFieldName("type") orelse return false;
+    if (!std.mem.eql(u8, compact(nodeText(ret, v.source)), "void")) return false;
+
+    const params = childOfKindName(fn_node, "parameters") orelse return false;
+    var types: [2][]const u8 = undefined;
+    var n: usize = 0;
+    const count = params.namedChildCount();
+    var i: u32 = 0;
+    while (i < count) : (i += 1) {
+        const param = params.namedChild(i) orelse continue;
+        if (!std.mem.eql(u8, param.kind(), "parameter")) continue;
+        if (n == types.len) return false;
+        const t = param.childByFieldName("type") orelse return false;
+        types[n] = resolveAlias(v, compact(nodeText(t, v.source)));
+        n += 1;
+    }
+
+    if (n == 2) return std.mem.endsWith(u8, types[1], "StateContext");
+    if (n != 1) return false;
+    const t = std.mem.trimStart(u8, types[0], "*");
+    for ([_][]const u8{ "server.Action", "server.Action.Stateful", "server.Event", "server.Event.Stateful" }) |s| {
+        if (std.mem.endsWith(u8, t, s)) return true;
+    }
+    return is_action_attr and std.mem.indexOf(u8, t, "client.") == null and
+        !std.mem.endsWith(u8, t, "Event") and !std.mem.endsWith(u8, t, "Action");
+}
+
+// `*Action.Stateful` with `const Action = zx.server.Action;` -> `zx.server.Action.Stateful`.
+fn resolveAlias(v: *Visibility, t: []const u8) []const u8 {
+    const base = std.mem.trimStart(u8, t, "*");
+    const head_len = std.mem.indexOfScalar(u8, base, '.') orelse base.len;
+    const target = v.aliases.get(base[0..head_len]) orelse return t;
+    const rest = base[head_len..];
+    // Only the common `X` / `X.Stateful` shapes; anything else stays unresolved.
+    if (rest.len == 0) return target;
+    if (std.mem.eql(u8, rest, ".Stateful")) {
+        if (std.mem.endsWith(u8, target, "server.Action")) return "zx.server.Action.Stateful";
+        if (std.mem.endsWith(u8, target, "server.Event")) return "zx.server.Event.Stateful";
+    }
+    return t;
+}
+
+fn declValue(decl: ts.Node) ?ts.Node {
+    const count = decl.childCount();
+    var i: u32 = 0;
+    while (i + 1 < count) : (i += 1) {
+        const child = decl.child(i) orelse continue;
+        if (std.mem.eql(u8, child.kind(), "=")) return decl.child(i + 1);
+    }
+    return null;
+}
+
+fn childOfKindName(node: ts.Node, kind: []const u8) ?ts.Node {
+    const count = node.childCount();
+    var i: u32 = 0;
+    while (i < count) : (i += 1) {
+        const child = node.child(i) orelse continue;
+        if (std.mem.eql(u8, child.kind(), kind)) return child;
+    }
+    return null;
+}
+
+// Trimmed type text, for signature matching.
+fn compact(text: []const u8) []const u8 {
+    return std.mem.trim(u8, text, " \t\r\n");
+}
+
+fn isIdentifier(text: []const u8) bool {
+    if (text.len == 0 or std.ascii.isDigit(text[0])) return false;
+    for (text) |c| if (!std.ascii.isAlphanumeric(c) and c != '_') return false;
+    return true;
 }
 
 fn childOfKind(node: ts.Node, kind: Parse.NodeKind) ?ts.Node {

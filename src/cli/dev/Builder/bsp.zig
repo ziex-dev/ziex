@@ -36,6 +36,8 @@ cycle_started_at: ?Io.Timestamp = null,
 /// Accumulated during one build_started…build_completed cycle.
 cycle: Cycle = .{},
 want_watch: bool = true,
+/// Build root the child runs in; its relative paths resolve against it.
+cwd: ?[]const u8 = null,
 watching: bool = false,
 closed: bool = false,
 
@@ -91,6 +93,7 @@ pub fn init(self: *Bsp, io: Io, options: InitOptions) !void {
     var child_process = try std.process.spawn(io, .{
         .argv = argv.items,
         .environ_map = options.environ_map,
+        .cwd = if (options.cwd) |dir| .{ .path = dir } else .inherit,
         .stdin = .pipe,
         .stdout = .pipe,
         .stderr = .pipe,
@@ -104,6 +107,7 @@ pub fn init(self: *Bsp, io: Io, options: InitOptions) !void {
         .child_process = child_process,
         .conf_arena = .init(options.allocator),
         .want_watch = options.watch,
+        .cwd = options.cwd,
     };
     errdefer self.conf_arena.deinit();
 
@@ -200,7 +204,9 @@ fn handshakeAndWatch(self: *Bsp, io: Io) !void {
 }
 
 fn loadConfiguration(self: *Bsp, io: Io, path: []const u8) !void {
-    var file = try Io.Dir.cwd().openFile(io, path, .{});
+    const resolved = if (self.cwd) |dir| try std.fs.path.resolve(self.allocator, &.{ dir, path }) else path;
+    defer if (self.cwd != null) self.allocator.free(resolved);
+    var file = try Io.Dir.cwd().openFile(io, resolved, .{});
     defer file.close(io);
     self.configuration = try Configuration.loadFile(self.conf_arena.allocator(), io, file);
     try self.buildStepGraph();
@@ -550,6 +556,35 @@ fn appendErrorBundle(self: *Bsp, eb: *const std.zig.ErrorBundle) !void {
                 .message = note_msg,
             });
         }
+        try self.appendReferenceTrace(eb, msg);
+    }
+}
+
+// `ErrorBundle.extraData` is private: a SourceLocation (all u32 fields) is
+// followed by `reference_trace_len` (decl_name, src_loc) pairs.
+fn appendReferenceTrace(self: *Bsp, eb: *const std.zig.ErrorBundle, msg: std.zig.ErrorBundle.ErrorMessage) !void {
+    if (msg.src_loc == .none) return;
+    const src = eb.getSourceLocation(msg.src_loc);
+    const fields = @typeInfo(std.zig.ErrorBundle.SourceLocation).@"struct".field_names.len;
+    var index = @backingInt(msg.src_loc) + fields;
+    for (0..src.reference_trace_len) |_| {
+        if (index + 1 >= eb.extra.len) return;
+        const decl_name = eb.extra[index];
+        const loc: std.zig.ErrorBundle.SourceLocationIndex = @fromBackingInt(@intCast(eb.extra[index + 1]));
+        index += 2;
+        if (loc == .none) continue;
+        const ref = eb.getSourceLocation(loc);
+        const file = try self.allocator.dupe(u8, eb.nullTerminatedString(ref.src_path));
+        errdefer self.allocator.free(file);
+        const message = try std.fmt.allocPrint(self.allocator, "referenced by {s}", .{eb.nullTerminatedString(decl_name)});
+        errdefer self.allocator.free(message);
+        try self.cycle.diagnostics.append(self.allocator, .{
+            .file = file,
+            .line = ref.line + 1,
+            .col = ref.column + 1,
+            .kind = .reference,
+            .message = message,
+        });
     }
 }
 
