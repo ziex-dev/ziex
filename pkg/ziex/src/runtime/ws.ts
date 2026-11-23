@@ -1,4 +1,5 @@
 import { Suspending } from "./jspi";
+import type { Handlers } from "./host";
 
 export type WsState = {
     upgraded: boolean;
@@ -35,10 +36,7 @@ export function deliverToWasm(ws: WsState, data: Uint8Array | null): void {
     if (data) ws.messageQueue.push(data);
 }
 
-export function buildWsImports(
-    mem: () => WebAssembly.Memory,
-    ws: WsState,
-): WebAssembly.ModuleImports {
+export function createWsHandlers(mem: () => WebAssembly.Memory, ws: WsState): Handlers {
     const decoder = new TextDecoder();
     const readBytes = (ptr: number, len: number) => new Uint8Array(mem().buffer, ptr, len);
     const readStr = (ptr: number, len: number) => decoder.decode(readBytes(ptr, len));
@@ -57,23 +55,22 @@ export function buildWsImports(
     };
 
     return {
-        upgrade: (): void => { ws.upgraded = true; },
-        write: (ptr: number, len: number, binary: number): void => {
+        ws_upgrade: () => { ws.upgraded = true; },
+        ws_write: (ptr, len, binary) => {
             const data = binary ? readBytes(ptr, len).slice() : readStr(ptr, len);
             if (ws.server) ws.server.send(data);
             else ws.pendingWrites.push(data);
         },
-        close: (code: number, reason_ptr: number, reason_len: number): void => {
+        ws_close: (code, reason_ptr, reason_len) => {
             ws.server?.close(code, readStr(reason_ptr, reason_len));
         },
         // Without JSPI the guest cannot wait: report closed.
-        recv: Suspending ? new Suspending(recv) : (_buf_ptr: number, _buf_max: number): number => -1,
-        subscribe: (ptr: number, len: number): void => { ws.subscribe?.(readStr(ptr, len)); },
-        unsubscribe: (ptr: number, len: number): void => { ws.unsubscribe?.(readStr(ptr, len)); },
-        publish: (topic_ptr: number, topic_len: number, data_ptr: number, data_len: number): number =>
+        ws_recv: (buf_ptr, buf_max) => Suspending ? recv(buf_ptr, buf_max) : -1,
+        ws_subscribe: (ptr, len) => { ws.subscribe?.(readStr(ptr, len)); },
+        ws_unsubscribe: (ptr, len) => { ws.unsubscribe?.(readStr(ptr, len)); },
+        ws_publish: (topic_ptr, topic_len, data_ptr, data_len) =>
             ws.publish?.(readStr(topic_ptr, topic_len), readBytes(data_ptr, data_len).slice()) ?? 0,
-        is_subscribed: (ptr: number, len: number): number =>
-            ws.isSubscribed?.(readStr(ptr, len)) ? 1 : 0,
+        ws_is_subscribed: (ptr, len) => ws.isSubscribed?.(readStr(ptr, len)) ? 1 : 0,
     };
 }
 

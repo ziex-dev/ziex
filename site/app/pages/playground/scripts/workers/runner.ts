@@ -1,4 +1,5 @@
 import { WASI, PreopenDirectory, OpenFile, File, ConsoleStdout, WASIProcExit } from "@bjorn3/browser_wasi_shim";
+import { createHostImports, type Handlers } from "../../../../../../pkg/ziex/src/runtime/host";
 
 function asUint8Array(data: unknown): Uint8Array {
     if (data instanceof Uint8Array) return data;
@@ -45,14 +46,16 @@ function stripWasmStartSection(bytes: Uint8Array): Uint8Array {
     return stripped ? new Uint8Array(out) : bytes;
 }
 
-function stubHttpImports(getMemory: () => WebAssembly.Memory | null, sink: {
+// The playground has no JSPI context, so every op completes synchronously.
+function stubHandlers(getMemory: () => WebAssembly.Memory | null, sink: {
     html: { value: string };
     meta: { value: ResponseMeta | null };
-}) {
+}): Handlers {
     const decoder = new TextDecoder("utf-8", { fatal: false });
     const htmlDec = new TextDecoder("utf-8", { fatal: false });
+    const fail = () => -1;
     return {
-        commit: (status: number, meta_ptr: number, meta_len: number) => {
+        http_commit: (status, meta_ptr, meta_len) => {
             const mem = getMemory();
             let streaming = false;
             let headers: [string, string][] = [];
@@ -68,62 +71,30 @@ function stubHttpImports(getMemory: () => WebAssembly.Memory | null, sink: {
             }
             sink.meta.value = { status, streaming, headers };
         },
-        write: (ptr: number, len: number) => {
+        http_write: (ptr, len) => {
             const mem = getMemory();
             if (!mem || len <= 0) return;
             sink.html.value += htmlDec.decode(new Uint8Array(mem.buffer, ptr >>> 0, len >>> 0), { stream: true });
         },
-        end: () => {
+        http_end: () => {
             sink.html.value += htmlDec.decode();
         },
-    };
-}
-
-function noopWsImports() {
-    return {
-        upgrade: () => {},
-        write: () => {},
-        close: () => {},
-        recv: () => -1,
-        subscribe: () => {},
-        unsubscribe: () => {},
-        publish: () => 0,
-        is_subscribed: () => 0,
-    };
-}
-
-function stubKvImports() {
-    return {
-        get: () => -1,
-        put: () => 0,
-        delete: () => 0,
-        list: () => 0,
-    };
-}
-
-function stubDbImports() {
-    return {
-        open: () => -1,
-        run: () => -1,
-        get: () => -1,
-        all: () => -1,
-        values: () => -1,
-    };
-}
-
-function stubNetImports() {
-    return {
-        fetch: () => -1,
-        take: () => {},
-    };
-}
-
-function stubSysImports() {
-    return {
-        sleep_ms: (_ms: number) => {},
-        park: () => {
+        io_sleep: () => {},
+        ws_recv: fail,
+        sys_park: () => {
             throw new Error("park is not supported in the playground");
         },
+        kv_get: fail,
+        kv_put: () => 0,
+        kv_delete: () => 0,
+        kv_list: () => 0,
+        db_open: fail,
+        db_run: fail,
+        db_get: fail,
+        db_all: fail,
+        db_values: fail,
+        net_fetch: fail,
+        net_open: fail,
     };
 }
 
@@ -216,14 +187,9 @@ async function run(wasmData: unknown, kind: "playground" | "app", opts: {
             wasi_snapshot_preview1: wasi.wasiImport,
         };
         if (kind === "app") {
+            const { call } = createHostImports(stubHandlers(() => wasmMemory, { html, meta: responseMeta }));
             Object.assign(imports, {
-                __zx: createZxImports(() => wasmMemory),
-                __zx_ws: noopWsImports(),
-                __zx_sys: stubSysImports(),
-                __zx_http: stubHttpImports(() => wasmMemory, { html, meta: responseMeta }),
-                __zx_kv: stubKvImports(),
-                __zx_db: stubDbImports(),
-                __zx_net: stubNetImports(),
+                __zx: { ...createZxImports(() => wasmMemory), call, wait: call },
             });
         }
 

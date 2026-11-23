@@ -30,6 +30,11 @@ pub fn configure(b: *std.Build, zx_mod: *std.Build.Module, opts: Options) *std.B
     app_opts.addOption(?[]const u8, "ai_model", null);
     app_opts.addOption(?[]const u8, "ai_image_model", null);
     app_opts.addOption(?[]const u8, "ai_base_url", null);
+    app_opts.addOption(bool, "feat_flag_server", false);
+    app_opts.addOption([]const u8, "flag_provider", "ofrep");
+    app_opts.addOption(?[]const u8, "flag_base_url", null);
+    app_opts.addOption(?[]const u8, "flag_app_id", null);
+    app_opts.addOption(?[]const u8, "flag_binding", null);
     zx_mod.addOptions("app_opts", app_opts);
 
     if (opts.enable_httpz) {

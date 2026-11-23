@@ -217,6 +217,10 @@ var cache_fs: zx.Kv.Fs = undefined;
 const AiProvider = if (app_opts.feat_ai_server) std.meta.stringToEnum(zx.Ai.Provider, app_opts.ai_provider).?.Type() else void;
 var ai_provider: AiProvider = undefined;
 
+const FlagProvider = if (app_opts.feat_flag_server) std.meta.stringToEnum(zx.Flag.Provider, app_opts.flag_provider).?.Type() else void;
+var flag_provider: FlagProvider = undefined;
+var flag_env: std.heap.ArenaAllocator = undefined;
+
 const Resolved = struct {
     datadir: ?[]const u8 = null,
     staticdir: ?[]const u8 = null,
@@ -288,6 +292,11 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
                 if (os == .wasi) initAi(alloc, inita);
             }
 
+            // Feature ==> zx.flag
+            if (comptime app_opts.feat_flag_server) {
+                if (os == .wasi) initFlag(alloc, inita);
+            }
+
             return cfg;
         },
         else => {},
@@ -328,6 +337,9 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
     // Feature ==> zx.ai
     if (comptime app_opts.feat_ai_server) initAi(alloc, inita);
 
+    // Feature ==> zx.flag
+    if (comptime app_opts.feat_flag_server) initFlag(alloc, inita);
+
     resolved.datadir = datadir;
     resolved.staticdir = staticdir;
 
@@ -350,6 +362,29 @@ fn initAi(alloc: std.mem.Allocator, inita: zx.Init) void {
     };
     if (@hasField(AiProvider, "image_model")) ai_provider.image_model = app_opts.ai_image_model;
     zx.ai = ai_provider.ai();
+}
+
+fn initFlag(alloc: std.mem.Allocator, inita: zx.Init) void {
+    flag_env = .init(alloc);
+    const env = flag_env.allocator();
+    flag_provider = switch (FlagProvider) {
+        zx.Flag.Ofrep => .{
+            .io = inita.io,
+            .base_url = envVar(env, inita, zx.Flag.Ofrep.env_url) orelse app_opts.flag_base_url orelse "",
+            .api_key = envVar(env, inita, zx.Flag.Ofrep.env_api_key),
+        },
+        zx.Flag.Flagship => .{
+            .io = inita.io,
+            .binding = app_opts.flag_binding orelse zx.Flag.Flagship.default_binding,
+            .base_url = app_opts.flag_base_url orelse zx.Flag.Flagship.default_base_url,
+            .account_id = envVar(env, inita, zx.Flag.Flagship.env_account_id),
+            .app_id = envVar(env, inita, zx.Flag.Flagship.env_app_id) orelse app_opts.flag_app_id,
+            .api_token = envVar(env, inita, zx.Flag.Flagship.env_api_token),
+        },
+        zx.Flag.Kv => if (app_opts.feat_kv_server) .{ .store = zx.kv } else @compileError("the .kv flag provider needs the .kv server feature"),
+        else => unreachable,
+    };
+    zx.flag = flag_provider.flag();
 }
 
 fn freeResolved(alloc: std.mem.Allocator) void {
@@ -383,6 +418,12 @@ fn freeResolved(alloc: std.mem.Allocator) void {
         zx.ai = .failing;
         if (resolved.ai_api_key) |s| alloc.free(s);
         if (resolved.ai_base_url) |s| alloc.free(s);
+    }
+
+    // Feature ==> zx.flag
+    if (comptime app_opts.feat_flag_server) {
+        zx.flag = .failing;
+        flag_env.deinit();
     }
 
     if (resolved.staticdir) |s| alloc.free(s);

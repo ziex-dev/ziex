@@ -6,6 +6,7 @@ import {
 } from "../../wasm/core";
 import type { KVNamespace, SyncKVNamespace } from "../kv";
 import { Suspending } from "../jspi";
+import type { Handlers } from "../host";
 import { encodeStrings } from "../wire";
 
 export type { WasmAllocRef };
@@ -108,79 +109,59 @@ function list(
     );
 }
 
-function wrapImport<T extends (...args: number[]) => number | Promise<number>>(impl: T): T {
-    if (!jspi) {
-        return ((...args: Parameters<T>) => {
-            const r = impl(...args);
-            if (r instanceof Promise) throw new Error("async kv binding requires JSPI");
-            return r;
-        }) as T;
-    }
-    return new Suspending!(impl);
-}
-
-export type KVImportOptions = {
-    // "background" never suspends put/delete: a suspended event handler's shadow
-    // stack frames get overwritten by the next event's handler.
+export type KVHandlerOptions = {
+    // "background" never suspends put/delete: the guest issues them through
+    // `__zx.call`, so they must complete synchronously.
     writes?: "await" | "background";
 };
 
-function background<T extends (...args: number[]) => number | Promise<number>>(impl: T): T {
-    return ((...args: Parameters<T>) => {
-        const r = impl(...args);
-        if (r instanceof Promise) {
-            r.catch((err) => console.error("zx.kv write failed:", err));
-            return 0;
-        }
-        return r;
-    }) as T;
+function background(r: number | Promise<number>): number {
+    if (r instanceof Promise) {
+        r.catch((err) => console.error("zx.kv write failed:", err));
+        return 0;
+    }
+    return r;
 }
 
-/**
- * Build the `__zx_kv` host functions for key/value namespace bindings.
- *
- * ```ts
- * if (__FEAT_KV__) importObject.__zx_kv = createKVImports(bindings, getMemory, allocRef);
- * ```
- */
-export function createKVImports(
+/** Host ops for key/value namespace bindings. */
+export function createKvHandlers(
     bindings: Record<string, KVNamespace>,
     getMemory: () => WebAssembly.Memory,
     allocRef: WasmAllocRef,
-    options: KVImportOptions = {},
-): WebAssembly.ModuleImports {
-    const write = options.writes === "background" ? background : wrapImport;
+    options: KVHandlerOptions = {},
+): Handlers {
+    const write = options.writes === "background" ? background : (r: number | Promise<number>) => r;
     return {
-        get: wrapImport((ns_ptr, ns_len, key_ptr, key_len, out_ptr) => {
+        kv_get: (ns_ptr, ns_len, key_ptr, key_len, out_ptr) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) return -1;
             return get(b, readStr(getMemory, key_ptr, key_len), out_ptr, getMemory, allocRef);
-        }),
+        },
 
-        put: write((ns_ptr, ns_len, key_ptr, key_len, val_ptr, val_len, ttl_seconds) => {
+        kv_put: (ns_ptr, ns_len, key_ptr, key_len, val_ptr, val_len, ttl_seconds) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) return miss;
-            return put(
+            return write(put(
                 b,
                 readStr(getMemory, key_ptr, key_len),
                 readStr(getMemory, val_ptr, val_len),
                 ttl_seconds,
-            );
-        }),
+            ));
+        },
 
-        delete: write((ns_ptr, ns_len, key_ptr, key_len) => {
+        kv_delete: (ns_ptr, ns_len, key_ptr, key_len) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) return miss;
-            return del(b, readStr(getMemory, key_ptr, key_len));
-        }),
+            return write(del(b, readStr(getMemory, key_ptr, key_len)));
+        },
 
-        list: wrapImport((ns_ptr, ns_len, pfx_ptr, pfx_len, out_ptr) => {
+        kv_list: (ns_ptr, ns_len, pfx_ptr, pfx_len, out_ptr) => {
             const b = resolve(bindings, readStr(getMemory, ns_ptr, ns_len));
             if (!b) {
                 new DataView(getMemory().buffer).setUint32(out_ptr, 0, true);
                 return 0;
             }
             return list(b, readStr(getMemory, pfx_ptr, pfx_len), out_ptr, getMemory, allocRef);
-        }),
+        },
     };
 }

@@ -1,4 +1,5 @@
-import { Suspending, type SuspendGate } from "./jspi";
+import { Suspending } from "./jspi";
+import type { Handlers } from "./host";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -77,15 +78,12 @@ export function fetchMeta(status: number, headLen: number): bigint {
 }
 
 /**
- * Create the `__zx_net` imports for blocking WASM fetch via JSPI: `fetch` holds the
- * response and returns its length, `take` copies it into wasm memory.
- * `open`/`read`/`close` stream a response body chunk by chunk instead.
- * When JSPI is unavailable `fetch` and `open` always return -1 (network error).
+ * Host ops for blocking wasm fetch via JSPI: `net_fetch` holds the response and
+ * returns its length, `net_take` copies it into wasm memory. `net_open`/`net_read`/
+ * `net_close` stream a body chunk by chunk instead. Without JSPI `net_fetch` and
+ * `net_open` return -1 (network error).
  */
-export function createFetchImports(
-    getMemory: () => WebAssembly.Memory,
-    gate: SuspendGate | null = null,
-): WebAssembly.ModuleImports {
+export function createFetchHandlers(getMemory: () => WebAssembly.Memory): Handlers {
     const held = new Map<number, Uint8Array>();
     let nextHandle = 1;
 
@@ -94,81 +92,70 @@ export function createFetchImports(
     const readBytes = (ptr: number, len: number): Uint8Array =>
         new Uint8Array(getMemory().buffer, ptr >>> 0, len >>> 0);
 
-    async function doFetch(
-        url_ptr: number, url_len: number,
-        method_ptr: number, method_len: number,
-        headers_ptr: number, headers_len: number,
-        body_ptr: number, body_len: number,
-        timeout_ms: number,
-        redirect: number,
-        status_out: number,
-        head_len_out: number,
-        handle_out: number,
-    ): Promise<number> {
-        const url = readStr(url_ptr, url_len);
+    // Reads the guest's `Request` extern struct before suspending: the guest may
+    // reuse this memory once it resumes.
+    function readRequest(ptr: number): FetchRequest {
+        const [urlPtr, urlLen, methodPtr, methodLen, headersPtr, headersLen, bodyPtr, bodyLen, timeoutMs, redirect] =
+            new Uint32Array(getMemory().buffer, ptr >>> 0, 10);
+        const method = methodLen! > 0 ? readStr(methodPtr!, methodLen!) : "GET";
+        return {
+            url: readStr(urlPtr!, urlLen!),
+            method,
+            headersJson: readStr(headersPtr!, headersLen!),
+            body: bodyLen! > 0 ? readBytes(bodyPtr!, bodyLen!).slice() : undefined,
+            timeoutMs: timeoutMs!,
+            redirect: redirect!,
+        };
+    }
+
+    function report(url: string, err: unknown): number {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`wasm fetch failed: ${url} (${msg})`);
+        return -1;
+    }
+
+    async function doFetch(req: FetchRequest, statusOut: number, headLenOut: number, handleOut: number): Promise<number> {
         try {
-            const res = await performFetch({
-                url,
-                method: method_len > 0 ? readStr(method_ptr, method_len) : "GET",
-                headersJson: readStr(headers_ptr, headers_len),
-                // Copy: the guest may reuse this memory once it resumes.
-                body: body_len > 0 ? readBytes(body_ptr, body_len).slice() : undefined,
-                timeoutMs: timeout_ms,
-                redirect,
-            });
+            const res = await performFetch(req);
             const handle = nextHandle++;
             held.set(handle, res.bytes);
             const view = new DataView(getMemory().buffer);
-            view.setUint16(status_out >>> 0, res.status, true);
-            view.setUint32(head_len_out >>> 0, res.headLen, true);
-            view.setUint32(handle_out >>> 0, handle, true);
+            view.setUint16(statusOut >>> 0, res.status, true);
+            view.setUint32(headLenOut >>> 0, res.headLen, true);
+            view.setUint32(handleOut >>> 0, handle, true);
             return res.bytes.length;
         } catch (err) {
             if (err === "timeout") return -3;
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error(`wasm fetch failed: ${url} (${msg})`);
-            return -1;
+            return report(req.url, err);
         }
     }
 
     type Body = { reader: ReadableStreamDefaultReader<Uint8Array>; pending: Uint8Array };
     const bodies = new Map<number, Body>();
 
-    // Resolves once the head arrives; the body is then pulled with `read`.
-    async function open(
-        url_ptr: number, url_len: number,
-        method_ptr: number, method_len: number,
-        headers_ptr: number, headers_len: number,
-        body_ptr: number, body_len: number,
-        redirect: number,
-        status_out: number,
-        handle_out: number,
-    ): Promise<number> {
-        const url = readStr(url_ptr, url_len);
-        const method = method_len > 0 ? readStr(method_ptr, method_len) : "GET";
+    // Resolves once the head arrives; the body is then pulled with `net_read`.
+    async function open(req: FetchRequest, statusOut: number, handleOut: number): Promise<number> {
         try {
-            const response = await fetch(resolveFetchUrl(url), {
-                method,
-                headers: parseRequestHeaders(readStr(headers_ptr, headers_len)),
-                body: method !== "GET" && method !== "HEAD" && body_len > 0 ? readBytes(body_ptr, body_len).slice() : undefined,
-                redirect: redirect === 1 ? "manual" : "follow",
+            const response = await fetch(resolveFetchUrl(req.url), {
+                method: req.method,
+                headers: parseRequestHeaders(req.headersJson),
+                body: req.method !== "GET" && req.method !== "HEAD" ? req.body as BodyInit | undefined : undefined,
+                redirect: req.redirect === 1 ? "manual" : "follow",
             });
             const handle = nextHandle++;
             const reader = (response.body ?? new Blob().stream()).getReader();
             bodies.set(handle, { reader, pending: new Uint8Array(0) });
             const view = new DataView(getMemory().buffer);
-            view.setUint16(status_out >>> 0, response.status, true);
-            view.setUint32(handle_out >>> 0, handle, true);
+            view.setUint16(statusOut >>> 0, response.status, true);
+            view.setUint32(handleOut >>> 0, handle, true);
             return 0;
         } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error(`wasm fetch failed: ${url} (${msg})`);
-            return -1;
+            return report(req.url, err);
         }
     }
 
-    // Copies up to `buf_len` body bytes; 0 at the end, -1 on error.
-    async function read(handle: number, buf_ptr: number, buf_len: number): Promise<number> {
+    // Copies up to `bufLen` body bytes; 0 at the end, -1 on error.
+    async function read(handle: number, bufPtr: number, bufLen: number): Promise<number> {
         const body = bodies.get(handle);
         if (!body) return -1;
         try {
@@ -180,30 +167,28 @@ export function createFetchImports(
         } catch {
             return -1;
         }
-        const n = Math.min(buf_len, body.pending.length);
-        new Uint8Array(getMemory().buffer, buf_ptr >>> 0, n).set(body.pending.subarray(0, n));
+        const n = Math.min(bufLen, body.pending.length);
+        new Uint8Array(getMemory().buffer, bufPtr >>> 0, n).set(body.pending.subarray(0, n));
         body.pending = body.pending.subarray(n);
         return n;
     }
 
-    const close = (handle: number): void => {
-        const body = bodies.get(handle);
-        if (!body) return;
-        bodies.delete(handle);
-        body.reader.cancel().catch(() => {});
+    return {
+        net_fetch: (req, statusOut, headLenOut, handleOut) =>
+            Suspending ? doFetch(readRequest(req), statusOut, headLenOut, handleOut) : -1,
+        net_take: (handle, bufPtr) => {
+            const bytes = held.get(handle);
+            if (!bytes) return;
+            held.delete(handle);
+            new Uint8Array(getMemory().buffer, bufPtr >>> 0, bytes.length).set(bytes);
+        },
+        net_open: (req, statusOut, handleOut) => Suspending ? open(readRequest(req), statusOut, handleOut) : -1,
+        net_read: (handle, bufPtr, bufLen) => Suspending ? read(handle, bufPtr, bufLen >>> 0) : -1,
+        net_close: (handle) => {
+            const body = bodies.get(handle);
+            if (!body) return;
+            bodies.delete(handle);
+            body.reader.cancel().catch(() => {});
+        },
     };
-
-    const take = (handle: number, buf_ptr: number): void => {
-        const bytes = held.get(handle);
-        if (!bytes) return;
-        held.delete(handle);
-        new Uint8Array(getMemory().buffer, buf_ptr >>> 0, bytes.length).set(bytes);
-    };
-
-    if (!Suspending) {
-        return { fetch: (): number => -1, take, open: (): number => -1, read: (): number => -1, close };
-    }
-
-    const suspending = <T extends (...args: any[]) => Promise<number>>(fn: T) => gate ? gate.suspending(fn) : new Suspending(fn);
-    return { fetch: suspending(doFetch), take, open: suspending(open), read: suspending(read), close };
 }

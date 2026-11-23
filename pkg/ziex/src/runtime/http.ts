@@ -1,4 +1,5 @@
 import { mergeUint8Arrays } from "./wasi";
+import type { Handlers } from "./host";
 
 export type HttpState = {
     committed: boolean;
@@ -38,13 +39,10 @@ function whenCommitted(http: HttpState): Promise<void> {
     });
 }
 
-export function buildHttpImports(
-    mem: () => WebAssembly.Memory,
-    http: HttpState,
-): WebAssembly.ModuleImports {
+export function createHttpHandlers(mem: () => WebAssembly.Memory, http: HttpState): Handlers {
     const decoder = new TextDecoder();
     return {
-        commit: (status: number, meta_ptr: number, meta_len: number): void => {
+        http_commit: (status, meta_ptr, meta_len) => {
             http.status = status >>> 0;
             http.committed = true;
             http.headers = new Headers();
@@ -61,13 +59,13 @@ export function buildHttpImports(
             }
             notifyCommitted(http);
         },
-        write: (ptr: number, len: number): void => {
+        http_write: (ptr, len) => {
             if (len <= 0) return;
             const chunk = new Uint8Array(mem().buffer, ptr >>> 0, len >>> 0).slice();
             if (http.streamWriter) void http.streamWriter.write(chunk);
             else http.bodyChunks.push(chunk);
         },
-        end: (): void => {
+        http_end: () => {
             http.ended = true;
             // Unblock toResponse if the handler finished without committing.
             if (!http.committed) notifyCommitted(http);

@@ -145,6 +145,25 @@ pub const AppOptions = struct {
             server: ?AiServerOptions = null,
         };
 
+        // `zx.flag`, OpenFeature-style feature flags. Credentials come from the provider's env,
+        // e.g. `OFREP_URL`, or `CLOUDFLARE_ACCOUNT_ID`, `FLAGSHIP_APP_ID` and `CLOUDFLARE_API_TOKEN`.
+        pub const FlagOptions = struct {
+            pub const Provider = enum { ofrep, flagship, kv };
+            pub const FlagServerOptions = struct {
+                pub const enabled: FlagServerOptions = .{};
+
+                provider: Provider = .ofrep,
+                // The OFREP server, or the Cloudflare API for Flagship.
+                base_url: ?[]const u8 = null,
+                // Flagship only.
+                app_id: ?[]const u8 = null,
+                binding: ?[]const u8 = null,
+            };
+            pub const enabled: FlagOptions = .{ .server = .enabled };
+
+            server: ?FlagServerOptions = null,
+        };
+
         pub const default = FeatureOptions{};
 
         sqlite: ?SqliteOptions = null,
@@ -152,6 +171,7 @@ pub const AppOptions = struct {
         kv: ?KvOptions = null,
         cache: ?CacheOptions = null,
         ai: ?AiOptions = null,
+        flag: ?FlagOptions = null,
     };
 
     /// Path to the Ziex app source directory.

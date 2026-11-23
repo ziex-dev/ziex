@@ -33,7 +33,6 @@ import {
     loadValueFromRef,
     releaseValueRef,
     wrapPromisingExport,
-    resetSuspendGate,
     invokeWasmExport,
     readString,
     writeBytes,
@@ -49,9 +48,8 @@ import {
     CallbackType_WebSocketClose,
 } from "./constants";
 import { flushDomCmds } from "./dom_cmd";
-import { createFetchImports } from "../runtime/fetch";
-import { createIoImports } from "../runtime/io";
-import { createKVImports } from "../runtime/kv/extern";
+import { createKvHandlers } from "../runtime/kv/extern";
+import type { Handlers } from "../runtime/host";
 import { createBrowserKVBindings, type KVNamespace } from "../runtime/kv";
 import { DELEGATED_EVENTS } from "./generated/events";
 import { HIGH_FREQ_EVENT_BITS } from "./generated/event_bits";
@@ -226,19 +224,11 @@ export class ZxBridge extends ZxBridgeCore {
     }
 
     /** Create the full browser import object for WASM instantiation (includes DOM + WebSocket). */
-    static override createImportObject(bridgeRef: [ZxBridge | null]): WebAssembly.Imports {
-        const gate = resetSuspendGate();
+    static override createImportObject(bridgeRef: [ZxBridge | null], handlers: Handlers = {}): WebAssembly.Imports {
         return {
             ...jsz.importObject(),
-            __zx_io: createIoImports(() => {
-                if (!jsz.memory) throw new Error("WASM memory is not ready");
-                return jsz.memory;
-            }, gate) as WebAssembly.ModuleImports,
-            __zx_net: createFetchImports(() => {
-                if (!jsz.memory) throw new Error("WASM memory is not ready");
-                return jsz.memory;
-            }, gate) as WebAssembly.ModuleImports,
             __zx: {
+                ...ZxBridgeCore.createHostImports(handlers),
                 _log: (level: number, ptr: number, len: number) => ZxBridgeCore.log(level, ptr, len),
                 _registerEventHandler: (vnodeId: bigint, eventTypeId: number) => {
                     bridgeRef[0]?.registerEventHandler(Number(vnodeId), eventTypeId);
@@ -543,18 +533,13 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
         throw new Error("WASM memory is not ready");
     };
 
+    const handlers: Handlers = typeof __FEAT_KV__ === "undefined" || __FEAT_KV__
+        ? createKvHandlers(options.kv ?? createBrowserKVBindings(), getMemory, allocRef, { writes: "background" })
+        : {};
     const importObject: WebAssembly.Imports = {
-        ...ZxBridge.createImportObject(bridgeRef),
+        ...ZxBridge.createImportObject(bridgeRef, handlers),
         ...options.importObject,
     };
-    if (typeof __FEAT_KV__ === "undefined" || __FEAT_KV__) {
-        importObject.__zx_kv = createKVImports(
-            options.kv ?? createBrowserKVBindings(),
-            getMemory,
-            allocRef,
-            { writes: "background" },
-        );
-    }
 
     // Streaming requires `application/wasm`, which some hosts (e.g. Safari extension pages) don't send
     const response = await fetch(url);

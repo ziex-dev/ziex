@@ -16,6 +16,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const http = @import("../http.zig");
 const zxon = @import("../../../util/zxon.zig");
+const imports = @import("../../wasm/imports.zig");
 
 pub const Method = http.Method;
 pub const Status = http.Status;
@@ -190,14 +191,14 @@ pub const Body = struct {
     };
 
     pub fn close(body: *Body) void {
-        if (comptime is_wasm) host.ext.close(body.transport.handle) else body.transport.request.deinit();
+        if (comptime is_wasm) _ = imports.call(.net_close, .{body.transport.handle}) else body.transport.request.deinit();
         body.allocator.destroy(body);
     }
 
     fn stream(r: *std.Io.Reader, w: *std.Io.Writer, limit: std.Io.Limit) std.Io.Reader.StreamError!usize {
         const t: *@FieldType(Body, "transport") = @alignCast(@fieldParentPtr("interface", r));
         const dest = limit.slice(try w.writableSliceGreedy(1));
-        const n = host.ext.read(t.handle, dest.ptr, dest.len);
+        const n = imports.wait(.net_read, .{ t.handle, dest });
         if (n < 0) return error.ReadFailed;
         if (n == 0) return error.EndOfStream;
         w.advance(@intCast(n));
@@ -225,19 +226,8 @@ fn openHost(body: *Body, options: FetchOptions) Error!void {
 
     var status: u16 = 0;
     var handle: u32 = 0;
-    const rc = host.ext.open(
-        options.url.ptr,
-        options.url.len,
-        method.ptr,
-        method.len,
-        headers.ptr,
-        headers.len,
-        payload.ptr,
-        payload.len,
-        @backingInt(options.redirect),
-        &status,
-        &handle,
-    );
+    const req = host.request(options, method, headers, payload, 0);
+    const rc = imports.wait(.net_open, .{ &req, &status, &handle });
     if (rc < 0) return error.NetworkError;
 
     const t = &body.transport;
@@ -455,65 +445,33 @@ const host = struct {
         var status: u16 = 0;
         var head_len: u32 = 0;
         var handle: u32 = 0;
-        const n = ext.fetch(
-            options.url.ptr,
-            options.url.len,
-            method.ptr,
-            method.len,
-            headers.ptr,
-            headers.len,
-            payload.ptr,
-            payload.len,
-            timeout_ms,
-            @backingInt(options.redirect),
-            &status,
-            &head_len,
-            &handle,
-        );
+        const req = request(options, method, headers, payload, timeout_ms);
+        const n = imports.wait(.net_fetch, .{ &req, &status, &head_len, &handle });
         if (n == -3) return error.Timeout;
         if (n < 0) return error.NetworkError;
 
         const bytes = try gpa.alloc(u8, @intCast(n));
-        ext.take(handle, bytes.ptr);
+        _ = imports.call(.net_take, .{ handle, bytes.ptr });
         return Result.parse(gpa, @fromBackingInt(@intCast(status)), bytes, head_len);
     }
 
-    const ext = struct {
-        /// Performs the request and holds the response until `take`. Returns its
-        /// length, -1 on network failure or -3 on timeout.
-        extern "__zx_net" fn fetch(
-            url_ptr: [*]const u8,
-            url_len: usize,
-            method_ptr: [*]const u8,
-            method_len: usize,
-            headers_ptr: [*]const u8,
-            headers_len: usize,
-            body_ptr: [*]const u8,
-            body_len: usize,
-            timeout_ms: u32,
-            redirect: u32,
-            status_out: *u16,
-            head_len_out: *u32,
-            handle_out: *u32,
-        ) i32;
-        /// Copies the held response (head then body) into `buf_ptr` and releases it.
-        extern "__zx_net" fn take(handle: u32, buf_ptr: [*]u8) void;
-        // Performs the request and holds its body for `read`. Returns 0, or -1 on network failure.
-        extern "__zx_net" fn open(
-            url_ptr: [*]const u8,
-            url_len: usize,
-            method_ptr: [*]const u8,
-            method_len: usize,
-            headers_ptr: [*]const u8,
-            headers_len: usize,
-            body_ptr: [*]const u8,
-            body_len: usize,
-            redirect: u32,
-            status_out: *u16,
-            handle_out: *u32,
-        ) i32;
-        // Copies up to `buf_len` body bytes; 0 at the end, -1 on error.
-        extern "__zx_net" fn read(handle: u32, buf_ptr: [*]u8, buf_len: usize) i32;
-        extern "__zx_net" fn close(handle: u32) void;
+    const Request = extern struct {
+        url: imports.Bytes,
+        method: imports.Bytes,
+        headers: imports.Bytes,
+        body: imports.Bytes,
+        timeout_ms: u32,
+        redirect: u32,
     };
+
+    fn request(options: FetchOptions, method: []const u8, headers: []const u8, payload: []const u8, timeout_ms: u32) Request {
+        return .{
+            .url = .of(options.url),
+            .method = .of(method),
+            .headers = .of(headers),
+            .body = .of(payload),
+            .timeout_ms = timeout_ms,
+            .redirect = @backingInt(options.redirect),
+        };
+    }
 };

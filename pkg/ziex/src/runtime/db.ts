@@ -6,5 +6,5 @@ export type {
     Database,
 } from "./db/extern";
 
-export { createDbImports } from "./db/extern";
+export { createDbHandlers } from "./db/extern";
 export { Sqlite } from "./db/sqlite";

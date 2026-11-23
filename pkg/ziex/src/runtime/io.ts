@@ -1,10 +1,8 @@
-import { Suspending, type SuspendGate } from "./jspi";
+import { Suspending } from "./jspi";
+import { i64, type Handlers } from "./host";
 
-/** `__zx_io` imports backing `zx.Io.Web`: clocks, entropy and sleep. */
-export function createIoImports(
-    getMemory: () => WebAssembly.Memory,
-    gate: SuspendGate | null = null,
-): WebAssembly.ModuleImports {
+/** Host ops backing `zx.Io.Web`: clocks, entropy and sleep. */
+export function createIoHandlers(getMemory: () => WebAssembly.Memory): Handlers {
     // `getRandomValues` fills at most 64 KiB per call.
     const maxRandomChunk = 65536;
     let warnedSleep = false;
@@ -22,15 +20,25 @@ export function createIoImports(
     const sleepAsync = (ms: number): Promise<void> =>
         new Promise((resolve) => { if (ms >= 0) setTimeout(resolve, ms); });
 
+    const nowNs = (source: number): bigint => {
+        const ms = source === 0 ? performance.timeOrigin + performance.now() : performance.now();
+        const whole = Math.floor(ms);
+        return BigInt(whole) * 1_000_000n + BigInt(Math.round((ms - whole) * 1e6));
+    };
+    const writeI64 = (ptr: number, value: bigint): void => {
+        new DataView(getMemory().buffer).setBigInt64(ptr >>> 0, value, true);
+    };
+
     return {
-        now: (source: number): bigint => {
-            const ms = source === 0 ? performance.timeOrigin + performance.now() : performance.now();
-            const whole = Math.floor(ms);
-            return BigInt(whole) * 1_000_000n + BigInt(Math.round((ms - whole) * 1e6));
+        io_now: (source, out) => writeI64(out, nowNs(source)),
+        io_resolution: (out) => writeI64(out, (globalThis as any).crossOriginIsolated ? 5_000n : 100_000n),
+        // Negative waits forever.
+        io_sleep: (lo, hi) => {
+            const ns = i64(lo, hi);
+            const ms = ns < 0 ? -1 : ns / 1e6;
+            return Suspending ? sleepAsync(ms) : sleepSync(ms);
         },
-        resolution: (): bigint => ((globalThis as any).crossOriginIsolated ? 5_000n : 100_000n),
-        sleep: gate ? gate.suspending(sleepAsync) : Suspending ? new Suspending(sleepAsync) : sleepSync,
-        random: (ptr: number, len: number): number => {
+        io_random: (ptr, len) => {
             const bytes = new Uint8Array(getMemory().buffer, ptr >>> 0, len >>> 0);
             const crypto = globalThis.crypto;
             if (!crypto?.getRandomValues) {

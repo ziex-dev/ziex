@@ -1,2 +1,2 @@
-export { run, buildWsImports, attachWebSocket } from "../../runtime";
+export { run, createWsHandlers, attachWebSocket } from "../../runtime";
 export type { StickyNamespace, WsState } from "../../runtime";

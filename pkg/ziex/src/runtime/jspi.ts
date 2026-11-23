@@ -47,27 +47,33 @@ export class SuspendGate {
         };
     }
 
-    suspending<F extends (...args: any[]) => Promise<any>>(fn: F): F {
-        return new this.#Suspending(async (...args: Parameters<F>) => {
-            const entry: Pending = { callId: this.#owner(), done: false, resume: null };
-            this.#stack.push(entry);
-            let value: unknown;
-            let error: unknown;
-            let failed = false;
-            try {
-                value = await fn(...args);
-            } catch (err) {
-                error = err;
-                failed = true;
-            }
-            entry.done = true;
-            await new Promise<void>((resolve) => {
-                entry.resume = resolve;
-                this.#tryResume();
-            });
-            if (failed) throw error;
-            return value;
+    // A result that isn't a promise returns without suspending.
+    suspending<F extends (...args: any[]) => any>(fn: F): F {
+        return new this.#Suspending((...args: Parameters<F>) => {
+            const result = fn(...args);
+            return result instanceof Promise ? this.#suspend(result) : result;
         }) as unknown as F;
+    }
+
+    async #suspend(pending: Promise<unknown>): Promise<unknown> {
+        const entry: Pending = { callId: this.#owner(), done: false, resume: null };
+        this.#stack.push(entry);
+        let value: unknown;
+        let error: unknown;
+        let failed = false;
+        try {
+            value = await pending;
+        } catch (err) {
+            error = err;
+            failed = true;
+        }
+        entry.done = true;
+        await new Promise<void>((resolve) => {
+            entry.resume = resolve;
+            this.#tryResume();
+        });
+        if (failed) throw error;
+        return value;
     }
 
     #call(run: (...args: any[]) => Promise<unknown>, args: any[]): Promise<unknown> {

@@ -1,0 +1,72 @@
+pub fn Page(ctx: zx.PageContext) !zx.Component {
+    const query = ctx.request.query;
+    if (query.get("checkout")) |variant| try toggle(variant);
+
+    const user = query.get("user") orelse "guest";
+    const context: zx.Flag.Context = .{ .targeting_key = user };
+    const checkout = zx.flag.details(bool, ctx.arena, "new-checkout", false, context);
+    const banner = zx.flag.details([]const u8, ctx.arena, "banner", "Welcome", context);
+
+    return (
+        <main @allocator={ctx.arena} class="example-page">
+            <header class="example-header">
+                <h1>Feature Flags</h1>
+                <p>OpenFeature-style flags through <code>zx.flag</code>, backed by OFREP, Cloudflare Flagship or <code>zx.kv</code> as set by the <code>.flag</code> feature. Evaluation never fails; errors fall back to the default.</p>
+            </header>
+
+            <section class="example-section">
+                <form method="get">
+                    <input type="text" name="user" value={user} placeholder="Targeting key" />
+                    <button name="checkout" value="on">Enable new checkout</button>
+                    <button name="checkout" value="off">Disable new checkout</button>
+                </form>
+
+                <table>
+                    <thead>
+                        <tr><th>Flag</th><th>Value</th><th>Variant</th><th>Reason</th><th>Error</th></tr>
+                    </thead>
+                    <tbody>
+                        <Row key="new-checkout" value={if (checkout.value) "true" else "false"} variant={checkout.variant} reason={checkout.reason} err={checkout.err} />
+                        <Row key="banner" value={banner.value} variant={banner.variant} reason={banner.reason} err={banner.err} />
+                    </tbody>
+                </table>
+
+                {if (checkout.value) (<p><strong>New checkout</strong> is on for {user}.</p>) else (<p>Classic checkout for {user}.</p>)}
+            </section>
+        </main>
+    );
+}
+
+const RowProps = struct {
+    key: []const u8,
+    value: []const u8,
+    variant: ?[]const u8,
+    reason: zx.Flag.Reason,
+    err: ?zx.Flag.Error,
+};
+
+fn Row(allocator: zx.Allocator, props: RowProps) zx.Component {
+    const err = if (props.err) |e| @errorName(e) else "-";
+    return (
+        <tr @{allocator}>
+            <td><code>{props.key}</code></td>
+            <td>{props.value}</td>
+            <td>{props.variant orelse "-"}</td>
+            <td>{@tagName(props.reason)}</td>
+            <td>{err}</td>
+        </tr>
+    );
+}
+
+// Writes the definition read by the `.kv` provider.
+fn toggle(variant: []const u8) !void {
+    const store: zx.Flag.Kv = .{ .store = zx.kv };
+    try store.put(zx.allocator, .{
+        .key = "new-checkout",
+        .variants = &.{ .{ .name = "on", .value = .{ .boolean = true } }, .{ .name = "off", .value = .{ .boolean = false } } },
+        .default_variant = if (std.mem.eql(u8, variant, "on")) "on" else "off",
+    });
+}
+
+const zx = @import("zx");
+const std = @import("std");

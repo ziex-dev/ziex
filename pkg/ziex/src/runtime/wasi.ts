@@ -15,7 +15,7 @@ export type WASI = {
 };
 
 /**
- * WASI imports for request argv/stdin. Response body uses `__zx_http`, not stdout.
+ * WASI imports for request argv/stdin. Response body uses the `http_*` host ops, not stdout.
  * `setRequest` swaps the request so one instance can serve many (see `__zx_serve`).
  */
 export function createWasiImports({

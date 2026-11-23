@@ -1,5 +1,6 @@
 import { type WasmAllocRef, writeBytesOut } from "../../wasm/core";
 import { Suspending } from "../jspi";
+import type { Handlers } from "../host";
 import {
     decodeBindings,
     encodeRun,
@@ -37,7 +38,7 @@ export interface PreparedStatement {
 }
 
 /**
- * SQL database binding for `__zx_db`.
+ * SQL database binding for the `db_*` host ops.
  * Shape matches Cloudflare D1 so Workers bindings work as-is; Postgres and other
  * drivers adapt to this interface.
  */
@@ -45,18 +46,12 @@ export interface Database {
     prepare(query: string): PreparedStatement;
 }
 
-/**
- * Build the `__zx_db` host functions for SQL database bindings.
- *
- * ```ts
- * if (__FEAT_DB__) importObject.__zx_db = createDbImports(bindings, getMemory, allocRef);
- * ```
- */
-export function createDbImports(
+/** Host ops for SQL database bindings. */
+export function createDbHandlers(
     bindings: Record<string, Database>,
     getMemory: () => WebAssembly.Memory,
     allocRef: WasmAllocRef,
-): WebAssembly.ModuleImports {
+): Handlers {
     const decoder = new TextDecoder();
 
     function readStr(ptr: number, len: number): string {
@@ -90,19 +85,14 @@ export function createDbImports(
     }
 
     if (!Suspending) {
-        return {
-            open: (_ns: number, _ns_len: number): number => -1,
-            run: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
-            get: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
-            all: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
-            values: (_a: number, _b: number, _c: number, _d: number, _e: number, _f: number, _g: number): number => -1,
-        };
+        const fail = () => -1;
+        return { db_open: fail, db_run: fail, db_get: fail, db_all: fail, db_values: fail };
     }
 
     return {
-        open: (ns_ptr: number, ns_len: number): number => binding(readStr(ns_ptr, ns_len)) ? 0 : -1,
+        db_open: (ns_ptr, ns_len) => binding(readStr(ns_ptr, ns_len)) ? 0 : -1,
 
-        run: new Suspending(async (
+        db_run: async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -117,9 +107,9 @@ export function createDbImports(
                 out_ptr,
                 encodeRun(result.meta?.last_row_id ?? 0, result.meta?.changes ?? 0),
             );
-        }),
+        },
 
-        get: new Suspending(async (
+        db_get: async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -133,9 +123,9 @@ export function createDbImports(
                 return 0;
             }
             return writeBytesOut(getMemory, allocRef, out_ptr, encodeTableFromRecord(row));
-        }),
+        },
 
-        all: new Suspending(async (
+        db_all: async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -162,9 +152,9 @@ export function createDbImports(
                 const rows = records.map((record) => columns.map((col) => record[col]));
                 return writeBytesOut(getMemory, allocRef, out_ptr, encodeTable(columns, rows));
             }
-        }),
+        },
 
-        values: new Suspending(async (
+        db_values: async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -178,6 +168,6 @@ export function createDbImports(
                 return 0;
             }
             return writeBytesOut(getMemory, allocRef, out_ptr, encodeValues(rows as unknown[][]));
-        }),
+        },
     };
 }

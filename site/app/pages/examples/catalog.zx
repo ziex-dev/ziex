@@ -19,6 +19,7 @@ pub const data_and_apis = [_]SidebarProps.Section{
     .{ .title = "Database", .href = "/examples/db", .tags = &.{ "zx.db", "zx.db.row" } },
     .{ .title = "Key-Value", .href = "/examples/kv", .tags = &.{ "zx.kv", "zx.State" } },
     .{ .title = "AI", .href = "/examples/ai", .tags = &.{ "zx.ai.gen.text", "zx.ai.gen.image" } },
+    .{ .title = "Feature Flags", .href = "/examples/flag", .tags = &.{ "zx.flag", "OpenFeature" } },
     .{ .title = "CRUD", .href = "/examples/crud", .tags = &.{ "zx.db", "zx.server.Event", experimental.label } },
     // .{ .title = "API Routes", .href = "/examples/api-route" },
     .{ .title = "Realtime WebSockets", .href = "/examples/realtime", .tags = &.{ "zx.WebSocket", "cookies" } },

@@ -1,6 +1,7 @@
 import { ZigJS } from "../../../../vendor/jsz/js/src";
-import { createFetchImports, fetchMeta, performFetch } from "../runtime/fetch";
-import { createIoImports } from "../runtime/io";
+import { createFetchHandlers, fetchMeta, performFetch } from "../runtime/fetch";
+import { createIoHandlers } from "../runtime/io";
+import { createHostImports, type Handlers, type HostImports } from "../runtime/host";
 import { createSuspendGate, type SuspendGate } from "../runtime/jspi";
 import {
     CallbackType_Event,
@@ -276,25 +277,29 @@ export class ZxBridgeCore {
         }
     }
 
+    /** `__zx.call`/`__zx.wait` with the io and fetch ops plus `handlers`. */
+    static createHostImports(handlers: Handlers): HostImports {
+        const memory = () => {
+            if (!jsz.memory) throw new Error("WASM memory is not ready");
+            return jsz.memory;
+        };
+        return createHostImports(
+            { ...createIoHandlers(memory), ...createFetchHandlers(memory), ...handlers },
+            resetSuspendGate(),
+        );
+    }
+
     /**
      * Create the core import object for WASM instantiation.
      * Includes only environment-agnostic bindings: log, fetch, and timers.
      * Use ZxBridge.createImportObject (from wasm/index.ts) in browser contexts
      * to additionally include DOM and WebSocket bindings.
      */
-    static createImportObject(bridgeRef: [ZxBridgeCore | null]): WebAssembly.Imports {
-        const gate = resetSuspendGate();
+    static createImportObject(bridgeRef: [ZxBridgeCore | null], handlers: Handlers = {}): WebAssembly.Imports {
         return {
             ...jsz.importObject(),
-            __zx_io: createIoImports(() => {
-                if (!jsz.memory) throw new Error("WASM memory is not ready");
-                return jsz.memory;
-            }, gate) as WebAssembly.ModuleImports,
-            __zx_net: createFetchImports(() => {
-                if (!jsz.memory) throw new Error("WASM memory is not ready");
-                return jsz.memory;
-            }, gate) as WebAssembly.ModuleImports,
             __zx: {
+                ...ZxBridgeCore.createHostImports(handlers),
                 _log: (level: number, ptr: number, len: number) => ZxBridgeCore.log(level, ptr, len),
                 _fetchAsync: (
                     urlPtr: number,

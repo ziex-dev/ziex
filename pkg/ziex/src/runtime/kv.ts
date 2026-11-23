@@ -1,5 +1,5 @@
 export type { WasmAllocRef } from "../wasm/core";
-export { createKVImports } from "./kv/extern";
+export { createKvHandlers } from "./kv/extern";
 export { hasJspi } from "./jspi";
 
 import { hasJspi } from "./jspi";

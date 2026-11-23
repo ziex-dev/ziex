@@ -13,7 +13,7 @@ type ReusableInstance = {
     memory: () => WebAssembly.Memory;
     http: HttpState;
     // Read live by the imports; swapped per request.
-    bindings: Pick<Bindings, "kv" | "db">;
+    bindings: Pick<Bindings, "kv" | "db" | "env">;
     served: number;
 };
 
@@ -45,6 +45,7 @@ export async function serveReused(opts: ServeOptions): Promise<Response> {
     Object.assign(inst.http, newHttpState());
     replaceEntries(inst.bindings.kv, opts.kv);
     replaceEntries(inst.bindings.db, opts.db);
+    inst.bindings.env = opts.env;
 
     const done = inst.serve().then(
         () => {
@@ -66,7 +67,7 @@ function isHealthy(inst: ReusableInstance): boolean {
 
 async function createReusable(opts: ServeOptions): Promise<ReusableInstance> {
     const http = newHttpState();
-    const bindings = { kv: { ...opts.kv }, db: { ...opts.db } };
+    const bindings: ReusableInstance["bindings"] = { kv: { ...opts.kv }, db: { ...opts.db }, env: opts.env };
 
     let onPark!: () => void;
     const parked = new Promise<void>((resolve) => { onPark = resolve; });
@@ -77,6 +78,7 @@ async function createReusable(opts: ServeOptions): Promise<ReusableInstance> {
         ws: newWsState(),
         extraArgs: ["--zx-reuse"],
         onPark,
+        getEnv: () => bindings.env,
     });
 
     const exited = promising!(instance.exports._start as () => void)().then(() => {

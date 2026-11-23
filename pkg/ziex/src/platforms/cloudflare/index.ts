@@ -1,5 +1,5 @@
 export {
-    createKVImports,
+    createKvHandlers,
     createBrowserKVBindings,
     hasJspi,
 } from "../../runtime/kv";

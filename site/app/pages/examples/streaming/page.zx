@@ -72,11 +72,10 @@ fn SiteStats(allocator: zx.Allocator, props: struct { loading: bool }) zx.Compon
 }
 
 fn wait(duration_ms: u64) void {
-    if (zx.platform.isWasm()) return sleep_ms(@intCast(duration_ms));
-
-    std.Io.sleep(zx.Io.default(), .fromMilliseconds(@intCast(duration_ms)), .awake) catch {};
+    // WASI can't block on the edge; `zx.Io.Web` sleeps through the host.
+    const io = if (zx.platform.isWasm()) zx.Io.Web.io() else zx.Io.default();
+    std.Io.sleep(io, .fromMilliseconds(@intCast(duration_ms)), .awake) catch {};
 }
-extern "__zx_sys" fn sleep_ms(ms: u32) void;
 
 
 pub const options = zx.PageOptions{

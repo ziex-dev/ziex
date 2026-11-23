@@ -7,6 +7,7 @@ const Web = @This();
 
 const std = @import("std");
 const Io = std.Io;
+const host = @import("../../wasm/imports.zig");
 
 pub fn io() Io {
     return .{ .userdata = null, .vtable = &vtable };
@@ -53,35 +54,33 @@ fn checkCancel(_: ?*anyopaque) Io.Cancelable!void {}
 
 fn now(_: ?*anyopaque, clock: Io.Clock) Io.Timestamp {
     const src = source(clock) orelse return .zero;
-    return .{ .nanoseconds = ext.now(@backingInt(src)) };
+    var ns: i64 = 0;
+    _ = host.call(.io_now, .{ src, &ns });
+    return .{ .nanoseconds = ns };
 }
 
 fn clockResolution(_: ?*anyopaque, clock: Io.Clock) Io.Clock.ResolutionError!Io.Duration {
     _ = source(clock) orelse return error.ClockUnavailable;
-    return .{ .nanoseconds = ext.resolution() };
+    var ns: i64 = 0;
+    _ = host.call(.io_resolution, .{&ns});
+    return .{ .nanoseconds = ns };
 }
 
 fn sleep(_: ?*anyopaque, timeout: Io.Timeout) Io.Cancelable!void {
-    const duration = timeout.toDurationFromNow(io()) orelse return ext.sleep(-1);
+    // Negative waits forever.
+    const duration = timeout.toDurationFromNow(io()) orelse return wait(-1);
     const ns = duration.raw.nanoseconds;
-    if (ns <= 0) return;
-    ext.sleep(@as(f64, @floatFromInt(ns)) / std.time.ns_per_ms);
+    if (ns > 0) wait(@intCast(ns));
+}
+
+fn wait(ns: i64) void {
+    _ = host.wait(.io_sleep, .{ns});
 }
 
 fn random(_: ?*anyopaque, buffer: []u8) void {
-    _ = ext.random(buffer.ptr, buffer.len);
+    _ = host.call(.io_random, .{buffer});
 }
 
 fn randomSecure(_: ?*anyopaque, buffer: []u8) Io.RandomSecureError!void {
-    if (!ext.random(buffer.ptr, buffer.len)) return error.EntropyUnavailable;
+    if (host.call(.io_random, .{buffer}) == 0) return error.EntropyUnavailable;
 }
-
-const ext = struct {
-    extern "__zx_io" fn now(source: u32) i64;
-    /// Timer granularity in nanoseconds (browsers coarsen `performance.now()`).
-    extern "__zx_io" fn resolution() i64;
-    /// Milliseconds; negative waits forever.
-    extern "__zx_io" fn sleep(ms: f64) void;
-    /// True when the bytes came from `crypto.getRandomValues`.
-    extern "__zx_io" fn random(ptr: [*]u8, len: usize) bool;
-};
