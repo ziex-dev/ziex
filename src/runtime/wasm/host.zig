@@ -9,7 +9,7 @@ const fetch = @import("../client/fetch.zig");
 const window = @import("../client/window.zig");
 const websocket = @import("../client/websocket.zig");
 
-// Must match CallbackType_* in `pkg/ziex/src/wasm/core.ts`.
+// Must match CallbackType_* in `pkg/ziex/src/wasm/constants.ts`.
 pub const HostMsg = enum(u8) {
     event = 0,
     fetch_success = 1,
@@ -43,8 +43,7 @@ fn hostCb(msg_type: u8, id: u64, a: u64, b: u64, c: u64) callconv(.c) void {
 fn dispatchClient(msg: HostMsg, id: u64, a: u64, b: u64, c: u64) void {
     switch (msg) {
         .timeout, .interval, .event => {
-            const cb_type: window.CallbackType = @fromBackingInt(@intCast(@backingInt(msg)));
-            _ = window.dispatchCallback(cb_type, id, a, std.heap.wasm_allocator);
+            _ = window.dispatchCallback(msg, id, a, std.heap.wasm_allocator);
         },
         .ws_open => {
             const protocol = hostBytes(a, @truncate(b));

@@ -16,7 +16,7 @@ pub extern "__zx" fn _wsClose(ws_id: u64, code: u16, reason_ptr: [*]const u8, re
 pub extern "__zx" fn _getLocationHref(buf: [*]u8, buf_len: usize) usize;
 
 /// Gets form entries `[k1,v1,...]` from JS and writes the pointer to `out_ptr`.
-pub extern "__zx" fn _getFormData(event_ref: u64, out_ptr: *[*]u8) usize;
+pub extern "__zx" fn _getFormData(event_ref: u32, out_ptr: *[*]u8) usize;
 
 /// Submits a form with action identity
 pub extern "__zx" fn _submitFormAction(vnode_id: u64, action_id: u32) void;

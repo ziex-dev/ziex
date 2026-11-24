@@ -27,7 +27,7 @@ export const DomOp_InsertBefore = 10;
 export const DomOp_RemoveChild = 11;
 export const DomOp_ReplaceChild = 12;
 
-// --- Host→guest `__zx_cb` type ids ---
+// --- Host→guest `__zx_cb` type ids (must match `HostMsg` in src/runtime/wasm/host.zig) ---
 export const CallbackType_Event = 0;
 export const CallbackType_FetchSuccess = 1;
 export const CallbackType_FetchError = 2;

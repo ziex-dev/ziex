@@ -16,12 +16,12 @@ const platform_role = zx.platform.role;
 _internal: Internal = .{},
 
 pub const Internal = struct {
-    event_ref: u64 = 0,
+    event_ref: u32 = 0,
     component_id: []const u8 = "",
     state_idx: u32 = 0,
 };
 
-pub fn init(event_ref: u64) Event {
+pub fn init(event_ref: u32) Event {
     return .{ ._internal = .{ .event_ref = event_ref } };
 }
 
@@ -126,41 +126,31 @@ fn readStruct(comptime T: type, allocator: Allocator, obj: js.Object) T {
     return result;
 }
 
+// One boundary crossing per field; type mismatches read as null.
 fn readField(comptime F: type, allocator: Allocator, obj: js.Object, comptime name: []const u8) ?F {
     const finfo = @typeInfo(F);
     const Child = if (finfo == .optional) finfo.optional.child else F;
-    const child_info = @typeInfo(Child);
     const js_name = comptime generated_events.jsName(name);
-    const raw = obj.value.get(js_name) catch return null;
-    defer raw.deinit();
 
-    const raw_type = raw.typeOf();
-    if (raw_type == .null or raw_type == .undefined) return null;
-
-    switch (child_info) {
+    switch (@typeInfo(Child)) {
         .@"struct" => {
-            if (raw_type != .object and raw_type != .function) return null;
-            const sub = js.Object{ .value = raw };
+            const sub = (obj.get(?js.Object, js_name) catch return null) orelse return null;
+            defer sub.deinit();
             return readStruct(Child, allocator, sub);
         },
         .pointer => |p| {
-            if (p.size == .slice and p.child == u8) {
-                if (raw_type != .string) return null;
-                return raw.string(allocator) catch null;
-            }
-            @compileError("unsupported pointer field type in Event.as: " ++ @typeName(F));
+            if (p.size != .slice or p.child != u8) @compileError("unsupported pointer field type in Event.as: " ++ @typeName(F));
+            return obj.getAlloc(?js.String, allocator, js_name) catch null;
         },
-        .int, .float => {
-            if (raw_type != .number) return null;
-            if (child_info == .int) {
-                return @as(Child, @intFromFloat(raw.float() catch return null));
-            }
-            return @as(Child, @floatCast(raw.float() catch return null));
+        .int => {
+            const v = (obj.get(?f64, js_name) catch return null) orelse return null;
+            return std.math.lossyCast(Child, v);
         },
-        .bool => {
-            if (raw_type != .boolean) return null;
-            return raw.boolean() catch null;
+        .float => {
+            const v = (obj.get(?f64, js_name) catch return null) orelse return null;
+            return @floatCast(v);
         },
+        .bool => return obj.get(?bool, js_name) catch null,
         else => @compileError("unsupported field type in Event.as: " ++ @typeName(F)),
     }
 }

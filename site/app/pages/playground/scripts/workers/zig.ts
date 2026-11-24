@@ -193,8 +193,6 @@ function buildAppArgs(kind: CompileKind): string[] {
         "manifest",
     ];
 
-    if (kind === "client") args.push("--dep", "js");
-
     args.push(
         "-Mzx=zx/src/root.zig",
         "-Mzx_info=stubs/zx_info.zig",
@@ -204,8 +202,6 @@ function buildAppArgs(kind: CompileKind): string[] {
         "-Mapp_opts=stubs/app_opts.zig",
         "-Mmanifest=stubs/manifest.zon",
     );
-
-    if (kind === "client") args.push("-Mjs=js/src/main.zig");
 
     args.push(
         "--name",
@@ -283,7 +279,6 @@ async function compileAppOne(
     zxDirectory: Directory,
     libDirectory: Directory,
     libCompilerRt: ArrayBuffer,
-    jsDirectory: Directory | null,
     cache: Map<string, Inode>,
 ): Promise<Uint8Array> {
     const args = buildAppArgs(kind);
@@ -291,7 +286,6 @@ async function compileAppOne(
     tree.set("libcompiler_rt.a", new Uint8Array(libCompilerRt));
     const cwdContents = convertTree(tree).contents;
     cwdContents.set("zx", zxDirectory);
-    if (jsDirectory) cwdContents.set("js", jsDirectory);
 
     const wasi = new WASI(args, [], zigFds(cwdContents, libDirectory, cache), { debug: false });
 
@@ -307,36 +301,6 @@ async function compileAppOne(
     const wasmFile = cwd.dir.contents.get(outName) as File | undefined;
     if (!wasmFile) throw new Error(`${kind} compile produced no ${outName}`);
     return wasmFile.data.slice();
-}
-
-async function getJsArchive(): Promise<Directory> {
-    const response = await fetchWithCache(`/assets/playground/jsz.tar.gz`);
-    let arrayBuffer = await response.arrayBuffer();
-    const magicNumber = new Uint8Array(arrayBuffer).slice(0, 2);
-    if (magicNumber[0] == 0x1F && magicNumber[1] == 0x8B) {
-        const ds = new DecompressionStream("gzip");
-        arrayBuffer = await new Response(new Response(arrayBuffer).body!.pipeThrough(ds)).arrayBuffer();
-    }
-    const { untar } = await import("@andrewbranch/untar.js");
-    const entries = untar(arrayBuffer);
-    const root = new Map<string, Map<string, unknown> | Uint8Array>();
-    for (const e of entries) {
-        const path = e.filename.replace(/^\.\//, "");
-        if (!path || path.endsWith("/")) continue;
-        const parts = path.split("/");
-        let cur = root;
-        for (let i = 0; i < parts.length - 1; i++) {
-            const seg = parts[i]!;
-            let next = cur.get(seg);
-            if (!(next instanceof Map)) {
-                next = new Map();
-                cur.set(seg, next);
-            }
-            cur = next as Map<string, Map<string, unknown> | Uint8Array>;
-        }
-        cur.set(parts[parts.length - 1]!, e.fileData);
-    }
-    return convertTree(root);
 }
 
 async function run(files: { [filename: string]: string }, mode: CompileMode) {
@@ -356,9 +320,8 @@ async function run(files: { [filename: string]: string }, mode: CompileMode) {
             const wasm = await compilePlayground(files, zxDirectory, libDirectory, libCompilerRt, cache);
             postMessage({ compiled: wasm });
         } else {
-            const jsDirectory = await getJsArchive();
-            const ssrWasm = await compileAppOne("ssr", files, zxDirectory, libDirectory, libCompilerRt, null, cache);
-            const clientWasm = await compileAppOne("client", files, zxDirectory, libDirectory, libCompilerRt, jsDirectory, cache);
+            const ssrWasm = await compileAppOne("ssr", files, zxDirectory, libDirectory, libCompilerRt, cache);
+            const clientWasm = await compileAppOne("client", files, zxDirectory, libDirectory, libCompilerRt, cache);
             postMessage({ compiled: { ssrWasm, clientWasm } });
         }
 

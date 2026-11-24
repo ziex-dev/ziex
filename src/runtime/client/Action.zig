@@ -29,7 +29,7 @@ pub fn fromEvent(event: zx.client.Event, alloc: Allocator) Action {
     };
 }
 
-fn readFormEntries(alloc: Allocator, event_ref: u64) []const []const u8 {
+fn readFormEntries(alloc: Allocator, event_ref: u32) []const []const u8 {
     var ptr: [*]u8 = undefined;
     const len = ext._getFormData(event_ref, &ptr);
     if (len == 0) return &.{};

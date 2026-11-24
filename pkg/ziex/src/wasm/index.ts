@@ -10,10 +10,7 @@ export {
     CallbackType_WebSocketClose,
 } from "./constants";
 export {
-    jsz,
-    storeValueGetRef,
-    loadValueFromRef,
-    releaseValueRef,
+    wasm,
     textDecoder,
     textEncoder,
     getMemoryView,
@@ -24,23 +21,22 @@ export {
     bindWasmAlloc,
     ZxBridgeCore,
 } from "./core";
-export type { CallbackTypeValue, WasmAllocRef } from "./core";
+export type { CallbackHandler, WasmAllocRef } from "./core";
+export { R, ref, deref, unref } from "./js";
 
 import {
     ZxBridgeCore,
-    jsz,
-    storeValueGetRef,
-    loadValueFromRef,
-    releaseValueRef,
+    wasm,
+    mem,
     wrapPromisingExport,
     invokeWasmExport,
     readString,
-    writeBytes,
     textDecoder,
     textEncoder,
     getMemoryView,
 } from "./core";
 import { bindWasmAlloc, type WasmAllocRef } from "./core";
+import { ref, deref, unref, resetRefs } from "./js";
 import {
     CallbackType_WebSocketOpen,
     CallbackType_WebSocketMessage,
@@ -63,12 +59,12 @@ export class ZxBridge extends ZxBridgeCore {
     #websockets: Map<bigint, WebSocket> = new Map();
 
     // Every handler may suspend (fetch, sleep); the gate keeps suspended handlers safe.
-    readonly #eventbridge: ((velementId: bigint, eventTypeId: number, eventRef: bigint) => void) | undefined;
+    readonly #eventbridge: ((velementId: bigint, eventTypeId: number, eventRef: number) => void) | undefined;
 
     constructor(exports: WebAssembly.Exports) {
         super(exports);
         this.#eventbridge = wrapPromisingExport(
-            exports.__zx_eventbridge as ((velementId: bigint, eventTypeId: number, eventRef: bigint) => void) | undefined
+            exports.__zx_eventbridge as ((velementId: bigint, eventTypeId: number, eventRef: number) => void) | undefined
         );
     }
 
@@ -85,7 +81,6 @@ export class ZxBridge extends ZxBridgeCore {
     clearEventHandlers(velementId: number): void {
         const present = eventHandlersPresent.get(velementId) ?? 0;
         eventHandlersPresent.delete(velementId);
-        // Drop high-freq listeners when no vnode still needs them.
         // Drop high-freq listeners when no vnode still needs them.
         for (let bits = present & HIGH_FREQ_EVENT_BITS; bits !== 0; bits &= bits - 1) {
             maybeRemoveHighFreqListener(31 - Math.clz32(bits));
@@ -215,7 +210,7 @@ export class ZxBridge extends ZxBridgeCore {
      * Dispatch to WASM for one vnode. Caller owns `eventRef` lifetime
      * (store once per bubble, release after sync/async work completes).
      */
-    eventbridge(velementId: number, eventTypeId: number, eventRef: bigint): void | Promise<void> {
+    eventbridge(velementId: number, eventTypeId: number, eventRef: number): void | Promise<void> {
         const run = this.#eventbridge;
         if (!run) return;
         const result = run(BigInt(velementId >>> 0), eventTypeId, eventRef) as void | Promise<void>;
@@ -224,49 +219,17 @@ export class ZxBridge extends ZxBridgeCore {
     }
 
     /** Create the full browser import object for WASM instantiation (includes DOM + WebSocket). */
-    static override createImportObject(bridgeRef: [ZxBridge | null], handlers: Handlers = {}): WebAssembly.Imports {
+    static override createImportObject(bridgeRef: [ZxBridge | null], handlers: Handlers = {}) {
+        const base = ZxBridgeCore.createImportObject(bridgeRef, handlers);
         return {
-            ...jsz.importObject(),
+            ...base,
             __zx: {
-                ...ZxBridgeCore.createHostImports(handlers),
-                _log: (level: number, ptr: number, len: number) => ZxBridgeCore.log(level, ptr, len),
+                ...base.__zx,
                 _registerEventHandler: (vnodeId: bigint, eventTypeId: number) => {
                     bridgeRef[0]?.registerEventHandler(Number(vnodeId), eventTypeId);
                 },
                 _clearEventHandlers: (vnodeId: bigint) => {
                     bridgeRef[0]?.clearEventHandlers(Number(vnodeId));
-                },
-                _fetchAsync: (
-                    urlPtr: number,
-                    urlLen: number,
-                    methodPtr: number,
-                    methodLen: number,
-                    headersPtr: number,
-                    headersLen: number,
-                    bodyPtr: number,
-                    bodyLen: number,
-                    timeoutMs: number,
-                    redirect: number,
-                    fetchId: bigint
-                ) => {
-                    bridgeRef[0]?.fetchAsync(
-                        urlPtr, urlLen,
-                        methodPtr, methodLen,
-                        headersPtr, headersLen,
-                        bodyPtr, bodyLen,
-                        timeoutMs,
-                        redirect,
-                        fetchId
-                    );
-                },
-                _setTimeout: (callbackId: bigint, delayMs: number) => {
-                    bridgeRef[0]?.setTimeout(callbackId, delayMs);
-                },
-                _setInterval: (callbackId: bigint, intervalMs: number) => {
-                    bridgeRef[0]?.setInterval(callbackId, intervalMs);
-                },
-                _clearInterval: (callbackId: bigint) => {
-                    bridgeRef[0]?.clearInterval(callbackId);
                 },
                 // WebSocket API
                 _wsConnect: (
@@ -293,11 +256,11 @@ export class ZxBridge extends ZxBridgeCore {
                 _getLocationHref: (bufPtr: number, bufLen: number): number => {
                     const bytes = textEncoder.encode(window.location.href);
                     const len = Math.min(bytes.length, bufLen);
-                    writeBytes(bufPtr, bytes.subarray(0, len));
+                    mem.writeBytes(bufPtr, bytes.subarray(0, len));
                     return len;
                 },
-                _getFormData: (eventRef: bigint, outPtrAddr: number): number => {
-                    const event = loadValueFromRef(eventRef) as Event | undefined;
+                _getFormData: (eventRef: number, outPtrAddr: number): number => {
+                    const event = deref(eventRef) as Event | undefined;
                     const el = event?.target as Element | null | undefined;
                     const form = el instanceof HTMLFormElement
                         ? el
@@ -311,7 +274,7 @@ export class ZxBridge extends ZxBridgeCore {
                     }
                     const bytes = textEncoder.encode(JSON.stringify(entries));
                     const [ptr, len] = bridgeRef[0]!.writeBytesToWasm(bytes);
-                    new DataView(jsz.memory!.buffer).setUint32(outPtrAddr, ptr, true);
+                    mem.data().setUint32(outPtrAddr >>> 0, ptr, true);
                     return len;
                 },
                 _submitFormAction: (vnodeId: bigint, actionId: number): void => {
@@ -379,13 +342,13 @@ let delegationState: DelegatedListenerState | null = null;
 
 function makeDelegatedListener(bridge: ZxBridge, eventTypeId: number): EventListener {
     return (event: Event) => {
-        let eventRef: bigint | undefined;
+        let eventRef: number | undefined;
         const pending: Promise<unknown>[] = [];
         let target = event.target as HTMLElement | null;
         while (target && target !== document.body) {
             const zxRef = (target as any).__zx_ref;
             if (typeof zxRef === "number" && bridge.hasEventHandler(zxRef, eventTypeId)) {
-                if (eventRef === undefined) eventRef = storeValueGetRef(event);
+                if (eventRef === undefined) eventRef = ref(event);
                 const result = bridge.eventbridge(zxRef, eventTypeId, eventRef);
                 if (result && typeof (result as Promise<unknown>).then === "function") {
                     pending.push(result as Promise<unknown>);
@@ -395,11 +358,11 @@ function makeDelegatedListener(bridge: ZxBridge, eventTypeId: number): EventList
             target = target.parentElement;
         }
         if (eventRef !== undefined) {
-            const ref = eventRef;
+            const handle = eventRef;
             if (pending.length > 0) {
-                Promise.all(pending).finally(() => releaseValueRef(ref));
+                Promise.all(pending).finally(() => unref(handle));
             } else {
-                releaseValueRef(ref);
+                unref(handle);
             }
         }
     };
@@ -529,7 +492,7 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
     const allocRef: WasmAllocRef = [null];
     const getMemory = () => {
         if (wasmMemory) return wasmMemory;
-        if (jsz.memory) return jsz.memory;
+        if (wasm.memory) return wasm.memory;
         throw new Error("WASM memory is not ready");
     };
 
@@ -549,8 +512,9 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
     const { instance } = source;
 
     wasmMemory = instance.exports.memory as WebAssembly.Memory;
-    jsz.memory = wasmMemory;
+    wasm.memory = wasmMemory;
     bindWasmAlloc(allocRef, instance.exports);
+    resetRefs();
 
     const bridge = new ZxBridge(instance.exports);
     bridgeRef[0] = bridge;

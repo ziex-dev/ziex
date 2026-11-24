@@ -160,10 +160,8 @@ pub const DomCmdBuffer = struct {
         try self.appendRecord(.create_text, ptr32(text), @intCast(text.len), id32(vnode_id), 0, 0);
     }
 
-    pub fn hydrateInsert(self: *DomCmdBuffer, vnode_id: u64, end_comment_ref: u64) !void {
-        const lo: u32 = @truncate(end_comment_ref);
-        const hi: u32 = @truncate(end_comment_ref >> 32);
-        try self.appendRecord(.hydrate_insert, id32(vnode_id), lo, hi, 0, 0);
+    pub fn hydrateInsert(self: *DomCmdBuffer, vnode_id: u64, end_comment_ref: u32) !void {
+        try self.appendRecord(.hydrate_insert, id32(vnode_id), end_comment_ref, 0, 0, 0);
     }
 
     pub fn setAttr(self: *DomCmdBuffer, vnode_id: u64, name: []const u8, val: []const u8) !void {
@@ -251,7 +249,7 @@ pub fn createText(text: []const u8, vnode_id: u64) void {
     flushOneshot(&tmp);
 }
 
-pub fn hydrateInsert(vnode_id: u64, end_comment_ref: u64) void {
+pub fn hydrateInsert(vnode_id: u64, end_comment_ref: u32) void {
     if (active_buf) |buf| {
         buf.hydrateInsert(vnode_id, end_comment_ref) catch {};
         return;

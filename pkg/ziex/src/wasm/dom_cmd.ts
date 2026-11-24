@@ -1,4 +1,5 @@
-import { getMemoryView, readString, loadValueFromRef } from "./core";
+import { getMemoryView, readString } from "./core";
+import { deref } from "./js";
 import { TAG_NAMES } from "./generated/tags";
 import { SVG_TAG_START_INDEX, CUSTOM_TAG_INDEX } from "./generated/tag_indices";
 import {
@@ -134,8 +135,7 @@ export function flushDomCmds(ptr: number, len: number, ctx: DomFlushContext): vo
             }
             case DomOp_HydrateInsert: {
                 const child = domNodes.get(p0);
-                const ref = BigInt(p1) | (BigInt(p2) << 32n);
-                const end = loadValueFromRef(ref) as ChildNode | null | undefined;
+                const end = deref(p1) as ChildNode | null | undefined;
                 if (!child || !end?.parentNode) break;
                 end.parentNode.insertBefore(child, end);
                 break;

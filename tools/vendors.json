@@ -5,12 +5,6 @@
     "branch": "main",
     "commit": "aff3b54879e7514afaf8c87f1abe22121b8992d4"
   },
-  "jsz": {
-    "repo": "git@github.com:nurulhudaapon/jsz.git",
-    "https": "https://github.com/nurulhudaapon/jsz",
-    "branch": "main",
-    "commit": "3c23860e47fdcdc5af805efb7fd0bdac5fd3e9bc"
-  },
   "zig-tree-sitter": {
     "repo": "git@github.com:nurulhudaapon/zig-tree-sitter.git",
     "https": "https://github.com/nurulhudaapon/zig-tree-sitter",

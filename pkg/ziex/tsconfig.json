@@ -17,6 +17,6 @@
     "sourceMap": false,
     "noEmitOnError": false
   },
-  "include": ["./src/**/*.ts", "../../vendor/jsz/js/src/**/*.ts"],
+  "include": ["./src/**/*.ts"],
   "exclude": ["node_modules", "dist", "test", "zig-out", ".zig-cache", "**/*.test.ts"]
 }

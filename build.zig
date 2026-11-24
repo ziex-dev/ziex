@@ -65,11 +65,6 @@ pub fn build(b: *std.Build) !void {
             }
         }
 
-        if (is_client) {
-            const jsz_dep = b.dependency("zig_js", .{ .target = target, .optimize = optimize });
-            mod.addImport("js", jsz_dep.module("zig-js"));
-        }
-
         mod.addOptions("zx_info", options);
     }
 

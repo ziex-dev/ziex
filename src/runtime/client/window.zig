@@ -9,17 +9,7 @@ pub const Document = @import("window/document.zig");
 
 pub const is_wasm = zx.platform.role == .client;
 
-/// JS bindings - only available in WASM builds
-pub const js = if (is_wasm) @import("js") else struct {
-    pub const Object = void;
-    pub const Value = void;
-    pub const String = []const u8;
-    pub const global = struct {
-        pub fn get(_: type, _: []const u8) !void {}
-        pub fn call(_: type, _: []const u8, _: anytype) !void {}
-    };
-    pub fn string(_: []const u8) void {}
-};
+pub const js = @import("js.zig");
 
 pub const Console = struct {
     ref: js.Object,
@@ -63,16 +53,9 @@ pub const Event = struct {
     target: ?EventTarget = null,
     data: ?[]const u8 = null,
 
-    /// Create an Event from a u64 NaN-boxed reference (passed from JS via jsz)
-    pub fn fromRef(event_ref: u64) Event {
-        const event_value: js.Value = @fromBackingInt(@intCast(event_ref));
-        const event_obj = js.Object{ .value = event_value };
-
-        return .{
-            .ref = event_obj,
-            .target = null,
-            .data = null,
-        };
+    /// Wrap a JS event handle; JS owns and releases it.
+    pub fn fromRef(event_ref: u32) Event {
+        return .{ .ref = .{ .value = @fromBackingInt(event_ref) } };
     }
 
     pub fn preventDefault(self: Event) void {
@@ -105,18 +88,7 @@ pub fn eval(T: type, code: []const u8) !T {
     return try js.global.call(T, "eval", .{js.string(code)});
 }
 
-/// Callback types for async operations (must match bridge.ts CallbackType)
-pub const CallbackType = enum(u8) {
-    event = 0,
-    fetch_success = 1,
-    fetch_error = 2,
-    timeout = 3,
-    interval = 4,
-    ws_open = 5,
-    ws_message = 6,
-    ws_error = 7,
-    ws_close = 8,
-};
+pub const CallbackType = @import("../wasm/host.zig").HostMsg;
 
 /// Callback function types
 pub const TimeoutCallback = *const fn () void;

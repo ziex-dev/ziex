@@ -87,21 +87,12 @@ pub fn build(b: *std.Build) !void {
         run_zx_tar.addDirectoryArg(zx_wasm_dep.path("."));
         run_zx_tar.addArg("src");
 
-        const run_jsz_tar = b.addSystemCommand(&.{ "tar", "-czf" });
-        run_jsz_tar.setName("pack jsz sources (playground)");
-        run_jsz_tar.has_side_effects = true;
-        const jsz_tar_gz = run_jsz_tar.addOutputFileArg("jsz.tar.gz");
-        run_jsz_tar.addArg("-C");
-        run_jsz_tar.addDirectoryArg(zx_wasm_dep.path("vendor/jsz"));
-        run_jsz_tar.addArg("src");
-
         const ziex_js_files = ziex_js_dep.namedWriteFiles("ziex_js");
         const pg_init_js = ziex_js_files.getDirectory().path(b, "wasm/init.js");
 
         const playground_assets = b.addNamedWriteFiles("playground_assets");
         _ = playground_assets.addCopyFile(zx_exe.getEmittedBin(), b.fmt("zx-{s}-{s}.wasm", .{ ziex.info.version, id }));
         _ = playground_assets.addCopyFile(zx_tar_gz, b.fmt("zx-{s}-{s}.tar.gz", .{ ziex.info.version, id }));
-        _ = playground_assets.addCopyFile(jsz_tar_gz, "jsz.tar.gz");
         _ = playground_assets.addCopyFile(pg_init_js, "init.js");
 
         if (build_zig) {
@@ -427,7 +418,7 @@ pub fn build(b: *std.Build) !void {
 // Cache-busting id: hash of the sources packed into / compiled for the playground and client assets
 fn assetId(b: *std.Build, _: std.builtin.Optimize) []const u8 {
     const io = b.graph.io;
-    const dirs = [_][]const u8{ "../src", "../vendor/jsz/src", "../pkg/ziex/src" };
+    const dirs = [_][]const u8{ "../src", "../pkg/ziex/src" };
     var hasher = std.hash.Wyhash.init(0);
     for (dirs) |sub| {
         var dir = b.root.openDir(io, sub, .{ .iterate = true }) catch |err|

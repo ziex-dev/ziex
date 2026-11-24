@@ -379,8 +379,8 @@ pub fn getVElementById(self: *Client, id: u64) ?*vtree_mod.VElement {
     return self.id_to_velement.get(id);
 }
 
-/// `event_ref` is a NaN-boxed JS event object. Returns true if a handler ran.
-pub fn dispatchEvent(self: *Client, velement_id: u64, event_type: EventType, event_ref: u64) bool {
+/// `event_ref` is a JS handle to the event object. Returns true if a handler ran.
+pub fn dispatchEvent(self: *Client, velement_id: u64, event_type: EventType, event_ref: u32) bool {
     if (self.getHandler(velement_id, event_type)) |handler| {
         const event_context = zx.client.Event.init(event_ref);
         handler.callback(handler.context, event_context);
@@ -389,12 +389,12 @@ pub fn dispatchEvent(self: *Client, velement_id: u64, event_type: EventType, eve
     return false;
 }
 
-pub fn dispatchEventByName(self: *Client, velement_id: u64, event_type_name: []const u8, event_ref: u64) bool {
+pub fn dispatchEventByName(self: *Client, velement_id: u64, event_type_name: []const u8, event_ref: u32) bool {
     const event_type = std.meta.stringToEnum(EventType, event_type_name) orelse return false;
     return self.dispatchEvent(velement_id, event_type, event_ref);
 }
 
-export fn __zx_eventbridge(velement_id: u64, event_type_id: u8, event_ref: u64) void {
+export fn __zx_eventbridge(velement_id: u64, event_type_id: u8, event_ref: u32) void {
     if (zx.platform.role != .client) return;
     if (global_client) |client| {
         const event_type: EventType = @fromBackingInt(@intCast(event_type_id));
