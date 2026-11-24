@@ -26,7 +26,8 @@ pub fn secrets(e: *const Env) Secrets {
 }
 
 pub const LoadOptions = struct {
-    dir: std.Io.Dir = .cwd(),
+    // Defaults to cwd, resolved at runtime (not comptime-known on Windows).
+    dir: ?std.Io.Dir = null,
     // e.g. `development`, `production`, `test`, `staging`.
     mode: ?[]const u8 = null,
     max_size: usize = 1 << 20,
@@ -36,6 +37,7 @@ pub const LoadOptions = struct {
 // Variables already in the map always win; `.env.local` is skipped in `test` mode.
 pub fn load(e: *Env, io: std.Io, opts: LoadOptions) !void {
     const gpa = e.map.allocator;
+    const dir = opts.dir orelse std.Io.Dir.cwd();
     const is_test = if (opts.mode) |m| std.mem.eql(u8, m, "test") else false;
 
     var bufs: [2][128]u8 = undefined;
@@ -50,7 +52,7 @@ pub fn load(e: *Env, io: std.Io, opts: LoadOptions) !void {
     defer files.deinit();
     for (names) |maybe_name| {
         const name = maybe_name orelse continue;
-        const src = opts.dir.readFileAlloc(io, name, gpa, .limited(opts.max_size)) catch |err| switch (err) {
+        const src = dir.readFileAlloc(io, name, gpa, .limited(opts.max_size)) catch |err| switch (err) {
             error.FileNotFound => continue,
             else => return err,
         };
