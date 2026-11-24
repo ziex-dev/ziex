@@ -208,9 +208,9 @@ pub const VTable = struct {
     stmtIterate: *const fn (stmt: ?*anyopaque, bindings: Bindings) anyerror!Statement.Iterator,
     stmtDeinit: *const fn (stmt: ?*anyopaque) void,
     stmtToString: *const fn (stmt: ?*anyopaque, allocator: std.mem.Allocator) anyerror![]u8,
-    stmtColumnNames: *const fn (stmt: ?*anyopaque) []const []const u8,
-    stmtColumnTypes: *const fn (stmt: ?*anyopaque) []const ColumnType,
-    stmtParamCount: *const fn (stmt: ?*anyopaque) usize,
+    stmtColumnNames: *const fn (stmt: ?*anyopaque) anyerror![]const []const u8,
+    stmtColumnTypes: *const fn (stmt: ?*anyopaque) anyerror![]const ColumnType,
+    stmtParamCount: *const fn (stmt: ?*anyopaque) anyerror!usize,
 };
 
 pub fn prepare(self: Db, sql: []const u8) !Statement {
@@ -500,13 +500,13 @@ fn failingStmtDeinit(_: ?*anyopaque) void {}
 fn failingStmtToString(_: ?*anyopaque, _: std.mem.Allocator) anyerror![]u8 {
     return Error.Closed;
 }
-fn failingStmtColumnNames(_: ?*anyopaque) []const []const u8 {
+fn failingStmtColumnNames(_: ?*anyopaque) anyerror![]const []const u8 {
     return &.{};
 }
-fn failingStmtColumnTypes(_: ?*anyopaque) []const ColumnType {
+fn failingStmtColumnTypes(_: ?*anyopaque) anyerror![]const ColumnType {
     return &.{};
 }
-fn failingStmtParamCount(_: ?*anyopaque) usize {
+fn failingStmtParamCount(_: ?*anyopaque) anyerror!usize {
     return 0;
 }
 

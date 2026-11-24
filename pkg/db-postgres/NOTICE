@@ -1,0 +1,9 @@
+The Postgres wire-protocol code in this package (message layouts, SCRAM-SHA-256
+flow, CommandComplete tag parsing, type OIDs and bytea decoding) is adapted from
+Bun's Zig Postgres client:
+
+  https://github.com/oven-sh/bun  tag bun-v1.3.13, src/sql/postgres
+  Bun is MIT licensed.
+
+Bun's socket, TLS (BoringSSL) and JavaScriptCore layers were not used; this
+package runs on std.Io and std.crypto.tls.

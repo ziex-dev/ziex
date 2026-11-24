@@ -2,5 +2,5 @@
     .name = .db_postgres,
     .version = "0.1.0",
     .fingerprint = 0x833b56a066777e92,
-    .paths = .{""},
+    .paths = .{ "build.zig", "build.zig.zon", "src", "NOTICE" },
 }

@@ -9,3 +9,4 @@ pub const open = Postgres.open;
 pub const deserialize = Postgres.deserialize;
 pub const db = Postgres.db;
 pub const from = Postgres.from;
+pub const uri = postgres.uri;

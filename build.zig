@@ -132,6 +132,7 @@ pub fn build(b: *std.Build) !void {
     {
         const mode_test = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
         if (b.lazyDependency("db_sqlite", .{})) |ad| mode_test.addImport("sqlite", ad.module("sqlite"));
+        if (b.lazyDependency("db_postgres", .{})) |ad| mode_test.addImport("db_postgres", ad.module("postgres"));
         mode_test.addOptions("zx_info", options);
         mode_test.addImport("lang", lang_mod);
 
@@ -180,6 +181,14 @@ pub fn build(b: *std.Build) !void {
 
         const test_step = b.step("test", "Run tests");
         test_step.dependOn(&test_run.step);
+
+        // protocol/auth/url unit tests for the postgres package; no server needed
+        const pg_unit = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("pkg/db-postgres/src/postgres.zig"),
+            .target = target,
+            .optimize = optimize,
+        }) });
+        test_step.dependOn(&b.addRunArtifact(pg_unit).step);
 
         const transpile_only = b.addExecutable(.{
             .name = "transpile-only",

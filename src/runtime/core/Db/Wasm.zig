@@ -130,15 +130,15 @@ fn toString(ud: ?*anyopaque, allocator: std.mem.Allocator) ![]u8 {
     return allocator.dupe(u8, statement_ctx.sql);
 }
 
-fn columnNames(_: ?*anyopaque) []const []const u8 {
+fn columnNames(_: ?*anyopaque) anyerror![]const []const u8 {
     return &.{};
 }
 
-fn columnTypes(_: ?*anyopaque) []const Db.ColumnType {
+fn columnTypes(_: ?*anyopaque) anyerror![]const Db.ColumnType {
     return &.{};
 }
 
-fn paramCount(_: ?*anyopaque) usize {
+fn paramCount(_: ?*anyopaque) anyerror!usize {
     return 0;
 }
 

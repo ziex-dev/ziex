@@ -812,8 +812,7 @@ fn Database(allocator: zx.Allocator, props: DatabaseProps) zx.Component {
             <h3>Enabling</h3>
             <p>The embedded SQLite database is disabled by default. Enable it in <code>build.zig</code> by passing <code>features</code> to your <code>ziex.init</code> call:</p>
             <CodeBlock code={props.enable_build} filename="build.zig" translate="no" />
-            // TODO: uncoment when postgres is supported
-            // <p>For Postgres, use <code>.postgres = .enabled</code> instead and access it through <code>zx.Db.Postgres</code>.</p>
+            <p>For Postgres, use <code>.postgres = .enabled</code> instead and set <code>DATABASE_URL</code> (for example <code>postgres://user:pass@host:5432/app?sslmode=verify-full</code>); <code>zx.db</code>{" "}then connects to it at startup. You can also open one yourself with <code>zx.Db.Postgres.open</code>. Use <code>$1</code> or named placeholders, and <code>RETURNING id</code> in place of a last-insert id. Repeated queries reuse a server-side prepared statement on each connection; add <code>statement_cache_size=0</code>{" "}to the URL when connecting through PgBouncer in transaction mode. TLS uses <code>sslmode</code>{" "}(<code>disable</code>, <code>prefer</code> by default, <code>require</code>, <code>verify-ca</code>, <code>verify-full</code>); client certificates are not supported yet.</p>
 
             <p>Create tables and insert rows with <code>zx.db.run</code>:</p>
             <CodeBlock code={props.db_basic} />

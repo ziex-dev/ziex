@@ -1,0 +1,14 @@
+.{
+    .name = .db_postgres_bench,
+    .version = "0.0.0",
+    .fingerprint = 0x86f6fe455532abfb,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .db_postgres = .{ .path = ".." },
+        .pg = .{
+            .url = "git+https://github.com/karlseguin/pg.zig?ref=master#59e71ce87238b29a67b897e553d2b97db2cea75c",
+            .hash = "pg-0.0.0-Wp_7ge14BwBOMOyvr9KuSEvtpuV_NcASU5B3t-zxVa0G",
+        },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src" },
+}

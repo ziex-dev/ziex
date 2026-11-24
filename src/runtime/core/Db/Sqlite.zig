@@ -636,17 +636,17 @@ fn toString(ud: ?*anyopaque, allocator: std.mem.Allocator) ![]u8 {
     return allocator.dupe(u8, stmt_ctx.sql);
 }
 
-fn columnNames(ud: ?*anyopaque) []const []const u8 {
+fn columnNames(ud: ?*anyopaque) anyerror![]const []const u8 {
     const stmt_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
     return stmt_ctx.column_names;
 }
 
-fn columnTypes(ud: ?*anyopaque) []const Db.ColumnType {
+fn columnTypes(ud: ?*anyopaque) anyerror![]const Db.ColumnType {
     const stmt_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
     return stmt_ctx.column_types;
 }
 
-fn paramCount(ud: ?*anyopaque) usize {
+fn paramCount(ud: ?*anyopaque) anyerror!usize {
     const stmt_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
     return stmt_ctx.param_count;
 }
