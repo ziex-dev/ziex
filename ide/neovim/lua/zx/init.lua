@@ -125,6 +125,7 @@ function M.attach(bufnr, lang)
   end
   if M.config.auto_install and parsers_missing() then M.install_parsers(false) end
   pcall(vim.treesitter.start, bufnr, lang)
+  vim.opt.cms = '// %s'
   if M.config.keymaps then
     vim.keymap.set("n", "<leader>zh", "<cmd>Inspect<CR>", { buffer = bufnr, desc = "zx: show highlight" })
     vim.keymap.set("n", "<leader>zt", "<cmd>InspectTree<CR>", { buffer = bufnr, desc = "zx: inspect tree" })
