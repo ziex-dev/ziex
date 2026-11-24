@@ -24,10 +24,25 @@ pub const Kind = enum { action, event };
 // `.{ .{ "path.zig", module, has_client_components }, ... }`, generated into `app.zig`.
 const modules = if (@hasDecl(app, "modules")) app.modules else .{};
 
-// The browser build only compiles modules holding `@client` components, so it
-// resolves ids from those alone; any id of a handler dispatches on the server.
+const components = if (@hasDecl(app, "components")) app.components else .{};
+
+// The browser build only compiles modules rendering or defining `@client`
+// components, so it resolves ids from those alone; any id of a handler
+// dispatches on the server.
 fn scanned(comptime m: anytype) bool {
-    return zx.platform.role != .client or m[2];
+    return zx.platform.role != .client or m[2] or definesClient(m[1]);
+}
+
+// Whether `M` declares a `@client` component rendered from another module.
+fn definesClient(comptime M: type) bool {
+    for (components) |c| {
+        if (!@hasDecl(M, c.name)) continue;
+        for (modules) |r| {
+            if (!r[2] or !std.mem.eql(u8, r[0], c.path) or !@hasDecl(r[1], c.name)) continue;
+            if (Key(@field(M, c.name)) == Key(@field(r[1], c.name))) return true;
+        }
+    }
+    return false;
 }
 
 /// Whether `F` is a server action or event handler, by signature.
