@@ -785,8 +785,7 @@ fn copyOnly(io: std.Io, allocator: std.mem.Allocator, source_path: []const u8, d
 /// If the file is in a pages directory, returns the route (e.g., "/about", "/")
 /// Otherwise returns empty string
 fn extractRouteFromPath(allocator: std.mem.Allocator, source_path: []const u8) ![]const u8 {
-    const sep = std.fs.path.sep_str;
-    const pages_sep = "pages" ++ sep;
+    const pages_sep = "pages/";
 
     // Check if source_path contains "pages" directory
     if (std.mem.indexOf(u8, source_path, pages_sep)) |pages_index| {
@@ -801,18 +800,12 @@ fn extractRouteFromPath(allocator: std.mem.Allocator, source_path: []const u8) !
             return try allocator.dupe(u8, "/");
         }
 
-        // Normalize separators first, then [id]→:id and [..]→*
+        // [id]→:id and [..]→*
         var with_slashes = std.array_list.Managed(u8).init(allocator);
         defer with_slashes.deinit();
         try with_slashes.append('/');
 
-        for (dir_path) |c| {
-            if (c == std.fs.path.sep) {
-                try with_slashes.append('/');
-            } else {
-                try with_slashes.append(c);
-            }
-        }
+        try with_slashes.appendSlice(dir_path);
 
         return try normalizeRoutePath(allocator, with_slashes.items);
     }
@@ -862,68 +855,13 @@ fn resolvePath(allocator: std.mem.Allocator, base_dir: []const u8, relative_path
     return try std.fs.path.resolve(allocator, &.{joined});
 }
 
-/// Calculate relative path from base to target
-fn relativePath(allocator: std.mem.Allocator, base: []const u8, target: []const u8) ![]const u8 {
-    const sep = std.fs.path.sep_str;
-
-    var base_normalized = base;
-    var target_normalized = target;
-    if (std.mem.endsWith(u8, base, sep)) {
-        base_normalized = base[0 .. base.len - sep.len];
-    }
-    if (std.mem.endsWith(u8, target, sep)) {
-        target_normalized = target[0 .. target.len - sep.len];
-    }
-
-    var base_parts = std.ArrayList([]const u8).empty;
-    defer base_parts.deinit(allocator);
-    var target_parts = std.ArrayList([]const u8).empty;
-    defer target_parts.deinit(allocator);
-
-    var base_iter = std.mem.splitScalar(u8, base_normalized, std.fs.path.sep);
-    while (base_iter.next()) |part| {
-        if (part.len > 0) {
-            try base_parts.append(allocator, part);
-        }
-    }
-
-    var target_iter = std.mem.splitScalar(u8, target_normalized, std.fs.path.sep);
-    while (target_iter.next()) |part| {
-        if (part.len > 0) {
-            try target_parts.append(allocator, part);
-        }
-    }
-
-    var common_len: usize = 0;
-    const min_len = @min(base_parts.items.len, target_parts.items.len);
-    while (common_len < min_len and std.mem.eql(u8, base_parts.items[common_len], target_parts.items[common_len])) {
-        common_len += 1;
-    }
-
-    var result = std.ArrayList(u8).empty;
-    defer result.deinit(allocator);
-
-    var i = common_len;
-    while (i < base_parts.items.len) : (i += 1) {
-        if (result.items.len > 0) {
-            try result.appendSlice(allocator, sep);
-        }
-        try result.appendSlice(allocator, "..");
-    }
-
-    i = common_len;
-    while (i < target_parts.items.len) : (i += 1) {
-        if (result.items.len > 0) {
-            try result.appendSlice(allocator, sep);
-        }
-        try result.appendSlice(allocator, target_parts.items[i]);
-    }
-
-    if (result.items.len == 0) {
-        return try allocator.dupe(u8, ".");
-    }
-
-    return try result.toOwnedSlice(allocator);
+/// Relative path from `base` to `target`, always '/'-separated.
+fn relativePath(io: std.Io, allocator: std.mem.Allocator, base: []const u8, target: []const u8) ![]u8 {
+    const cwd = try std.process.currentPathAlloc(io, allocator);
+    defer allocator.free(cwd);
+    const rel = try std.fs.path.relativeAlloc(allocator, cwd, null, base, target);
+    std.mem.replaceScalar(u8, rel, '\\', '/');
+    return rel;
 }
 
 /// Check if output_dir is a subdirectory of dir_path and return the relative path if so
@@ -1153,8 +1091,7 @@ fn writeClientZon(
     var entries = std.array_list.Managed(ModuleClient).init(allocator);
     defer entries.deinit();
     for (components) |component| {
-        const file = try std.mem.replaceOwned(u8, allocator, component.path, "\\", "/");
-        const prefix = prefixes.get(file) orelse {
+        const prefix = prefixes.get(component.path) orelse {
             std.debug.print(
                 "Warning: client component '{s}' in {s} is not reachable from {s} through pub declarations\n",
                 .{ component.name, component.path, root_rel },
@@ -1584,18 +1521,8 @@ fn transpileFile(
     defer allocator.free(source_z);
 
     // Convert to relative path for deterministic component IDs and sourcemaps
-    var relative_source_path: []const u8 = source_path;
-    var rel_path_allocated = false;
-    if (std.fs.path.isAbsolute(source_path)) {
-        if (std.process.currentPathAlloc(io, allocator)) |cwd| {
-            defer allocator.free(cwd);
-            if (relativePath(allocator, cwd, source_path)) |rel| {
-                relative_source_path = rel;
-                rel_path_allocated = true;
-            } else |_| {}
-        } else |_| {}
-    }
-    defer if (rel_path_allocated) allocator.free(relative_source_path);
+    const relative_source_path = try relativePath(io, allocator, ".", source_path);
+    defer allocator.free(relative_source_path);
 
     var result = try lang.Ast.parse(allocator, source_z, .{
         .path = relative_source_path,
@@ -1609,9 +1536,7 @@ fn transpileFile(
         try collectZxImports(io, allocator, out, &result.zig_ast, ast_source_dir);
     }
     if (pub_imports) |out| {
-        const rel = try relativePath(allocator, opts.outdir, output_path);
-        defer allocator.free(rel);
-        const from = try std.mem.replaceOwned(u8, allocator, rel, "\\", "/");
+        const from = try relativePath(io, allocator, opts.outdir, output_path);
         defer allocator.free(from);
         try collectPubImports(io, allocator, out, &result.zig_ast, ast_source_dir, from);
     }
@@ -1638,7 +1563,7 @@ fn transpileFile(
         switch (component.type) {
             .client => {
                 // For .client components, use the output .zig file path (relative to output_dir)
-                const output_rel_to_dir = try relativePath(allocator, opts.outdir, output_path);
+                const output_rel_to_dir = try relativePath(io, allocator, opts.outdir, output_path);
                 defer allocator.free(output_rel_to_dir);
 
                 // Remove leading "./" if present
@@ -1827,9 +1752,10 @@ fn transpileDirectory(
         try seen.put(abs_input, {});
 
         // Only sources inside the app dir map into the outdir.
-        const rel = try relativePath(allocator, abs_root, abs_input);
+        const rel = try relativePath(io, allocator, abs_root, abs_input);
         defer allocator.free(rel);
-        if (std.mem.eql(u8, rel, "..") or std.mem.startsWith(u8, rel, ".." ++ std.fs.path.sep_str)) continue;
+        // Different drive on Windows yields an absolute path
+        if (std.mem.eql(u8, rel, "..") or std.mem.startsWith(u8, rel, "../") or std.fs.path.isAbsolute(rel)) continue;
 
         try transpileSource(io, allocator, global_components, modules, input_files, companions_visited, &pending, opts, input_path, abs_input, rel);
     }
@@ -1945,9 +1871,7 @@ fn transpileSource(
 
 /// Lists a transpiled module in `app.zig` so its `pub` server handlers are registered.
 fn addModule(allocator: std.mem.Allocator, modules: *std.array_list.Managed([]const u8), output_rel_path: []const u8) !void {
-    const path = try allocator.dupe(u8, output_rel_path);
-    std.mem.replaceScalar(u8, path, '\\', '/');
-    try modules.append(path);
+    try modules.append(try allocator.dupe(u8, output_rel_path));
 }
 
 const TranspileOptions = struct {
