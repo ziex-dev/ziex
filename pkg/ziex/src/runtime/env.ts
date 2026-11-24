@@ -33,7 +33,8 @@ export function createEnvHandlers(
 
             try {
                 const args = args_len > 0 ? JSON.parse(readStr(args_ptr, args_len)) : [];
-                const result = fn.apply(target, Array.isArray(args) ? args : [args]);
+                // Call through `target`: on RPC stubs `fn.apply` is itself a remote method.
+                const result = target[method](...(Array.isArray(args) ? args : [args]));
                 // RPC bindings return thenables, not native promises.
                 if (typeof result?.then !== "function") return write(out, result);
                 return Promise.resolve(result).then((value) => write(out, value), (err) => fail(name, method, err));
