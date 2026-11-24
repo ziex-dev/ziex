@@ -99,6 +99,7 @@ pub const Ai = @import("runtime/core/Ai.zig");
 pub const Flag = @import("runtime/core/Flag.zig");
 pub const Auth = @import("runtime/core/Auth.zig");
 pub const Email = @import("runtime/core/Email.zig");
+pub const Secrets = @import("runtime/core/Secrets.zig");
 
 pub var db: Db = .failing;
 pub var kv: Kv = .failing;
@@ -106,6 +107,7 @@ pub var cache: Cache = .failing;
 pub var ai: Ai = .failing;
 pub var flag: Flag = .failing;
 pub var email: Email = .failing;
+pub var secrets: Secrets = .failing;
 
 // --- Net --- //
 pub const http = @import("runtime/core/http.zig");

@@ -238,6 +238,11 @@ var email_wasm: zx.Email.Wasm = undefined;
 var email_memory: ?zx.Email.Memory = null;
 var email_env: std.heap.ArenaAllocator = undefined;
 
+var secrets_env: ?zx.Secrets.Env = null;
+var secrets_wasm: zx.Secrets.Wasm = .{};
+var secrets_stores: [2]zx.Secrets = undefined;
+var secrets_chain: zx.Secrets.Chain = .{ .stores = &secrets_stores };
+
 const Resolved = struct {
     datadir: ?[]const u8 = null,
     staticdir: ?[]const u8 = null,
@@ -254,15 +259,18 @@ var resolved: Resolved = .{};
 fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Config {
     var cfg = config;
 
+    // Feature ==> zx.secrets; first, so `.env` files feed every `envVar` below.
+    if (comptime platform.role == .server) try initSecrets(alloc, inita);
+
     if (app_opts.server_port) |p| cfg.server.port = p;
     if (app_opts.server_address) |a| cfg.server.address = a;
 
-    const rootdir_env = envVar(alloc, inita, "ZIEX_ROOT_DIR");
-    const datadir_env = envVar(alloc, inita, "ZIEX_DATA_DIR");
-    const staticdir_env = envVar(alloc, inita, "ZIEX_STATIC_DIR");
-    const port_env = envVar(alloc, inita, "PORT");
-    const host_env = envVar(alloc, inita, "HOST");
-    if (envVar(alloc, inita, "ZIEX_STOP_ON_EOF")) |s| {
+    const rootdir_env = envVar(alloc, "ZIEX_ROOT_DIR");
+    const datadir_env = envVar(alloc, "ZIEX_DATA_DIR");
+    const staticdir_env = envVar(alloc, "ZIEX_STATIC_DIR");
+    const port_env = envVar(alloc, "PORT");
+    const host_env = envVar(alloc, "HOST");
+    if (envVar(alloc, "ZIEX_STOP_ON_EOF")) |s| {
         alloc.free(s);
         stop_on_eof = true;
     }
@@ -376,9 +384,25 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
     return cfg;
 }
 
+fn initSecrets(alloc: std.mem.Allocator, inita: zx.Init) !void {
+    secrets_env = try .fromEnviron(alloc, inita.minimal.environ);
+    const env = &secrets_env.?;
+
+    if (platform.os == .wasi) {
+        secrets_stores = .{ env.secrets(), secrets_wasm.secrets() };
+        zx.secrets = secrets_chain.secrets();
+        return;
+    }
+
+    // `.env` files live in the project (cwd), not `ZIEX_ROOT_DIR`, which the CLI points at `zig-out`.
+    const env_mode = env.map.get("ZIEX_ENV") orelse if (App.mode == .dev) "development" else "production";
+    try env.load(inita.io, .{ .mode = env_mode });
+    zx.secrets = env.secrets();
+}
+
 fn initAi(alloc: std.mem.Allocator, inita: zx.Init) void {
-    resolved.ai_api_key = envVar(alloc, inita, AiProvider.env_api_key);
-    resolved.ai_base_url = envVar(alloc, inita, AiProvider.env_base_url);
+    resolved.ai_api_key = envVar(alloc, AiProvider.env_api_key);
+    resolved.ai_base_url = envVar(alloc, AiProvider.env_base_url);
     ai_provider = .{
         .io = inita.io,
         .api_key = resolved.ai_api_key,
@@ -395,16 +419,16 @@ fn initFlag(alloc: std.mem.Allocator, inita: zx.Init) void {
     flag_provider = switch (FlagProvider) {
         zx.Flag.Ofrep => .{
             .io = inita.io,
-            .base_url = envVar(env, inita, zx.Flag.Ofrep.env_url) orelse app_opts.flag_base_url orelse "",
-            .api_key = envVar(env, inita, zx.Flag.Ofrep.env_api_key),
+            .base_url = envVar(env, zx.Flag.Ofrep.env_url) orelse app_opts.flag_base_url orelse "",
+            .api_key = envVar(env, zx.Flag.Ofrep.env_api_key),
         },
         zx.Flag.Flagship => .{
             .io = inita.io,
             .binding = app_opts.flag_binding orelse zx.Flag.Flagship.default_binding,
             .base_url = app_opts.flag_base_url orelse zx.Flag.Flagship.default_base_url,
-            .account_id = envVar(env, inita, zx.Flag.Flagship.env_account_id),
-            .app_id = envVar(env, inita, zx.Flag.Flagship.env_app_id) orelse app_opts.flag_app_id,
-            .api_token = envVar(env, inita, zx.Flag.Flagship.env_api_token),
+            .account_id = envVar(env, zx.Flag.Flagship.env_account_id),
+            .app_id = envVar(env, zx.Flag.Flagship.env_app_id) orelse app_opts.flag_app_id,
+            .api_token = envVar(env, zx.Flag.Flagship.env_api_token),
         },
         zx.Flag.Kv => if (app_opts.feat_kv_server) .{ .store = zx.kv } else @compileError("the .kv flag provider needs the .kv server feature"),
         else => unreachable,
@@ -420,8 +444,8 @@ fn initEmail(alloc: std.mem.Allocator, inita: zx.Init) void {
         .resend => blk: {
             email_resend = .{
                 .io = inita.io,
-                .api_key = envVar(env, inita, zx.Email.Resend.env_api_key),
-                .base_url = envVar(env, inita, zx.Email.Resend.env_base_url) orelse app_opts.email_base_url orelse zx.Email.Resend.default_base_url,
+                .api_key = envVar(env, zx.Email.Resend.env_api_key),
+                .base_url = envVar(env, zx.Email.Resend.env_base_url) orelse app_opts.email_base_url orelse zx.Email.Resend.default_base_url,
             };
             break :blk email_resend.email();
         },
@@ -433,7 +457,7 @@ fn initEmail(alloc: std.mem.Allocator, inita: zx.Init) void {
         .memory => initEmailMemory(alloc, inita),
     };
 
-    const from = envVar(env, inita, "EMAIL_FROM") orelse app_opts.email_from orelse return;
+    const from = envVar(env, "EMAIL_FROM") orelse app_opts.email_from orelse return;
     zx.email.from = zx.Email.Address.parse(from) catch {
         std.log.scoped(.zx_email).warn("invalid sender address: {s}", .{from});
         return;
@@ -449,6 +473,14 @@ fn initEmailMemory(alloc: std.mem.Allocator, inita: zx.Init) zx.Email {
 fn freeResolved(alloc: std.mem.Allocator) void {
     if (resolved.host) |s| alloc.free(s);
     resolved.host = null;
+
+    // Feature ==> zx.secrets
+    if (secrets_env) |*env| {
+        zx.secrets = .failing;
+        env.deinit();
+        secrets_env = null;
+    }
+
     if (resolved.datadir == null) return;
 
     // Feature ==> zx.db (sqlite backend)
@@ -498,14 +530,8 @@ fn freeResolved(alloc: std.mem.Allocator) void {
     resolved = .{};
 }
 
-fn envVar(alloc: std.mem.Allocator, inita: zx.Init, name: []const u8) ?[]const u8 {
-    if (platform.os == .freestanding) return null;
-    const minimal: std.process.Init.Minimal = switch (@TypeOf(inita)) {
-        std.process.Init.Minimal => inita,
-        std.process.Init => inita.minimal,
-        else => return null,
-    };
-    return minimal.environ.getAlloc(alloc, name) catch null;
+fn envVar(alloc: std.mem.Allocator, name: []const u8) ?[]const u8 {
+    return zx.secrets.get(alloc, name) catch null;
 }
 
 pub const Route = struct {
