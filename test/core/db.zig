@@ -679,6 +679,18 @@ test "api > pooled file database serves concurrent-style queries" {
     const row = (try database.get(arena.allocator(), "SELECT COUNT(*) AS total, SUM(n) AS s FROM nums", .{})).?;
     try expectIntField(row, "total", 5);
     try expectIntField(row, "s", 10);
+
+    const mode = (try database.get(arena.allocator(), "PRAGMA journal_mode", .{})).?;
+    try expectTextField(mode, "journal_mode", "wal");
+}
+
+test "api > constraint violation surfaces extended error" {
+    var database = try openTestDatabase();
+    defer database.deinit();
+
+    _ = try database.run("CREATE TABLE u (email TEXT UNIQUE)", .empty);
+    _ = try database.run("INSERT INTO u (email) VALUES ('a')", .empty);
+    try std.testing.expectError(error.ConstraintUnique, database.run("INSERT INTO u (email) VALUES ('a')", .empty));
 }
 
 test "api > named bindings resolve across all sigils" {

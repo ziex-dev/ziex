@@ -7,6 +7,5 @@
         "build.zig",
         "build.zig.zon",
         "vendor/sqlite",
-        "vendor/zqlite/src",
     },
 }

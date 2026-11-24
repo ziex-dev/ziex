@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) !void {
         if (!is_client) {
             if (enable_sqlite) {
                 const db_sqlite_dep = b.lazyDependency("db_sqlite", .{ .target = target, .optimize = optimize });
-                if (db_sqlite_dep) |a| mod.addImport("zqlite", a.module("zqlite"));
+                if (db_sqlite_dep) |a| mod.addImport("sqlite", a.module("sqlite"));
             }
             if (enable_postgres) {
                 const db_postgres_dp = b.lazyDependency("db_postgres", .{ .target = target, .optimize = optimize });
@@ -131,7 +131,7 @@ pub fn build(b: *std.Build) !void {
     // --- Steps: Test --- //
     {
         const mode_test = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
-        if (b.lazyDependency("db_sqlite", .{})) |ad| mode_test.addImport("zqlite", ad.module("zqlite"));
+        if (b.lazyDependency("db_sqlite", .{})) |ad| mode_test.addImport("sqlite", ad.module("sqlite"));
         mode_test.addOptions("zx_info", options);
         mode_test.addImport("lang", lang_mod);
 

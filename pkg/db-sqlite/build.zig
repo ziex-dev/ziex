@@ -10,15 +10,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const zqlite = b.addModule("zqlite", .{
-        .root_source_file = b.path("vendor/zqlite/src/zqlite.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
-    zqlite.addImport("c", translate_c.createModule());
-    zqlite.addIncludePath(b.path("vendor/sqlite"));
-    zqlite.addCSourceFile(.{
+    const sqlite = translate_c.addModule("sqlite");
+    sqlite.addIncludePath(b.path("vendor/sqlite"));
+    sqlite.addCSourceFile(.{
         .file = b.path("vendor/sqlite/sqlite3.c"),
         .flags = &[_][]const u8{
             "-std=c99",
