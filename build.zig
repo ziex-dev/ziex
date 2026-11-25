@@ -48,11 +48,11 @@ pub fn build(b: *std.Build) !void {
 
     // Imports (zx)
     {
+        if (enable_sqlite) {
+            const db_sqlite_dep = b.lazyDependency("db_sqlite", .{ .target = target, .optimize = optimize });
+            if (db_sqlite_dep) |a| mod.addImport("sqlite", a.module("sqlite"));
+        }
         if (!is_client) {
-            if (enable_sqlite) {
-                const db_sqlite_dep = b.lazyDependency("db_sqlite", .{ .target = target, .optimize = optimize });
-                if (db_sqlite_dep) |a| mod.addImport("sqlite", a.module("sqlite"));
-            }
             if (enable_postgres) {
                 const db_postgres_dp = b.lazyDependency("db_postgres", .{ .target = target, .optimize = optimize });
                 if (db_postgres_dp) |a| mod.addImport("db_postgres", a.module("postgres"));

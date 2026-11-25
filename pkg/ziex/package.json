@@ -41,7 +41,7 @@
   "license": "MIT",
   "scripts": {
     "build": "zig build -p dist -Dfrom-source=true",
-    "test": "bun test src/runtime/wire.test.ts src/runtime/host.test.ts src/runtime/kv.test.ts src/runtime/fs.test.ts",
+    "test": "bun test src/runtime/wire.test.ts src/runtime/host.test.ts src/runtime/kv.test.ts src/runtime/fs.test.ts src/runtime/db.test.ts",
     "test:jspi": "node --experimental-wasm-jspi --test src/runtime/jspi.test.ts",
     "publish": "zig build -p dist -Dfrom-source=true && cd dist && npm publish"
   },

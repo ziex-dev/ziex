@@ -7,6 +7,11 @@ const Db = @import("../Db.zig");
 
 const main_schema: [:0]const u8 = "main";
 
+const browser = builtin.cpu.arch.isWasm() and builtin.os.tag == .freestanding;
+comptime {
+    if (browser) _ = @import("Sqlite/web.zig");
+}
+
 // --- Thin C wrappers --- //
 
 const Conn = struct {
@@ -911,7 +916,8 @@ fn mapDeclaredColumnType(declared: []const u8) Db.ColumnType {
 }
 
 fn shouldPool(path: []const u8, options: OpenOptions) bool {
-    return options.max_pool_size > 1 and !isMemoryPath(path);
+    // Browser sqlite is built single-threaded.
+    return !browser and options.max_pool_size > 1 and !isMemoryPath(path);
 }
 
 fn isMemoryPath(path: []const u8) bool {

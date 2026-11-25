@@ -88,9 +88,14 @@ pub const AppOptions = struct {
             pub const SqliteServerOptions = struct {
                 pub const enabled: SqliteServerOptions = .{};
             };
+            // In the browser, stored at `db/default.db` on the `fs` feature's file system (implied).
+            pub const SqliteClientOptions = struct {
+                pub const enabled: SqliteClientOptions = .{};
+            };
             pub const enabled: SqliteOptions = .{ .server = .enabled };
 
             server: ?SqliteServerOptions = null,
+            client: ?SqliteClientOptions = null,
         };
 
         /// Enable Postgres database client, available through `zx.Db.Postgres`.
@@ -117,7 +122,7 @@ pub const AppOptions = struct {
             client: ?KvClientOptions = null,
         };
 
-        /// `std.Io.Dir`/`File` in the browser, persisted to OPFS. `Dir.cwd()` is its root.
+        // `std.Io.Dir`/`File` in the browser, persisted to OPFS. `Dir.cwd()` is its root.
         pub const FsOptions = struct {
             pub const FsClientOptions = struct {
                 pub const enabled: FsClientOptions = .{};

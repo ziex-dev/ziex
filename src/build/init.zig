@@ -58,6 +58,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
             .lsp = false,
             .@"is-client" = true,
+            .@"feature-sqlite" = if (features.sqlite) |s| s.client != null else false,
         });
         break :blk zx_wasm_dep.module("zx");
     } else null;
@@ -71,7 +72,8 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             .@"type-decl" = false,
             .@"feature-kv-client" = if (features.kv) |k| k.client != null else false,
             .@"feature-kv-server" = if (features.kv) |k| k.server != null else false,
-            .@"feature-fs-client" = if (features.fs) |f| f.client != null else false,
+            .@"feature-fs-client" = (if (features.fs) |f| f.client != null else false) or
+                (if (features.sqlite) |s| s.client != null else false),
             .@"feature-sqlite" = if (features.sqlite) |s| s.server != null else false,
             .@"feature-wasm-client" = build_client_wasm,
         }) orelse break :blk b.path(".");
@@ -350,7 +352,9 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     b.installArtifact(exe);
 
     // --- Ziex WASM Main Executable --- //
-    const fs_client = if (opts.features.fs) |f| f.client != null else false;
+    // Client sqlite stores its database on the browser file system.
+    const fs_client = (if (opts.features.fs) |f| f.client != null else false) or
+        (if (opts.features.sqlite) |s| s.client != null else false);
     var client_root: ?*std.Build.Module = null;
     const clients: ?*Clients = if (build_client_wasm) try b.allocator.create(Clients) else null;
     const manifest_path: LazyPath = if (build_client_wasm) blk: {
@@ -749,6 +753,7 @@ fn addAppOpts(b: *std.Build, params: AppOptsParams) *std.Build.Step.Options {
     app_opts.addOption(bool, "enable_httpz", params.enable_httpz);
     app_opts.addOption(bool, "omit_prerendered", params.omit_prerendered);
     app_opts.addOption(bool, "feat_sqlite_server", if (params.features.sqlite) |s| s.server != null else false);
+    app_opts.addOption(bool, "feat_sqlite_client", if (params.features.sqlite) |s| s.client != null else false);
     app_opts.addOption(bool, "feat_pg_server", if (params.features.postgres) |s| s.server != null else false);
     app_opts.addOption(bool, "feat_kv_server", if (params.features.kv) |k| k.server != null else false);
     app_opts.addOption(bool, "feat_kv_client", if (params.features.kv) |k| k.client != null else false);

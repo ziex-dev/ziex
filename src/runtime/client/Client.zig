@@ -255,6 +255,12 @@ fn mainClient() callconv(.c) void {
     if (comptime app_opts.feat_kv_client) {
         zx.kv = kv_wasm.kv();
     }
+    if (comptime app_opts.feat_sqlite_client) {
+        zx.db = zx.Db.Sqlite.open(zx.allocator, zx.Io.Web.io(), "db/default.db", .{}) catch |err| blk: {
+            std.log.err("zx.db: {t}", .{err});
+            break :blk zx.db;
+        };
+    }
     if (is_dev) clnt.info();
     clnt.renderAll();
 }
