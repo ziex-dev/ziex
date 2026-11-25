@@ -39,6 +39,7 @@ pub fn Sidebar(allocator: zx.Allocator, props: SidebarProps) zx.Component {
 
     return (
         <div @allocator={allocator}>
+            <DocsEnhance @client />
             <header class="top-bar">
                 <div class="top-bar-content">
                     <div class="top-bar-left">
@@ -56,12 +57,7 @@ pub fn Sidebar(allocator: zx.Allocator, props: SidebarProps) zx.Component {
                         <span></span>
                         <span></span>
                     </label>
-                    <div class="top-bar-search" role="search">
-                        <input id="docs-search" class="top-bar-search-input" type="search" placeholder="Search docs" aria-label="Search documentation" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="docs-search-results" />
-                        <span class="top-bar-search-hint" aria-hidden="true">/</span>
-                        <ul id="docs-search-results" class="top-bar-search-results" role="listbox" hidden="true"></ul>
-                        <script type="application/json" id="docs-search-index" @escaping={.none}>{docs_nav.search_index_json}</script>
-                    </div>
+                    <DocsSearch @client index={docs_nav.search_index} />
                     <div class="top-bar-right">
                         <nav class="top-bar-nav">
                             {for (nav_links) |nav| (
@@ -219,6 +215,8 @@ fn SidebarBadge(allocator: zx.Allocator, props: SidebarBadgeProps) ?zx.Component
 const GitHubIcon = icons.GitHub;
 const DiscordIcon = icons.Discord;
 
+pub const DocsEnhance = @import("docs_enhance.zx").DocsEnhance;
+pub const DocsSearch = @import("docs_search.zx").DocsSearch;
 const icons = @import("../components/icons.zx");
 const experimental = @import("experimental.zx");
 const docs_nav = @import("docs_nav.zx");

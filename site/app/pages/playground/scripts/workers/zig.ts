@@ -1,6 +1,7 @@
 import { WASI, PreopenDirectory, Fd, File, OpenFile, Directory, Inode, ConsoleStdout, wasi as wasi_defs } from "@bjorn3/browser_wasi_shim";
 import { getLatestZigArchive, getZxArchive, stderrOutput, fetchWithCache } from "../utils";
 import { nestPaths, flattenDirectory } from "../csr";
+import { buildWebGlue } from "../webglue";
 
 declare const ZIG_VERSION: string;
 
@@ -322,7 +323,8 @@ async function run(files: { [filename: string]: string }, mode: CompileMode) {
         } else {
             const ssrWasm = await compileAppOne("ssr", files, zxDirectory, libDirectory, libCompilerRt, cache);
             const clientWasm = await compileAppOne("client", files, zxDirectory, libDirectory, libCompilerRt, cache);
-            postMessage({ compiled: { ssrWasm, clientWasm } });
+            const webGlue = await buildWebGlue(clientWasm, zxDirectory);
+            postMessage({ compiled: { ssrWasm, clientWasm, webGlue } });
         }
 
         await persistZigCache().catch(() => {});

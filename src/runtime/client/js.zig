@@ -6,6 +6,11 @@ const platform = @import("../../platform.zig");
 
 const is_client = platform.platform.role == .client;
 
+pub const enabled = is_client;
+
+// JS hands buffers over via `__zx_alloc`; native builds only reach the stubs.
+pub const gpa_ = if (is_client) std.heap.wasm_allocator else std.heap.page_allocator;
+
 pub const Error = error{ InvalidType, JsException };
 
 pub const Type = enum(u8) { undefined, null, boolean, number, string, object, function, symbol, bigint };
@@ -13,14 +18,14 @@ pub const Type = enum(u8) { undefined, null, boolean, number, string, object, fu
 // Must match `pkg/ziex/src/wasm/js.ts`.
 pub const Raw = extern struct {
     tag: Tag,
-    // bool, handle, or string ptr
+    // bool, handle, callback id, or string/json ptr
     a: u32 = 0,
-    // number, string len, or `Type` of a handle
+    // number, string/json len, or `Type` of a handle
     n: f64 = 0,
 
-    pub const Tag = enum(u32) { undefined, null, boolean, number, string, ref };
+    pub const Tag = enum(u32) { undefined, null, boolean, number, string, ref, json, callback, bytes };
 
-    const undef: Raw = .{ .tag = .undefined };
+    pub const undef: Raw = .{ .tag = .undefined };
 };
 
 // How JS returns values: primitives inline, strings as bytes, or always a handle.
@@ -35,7 +40,11 @@ const ext = if (is_client) struct {
     extern "__zx_js" fn read(h: u32, out: *Raw, mode: Mode) void;
     extern "__zx_js" fn toRef(v: *const Raw) u32;
     extern "__zx_js" fn release(h: u32) void;
+    extern "__zx_js" fn bytes(h: u32, ptr: [*]u8, len: usize) usize;
 } else struct {
+    fn bytes(_: u32, _: [*]u8, _: usize) usize {
+        return 0;
+    }
     fn get(_: u32, _: [*]const u8, _: usize, out: *Raw, _: Mode) void {
         out.* = Raw.undef;
     }
@@ -79,6 +88,14 @@ pub inline fn string(v: anytype) String {
 /// Sentinel for passing `undefined` to JS.
 pub const Undefined = struct {};
 
+/// Bytes passed to JS as a copied `Uint8Array` (see `bytes`).
+pub const Bytes = struct { data: []const u8 };
+
+/// Marks a slice as binary data for `anytype` args, e.g. a fetch body.
+pub fn bytes(data: anytype) Bytes {
+    return .{ .data = std.mem.sliceAsBytes(data) };
+}
+
 /// A retained JS value. Release with `deinit`.
 pub const Value = enum(u32) {
     undefined = 0,
@@ -88,6 +105,7 @@ pub const Value = enum(u32) {
 
     pub fn init(x: anytype) Value {
         const r = toRaw(x);
+        defer freeTemps();
         return switch (r.tag) {
             .undefined => .undefined,
             .null => .null,
@@ -98,6 +116,46 @@ pub const Value = enum(u32) {
 
     pub fn deinit(self: Value) void {
         if (@backingInt(self) > 2) ext.release(@backingInt(self));
+    }
+
+    /// In JSON args (dictionaries), `{"$h":id}`, which JS swaps for the object.
+    pub fn jsonStringify(self: Value, jw: anytype) !void {
+        switch (self) {
+            .undefined, .null => try jw.write(null),
+            else => try jw.write(.{ .@"$h" = @backingInt(self) }),
+        }
+    }
+
+    /// A second handle to the same value (e.g. to keep a callback arg).
+    pub fn dup(self: Value) Value {
+        if (@backingInt(self) <= 2) return self;
+        const r = refRaw(self);
+        return @fromBackingInt(ext.toRef(&r));
+    }
+
+    /// `this[i]` for arrays and array-likes.
+    pub fn at(self: Value, i: usize) Value {
+        var buf: [20]u8 = undefined;
+        const key = std.fmt.bufPrint(&buf, "{d}", .{i}) catch unreachable;
+        return self.get(key) catch .undefined;
+    }
+
+    /// Copies an ArrayBuffer or typed array into `dst`; returns its full byte length.
+    pub fn copyBytes(self: Value, dst: []u8) usize {
+        return ext.bytes(@backingInt(self), dst.ptr, dst.len);
+    }
+
+    /// The bytes of an ArrayBuffer or typed array, e.g. `ImageData.data()`.
+    pub fn bytesAlloc(self: Value, allocator: Allocator) ![]u8 {
+        const n = ext.bytes(@backingInt(self), undefined, 0);
+        const out = try allocator.alloc(u8, n);
+        _ = ext.bytes(@backingInt(self), out.ptr, out.len);
+        return out;
+    }
+
+    pub fn len(self: Value) usize {
+        const o: Object = .{ .value = self };
+        return o.get(usize, "length") catch 0;
     }
 
     pub fn get(self: Value, n: []const u8) !Value {
@@ -171,6 +229,10 @@ pub const Value = enum(u32) {
 pub const Object = struct {
     value: Value,
 
+    pub fn jsonStringify(self: Object, jw: anytype) !void {
+        try self.value.jsonStringify(jw);
+    }
+
     pub fn deinit(self: Object) void {
         self.value.deinit();
     }
@@ -189,6 +251,7 @@ pub const Object = struct {
 
     pub fn set(self: Object, n: []const u8, v: anytype) !void {
         const r = toRaw(v);
+        defer freeTemps();
         ext.set(@backingInt(self.value), n.ptr, n.len, &r);
     }
 
@@ -200,6 +263,7 @@ pub const Object = struct {
 
     pub fn callAlloc(self: Object, comptime T: type, alloc: Allocator, n: []const u8, args: anytype) !Result(T) {
         const raws = argsRaw(args);
+        defer freeTemps();
         var out: Raw = undefined;
         if (!ext.call(@backingInt(self.value), n.ptr, n.len, &raws, raws.len, &out, comptime modeFor(T))) return Error.JsException;
         return convert(T, alloc, out);
@@ -208,6 +272,7 @@ pub const Object = struct {
     /// Calls `new this(...args)`.
     pub fn new(self: Object, args: anytype) !Object {
         const raws = argsRaw(args);
+        defer freeTemps();
         var out: Raw = undefined;
         if (!ext.construct(@backingInt(self.value), &raws, raws.len, &out)) return Error.JsException;
         return convert(Object, undefined, out);
@@ -217,29 +282,144 @@ pub const Object = struct {
 /// `globalThis`.
 pub const global: Object = .{ .value = .global };
 
-fn argsRaw(args: anytype) [@typeInfo(@TypeOf(args)).@"struct".field_types.len]Raw {
+/// Converts a tuple of args to `Raw` slots. Call `freeTemps` after the JS call.
+pub fn argsRaw(args: anytype) [@typeInfo(@TypeOf(args)).@"struct".field_types.len]Raw {
     const info = @typeInfo(@TypeOf(args)).@"struct";
     var raws: [info.field_types.len]Raw = undefined;
     inline for (info.field_names, 0..) |name, i| raws[i] = toRaw(@field(args, name));
     return raws;
 }
 
-fn toRaw(x: anytype) Raw {
+/// Converts a Zig value to a `Raw` slot. Byte slices become strings; other
+/// slices, arrays and structs become JSON (freed by `freeTemps`).
+pub fn toRaw(x: anytype) Raw {
     const T = @TypeOf(x);
     if (T == Object) return refRaw(x.value);
     if (T == Value) return refRaw(x);
-    if (T == String) return .{ .tag = .string, .a = @intCast(@intFromPtr(x.ptr)), .n = @floatFromInt(x.len) };
+    if (T == String) return strRaw(x.ptr[0..x.len]);
     if (T == Undefined) return Raw.undef;
-    return switch (@typeInfo(T)) {
-        .null => .{ .tag = .null },
-        .optional => if (x) |v| toRaw(v) else .{ .tag = .null },
-        .bool => .{ .tag = .boolean, .a = @intFromBool(x) },
-        .int, .comptime_int => .{ .tag = .number, .n = @floatFromInt(x) },
-        .float, .comptime_float => .{ .tag = .number, .n = @floatCast(x) },
-        .@"enum" => .{ .tag = .number, .n = @floatFromInt(@backingInt(x)) },
-        else => @compileError("unsupported JS value type: " ++ @typeName(T)),
-    };
+    if (T == Callback) return .{ .tag = .callback, .a = x.id };
+    if (T == Bytes) return .{ .tag = .bytes, .a = @intCast(@intFromPtr(x.data.ptr)), .n = @floatFromInt(x.data.len) };
+    switch (@typeInfo(T)) {
+        .null => return .{ .tag = .null },
+        .optional => return if (x) |v| toRaw(v) else .{ .tag = .null },
+        .bool => return .{ .tag = .boolean, .a = @intFromBool(x) },
+        .int, .comptime_int => return .{ .tag = .number, .n = @floatFromInt(x) },
+        .float, .comptime_float => return .{ .tag = .number, .n = @floatCast(x) },
+        .@"enum" => {
+            if (comptime @hasDecl(T, "str")) return strRaw(x.str());
+            return .{ .tag = .number, .n = @floatFromInt(@backingInt(x)) };
+        },
+        .@"struct" => if (comptime @hasField(T, "h") and @FieldType(T, "h") == Value) return refRaw(x.h),
+        .pointer => |p| {
+            if (p.size == .slice and p.child == u8) return strRaw(x);
+            if (p.size == .one) switch (@typeInfo(p.child)) {
+                .array => |arr| if (arr.child == u8) return strRaw(x),
+                else => {},
+            };
+        },
+        else => {},
+    }
+    return jsonRaw(x);
 }
+
+fn strRaw(s: []const u8) Raw {
+    return .{ .tag = .string, .a = @intCast(@intFromPtr(s.ptr)), .n = @floatFromInt(s.len) };
+}
+
+var temps: std.ArrayListUnmanaged([]u8) = .empty;
+
+fn jsonRaw(x: anytype) Raw {
+    const gpa = gpa_;
+    const json = std.json.Stringify.valueAlloc(gpa, x, .{ .emit_null_optional_fields = false }) catch return Raw.undef;
+    temps.append(gpa, json) catch {
+        gpa.free(json);
+        return Raw.undef;
+    };
+    return .{ .tag = .json, .a = @intCast(@intFromPtr(json.ptr)), .n = @floatFromInt(json.len) };
+}
+
+/// Frees JSON buffers made by `toRaw`.
+pub fn freeTemps() void {
+    if (temps.items.len == 0) return;
+    for (temps.items) |b| gpa_.free(b);
+    temps.clearRetainingCapacity();
+}
+
+/// A Zig function callable from JS. Args are handles valid for the duration of the call.
+pub const Callback = struct {
+    id: u32,
+
+    pub const Fn = *const fn (ctx: ?*anyopaque, args: []const Value) void;
+
+    const Slot = struct { func: ?Fn, ctx: ?*anyopaque, once: bool };
+    var slots: std.ArrayListUnmanaged(Slot) = .empty;
+    var free_ids: std.ArrayListUnmanaged(u32) = .empty;
+
+    pub const Options = struct {
+        /// Unregister after the first call (e.g. requestAnimationFrame).
+        once: bool = false,
+    };
+
+    /// Registers `func(ctx, args)`; id 0 is never used, so JS sees it as null.
+    pub fn init(ctx: ?*anyopaque, func: Fn, opts: Options) Callback {
+        const gpa = gpa_;
+        const slot: Slot = .{ .func = func, .ctx = ctx, .once = opts.once };
+        if (free_ids.pop()) |id| {
+            slots.items[id - 1] = slot;
+            return .{ .id = id };
+        }
+        slots.append(gpa, slot) catch @panic("OOM");
+        return .{ .id = @intCast(slots.items.len) };
+    }
+
+    /// Registers a context-free function.
+    pub fn fromFn(comptime f: fn ([]const Value) void, opts: Options) Callback {
+        const S = struct {
+            fn call(_: ?*anyopaque, args: []const Value) void {
+                f(args);
+            }
+        };
+        return init(null, S.call, opts);
+    }
+
+    /// Registers `f(ctx, args)` with a typed context pointer.
+    pub fn bind(ctx: anytype, comptime f: fn (@TypeOf(ctx), []const Value) void, opts: Options) Callback {
+        if (@typeInfo(@TypeOf(ctx)) != .pointer) @compileError("Callback.bind expects a pointer context");
+        const S = struct {
+            fn call(c: ?*anyopaque, args: []const Value) void {
+                f(@ptrCast(@alignCast(c)), args);
+            }
+        };
+        return init(@ptrCast(@constCast(ctx)), S.call, opts);
+    }
+
+    /// In JSON args (dictionaries), `{"$f":id}`, which JS swaps for the function.
+    pub fn jsonStringify(self: Callback, jw: anytype) !void {
+        try jw.write(.{ .@"$f" = self.id });
+    }
+
+    pub fn release(self: Callback) void {
+        if (self.id == 0 or self.id > slots.items.len) return;
+        const slot = &slots.items[self.id - 1];
+        if (slot.func == null) return;
+        slot.func = null;
+        free_ids.append(gpa_, self.id) catch {};
+    }
+
+    fn dispatch(id: u32, n: u32, a0: u32, a1: u32, a2: u32) callconv(.c) void {
+        if (id == 0 or id > slots.items.len) return;
+        const slot = slots.items[id - 1];
+        const func = slot.func orelse return;
+        if (slot.once) (Callback{ .id = id }).release();
+        const all = [3]Value{ @fromBackingInt(a0), @fromBackingInt(a1), @fromBackingInt(a2) };
+        func(slot.ctx, all[0..@min(n, 3)]);
+    }
+
+    comptime {
+        if (is_client) @export(&dispatch, .{ .name = "__zx_js_cb" });
+    }
+};
 
 fn refRaw(v: Value) Raw {
     return switch (v) {
@@ -263,7 +443,9 @@ fn rawType(r: Raw) Type {
         .null => .null,
         .boolean => .boolean,
         .number => .number,
-        .string => .string,
+        .string, .json => .string,
+        .bytes => .object,
+        .callback => .function,
         .ref => @fromBackingInt(@as(u8, @intFromFloat(r.n))),
     };
 }
@@ -272,7 +454,7 @@ fn takeBytes(alloc: Allocator, r: Raw) ![]u8 {
     const len: usize = @intFromFloat(r.n);
     if (len == 0) return alloc.alloc(u8, 0);
     const src: [*]u8 = @ptrFromInt(r.a);
-    defer std.heap.wasm_allocator.free(src[0..len]);
+    defer gpa_.free(src[0..len]);
     return alloc.dupe(u8, src[0..len]);
 }
 

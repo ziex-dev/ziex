@@ -124,17 +124,10 @@ pub const DomCmdBuffer = struct {
 
     fn appendRecord(self: *DomCmdBuffer, op: DomOp, p0: u32, p1: u32, p2: u32, p3: u32, p4: u32) !void {
         try self.ensureHeader();
-        const start = self.bytes.items.len;
-        try self.bytes.resize(self.allocator, start + RECORD_SIZE);
-        const rec = self.bytes.items[start..][0..RECORD_SIZE];
-        rec[0] = @backingInt(op);
-        rec[1] = 0;
-        std.mem.writeInt(u16, rec[2..4], 0, .little);
-        std.mem.writeInt(u32, rec[4..8], p0, .little);
-        std.mem.writeInt(u32, rec[8..12], p1, .little);
-        std.mem.writeInt(u32, rec[12..16], p2, .little);
-        std.mem.writeInt(u32, rec[16..20], p3, .little);
-        std.mem.writeInt(u32, rec[20..24], p4, .little);
+        const rec = try self.bytes.addManyAsArray(self.allocator, RECORD_SIZE);
+        const le = std.mem.nativeToLittle;
+        const words = [6]u32{ le(u32, @backingInt(op)), le(u32, p0), le(u32, p1), le(u32, p2), le(u32, p3), le(u32, p4) };
+        rec.* = @bitCast(words);
         self.count += 1;
     }
 

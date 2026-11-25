@@ -1,8 +1,10 @@
+// Tabs render with unix / macOS checked; install_os.zig switches them in the browser.
+
 pub fn InstallCLI(allocator: zx.Allocator, props: struct { show_init: bool = false }) zx.Component {
     return (
         <div class="install-box" @allocator={allocator}>
             <div class="install-box-header">
-                <input type="radio" id="tab-unix" name="install-platform" class="install-tab-radio" checked="true" aria-label="Linux or macOS installation" />
+                <input type="radio" id="tab-unix" name="install-platform" class="install-tab-radio" checked={true} aria-label="Linux or macOS installation" />
                 <input type="radio" id="tab-windows" name="install-platform" class="install-tab-radio" aria-label="Windows installation" />
                 {if (props.show_init) (<input type="radio" id="tab-node" name="install-platform" class="install-tab-radio" aria-label="Node.js installation" />)}
                 {if (props.show_init) (<input type="radio" id="tab-manual" name="install-platform" class="install-tab-radio" aria-label="Manual installation" />)}
@@ -96,7 +98,7 @@ pub fn InstallZig(allocator: zx.Allocator) zx.Component {
     return (
         <div class="install-box" @allocator={allocator}>
             <div class="install-box-header">
-                <input type="radio" id="tab-zig-mac" name="install-zig" class="install-tab-radio" checked="true" aria-label="Zig installation on macOS" />
+                <input type="radio" id="tab-zig-mac" name="install-zig" class="install-tab-radio" checked={true} aria-label="Zig installation on macOS" />
                 <input type="radio" id="tab-zig-win" name="install-zig" class="install-tab-radio" aria-label="Zig installation on Windows" />
                 <input type="radio" id="tab-zig-other" name="install-zig" class="install-tab-radio" aria-label="Zig installation on other platforms" />
                 <div class="install-tab-labels">
@@ -134,3 +136,4 @@ pub fn InstallZig(allocator: zx.Allocator) zx.Component {
 
 const zx = @import("zx");
 const ziex_org_url = zx.info.repository[0..(zx.info.repository.len - "/ziex".len)];
+const std = @import("std");

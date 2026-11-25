@@ -1,0 +1,153 @@
+// WebGPU from Zig: the WGSL shader lives in triangle.wgsl and is embedded at
+// compile time; the adapter, device, pipeline and per-frame render pass all go
+// through the generated `zx.client.web` bindings. No JavaScript is written.
+
+pub fn Page(ctx: zx.PageContext) zx.Component {
+    return (
+        <main @allocator={ctx.arena} class="example-page">
+            <header class="example-header">
+                <h1>WebGPU</h1>
+                <p>A shader embedded with @embedFile, rendered every frame from Zig.</p>
+            </header>
+            <WebGpuDemo @client />
+        </main>
+    );
+}
+
+pub fn WebGpuDemo(ctx: *zx.ComponentContext) zx.Component {
+    if (zx.platform.role == .client) start();
+    return (
+        <section @allocator={ctx.allocator} class="example-test">
+            <canvas id="webgpu-canvas" width="480" height="320" style="width: 100%; max-width: 480px; aspect-ratio: 3 / 2; border-radius: 8px; background: #0a0a0d;"></canvas>
+            <p><output id="webgpu-status">Starting WebGPU…</output></p>
+        </section>
+    );
+}
+
+const shader = @embedFile("triangle.wgsl");
+
+const web = zx.client.web;
+const js = zx.client.js;
+
+var started = false;
+var gpu: web.GPU = undefined;
+var device: web.GPUDevice = undefined;
+var queue: web.GPUQueue = undefined;
+var context: web.GPUCanvasContext = undefined;
+var pipeline: web.GPURenderPipeline = undefined;
+var uniforms: web.GPUBuffer = undefined;
+var bind_group: web.GPUBindGroup = undefined;
+var aspect: f32 = 1.5;
+var frames: u32 = 0;
+
+fn status(text: []const u8) void {
+    const doc = web.document();
+    defer doc.deinit();
+    const el = doc.getElementById("webgpu-status") orelse return;
+    defer el.deinit();
+    el.setTextContent(text);
+}
+
+fn start() void {
+    if (started) return;
+    started = true;
+    const nav = web.window().navigator();
+    defer nav.deinit();
+    gpu = nav.gpu();
+    if (@backingInt(gpu.h) <= 1) return status("WebGPU is not available in this browser.");
+    const p = gpu.requestAdapter(null);
+    defer p.deinit();
+    p.then(.fromFn(onAdapter, .{ .once = true }), .fromFn(onError, .{ .once = true }));
+}
+
+fn onError(_: []const js.Value) void {
+    status("WebGPU failed to start.");
+}
+
+fn onAdapter(args: []const js.Value) void {
+    if (args.len == 0 or @backingInt(args[0]) <= 1) return status("WebGPU is not available on this device.");
+    const adapter: web.GPUAdapter = .{ .h = args[0] };
+    const p = adapter.requestDevice(null);
+    defer p.deinit();
+    p.then(.fromFn(onDevice, .{ .once = true }), .fromFn(onError, .{ .once = true }));
+}
+
+fn onDevice(args: []const js.Value) void {
+    if (args.len == 0) return;
+    device = .{ .h = args[0].dup() };
+    queue = device.queue();
+
+    const doc = web.document();
+    defer doc.deinit();
+    const canvas = doc.getElementById("webgpu-canvas") orelse return;
+    defer canvas.deinit();
+    const el = canvas.as(web.HTMLCanvasElement);
+    aspect = @as(f32, @floatFromInt(el.width())) / @as(f32, @floatFromInt(el.height()));
+    context = web.contextWebgpu(el) orelse return status("Could not get a WebGPU canvas context.");
+
+    const format = gpu.getPreferredCanvasFormat();
+    context.configure(.{ .device = device, .format = format, .alphaMode = "premultiplied" });
+
+    const module = device.createShaderModule(.{ .code = shader });
+    defer module.deinit();
+    pipeline = device.createRenderPipeline(.{
+        .layout = "auto",
+        .vertex = .{ .module = module, .entryPoint = "vs_main" },
+        .fragment = .{ .module = module, .entryPoint = "fs_main", .targets = &[_]struct { format: web.GPUTextureFormat }{.{ .format = format }} },
+        .primitive = .{ .topology = "triangle-list" },
+    });
+
+    // time, aspect, padding: one 16-byte uniform block.
+    uniforms = device.createBuffer(.{ .size = 16, .usage = web.GPUBufferUsage.UNIFORM | web.GPUBufferUsage.COPY_DST });
+    const layout = pipeline.getBindGroupLayout(0);
+    defer layout.deinit();
+    bind_group = device.createBindGroup(.{
+        .layout = layout,
+        .entries = &[_]struct { binding: u32, resource: struct { buffer: web.GPUBuffer } }{
+            .{ .binding = 0, .resource = .{ .buffer = uniforms } },
+        },
+    });
+
+    _ = web.window().requestAnimationFrame(.fromFn(frame, .{ .once = true }));
+}
+
+const Color = struct { r: f64, g: f64, b: f64, a: f64 };
+const Attachment = struct { view: web.GPUTextureView, clearValue: Color, loadOp: []const u8, storeOp: []const u8 };
+
+fn frame(args: []const js.Value) void {
+    const ms = if (args.len > 0) args[0].float() catch 0 else 0;
+    const data = [4]f32{ @floatCast(ms / 1000), aspect, 0, 0 };
+    queue.writeBuffer(uniforms, 0, &data, null, null);
+
+    const encoder = device.createCommandEncoder(null);
+    defer encoder.deinit();
+    const texture = context.getCurrentTexture();
+    defer texture.deinit();
+    const view = texture.createView(null);
+    defer view.deinit();
+    const pass = encoder.beginRenderPass(.{
+        .colorAttachments = &[_]Attachment{.{ .view = view, .clearValue = .{ .r = 0.04, .g = 0.04, .b = 0.05, .a = 1 }, .loadOp = "clear", .storeOp = "store" }},
+    });
+    defer pass.deinit();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bind_group, null);
+    pass.draw(3, null, null, null);
+    pass.end();
+    const commands = encoder.finish(null);
+    defer commands.deinit();
+    queue.submit(&[_]web.GPUCommandBuffer{commands});
+
+    frames += 1;
+    if (frames == 1 or frames % 30 == 0) {
+        var buf: [64]u8 = undefined;
+        status(std.fmt.bufPrint(&buf, "Rendering with WebGPU · frame {d}", .{frames}) catch "Rendering with WebGPU");
+    }
+    _ = web.window().requestAnimationFrame(.fromFn(frame, .{ .once = true }));
+}
+
+pub const options: zx.PageOptions = .{
+    .methods = &.{ .GET, .POST },
+};
+
+const zx = @import("zx");
+const std = @import("std");

@@ -18,9 +18,12 @@ pub fn toc(comptime categories: []const Category) []const Link {
     }
 }
 
-pub const search_index_json = blk: {
+pub const SearchEntry = @import("docs_search.zx").Entry;
+
+/// Every docs page and section, for the top-bar search (docs_search.zx).
+pub const search_index: []const SearchEntry = blk: {
     @setEvalBranchQuota(200_000);
-    var json: []const u8 = "[";
+    var entries: []const SearchEntry = &.{};
     for (.{
         .{ "Learn", &learn.categories },
         .{ "Reference", &reference.categories },
@@ -29,33 +32,16 @@ pub const search_index_json = blk: {
         for (source[1]) |category| {
             for (category.sections) |section| {
                 const group = source[0] ++ " / " ++ category.title;
-                if (section.href.len > 0) json = json ++ entry(section.title, group, section.href);
+                if (section.href.len > 0) entries = entries ++ .{SearchEntry{ .title = section.title, .group = group, .href = section.href }};
                 for (section.items) |item| {
-                    json = json ++ entry(item.text, group ++ " / " ++ section.title, item.href);
+                    entries = entries ++ .{SearchEntry{ .title = item.text, .group = group ++ " / " ++ section.title, .href = item.href }};
                 }
             }
         }
     }
-    break :blk json[0 .. json.len - 1] ++ "]";
+    const frozen = entries[0..entries.len].*;
+    break :blk &frozen;
 };
-
-fn entry(comptime title: []const u8, comptime group: []const u8, comptime href: []const u8) []const u8 {
-    return "{\"t\":" ++ quote(title) ++ ",\"g\":" ++ quote(group) ++ ",\"h\":" ++ quote(href) ++ "},";
-}
-
-// JSON string literal, also safe inside <script>: `<` is escaped so `</script>` can't appear.
-fn quote(comptime s: []const u8) []const u8 {
-    var out: []const u8 = "\"";
-    for (s) |c| {
-        out = out ++ switch (c) {
-            '"' => "\\\"",
-            '\\' => "\\\\",
-            '<' => "\\u003c",
-            else => &[_]u8{c},
-        };
-    }
-    return out ++ "\"";
-}
 
 const Category = sidebar.SidebarProps.Category;
 const Link = sidebar.SidebarProps.Link;

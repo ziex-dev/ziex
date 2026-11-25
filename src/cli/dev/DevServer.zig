@@ -727,7 +727,10 @@ fn serveWebSocket(ds: *DevServer, sock: *http.Server.WebSocket, stream: std.Io.n
     // Drain incoming frames on a dedicated thread - mirrors WebServer.zig's
     // recvWebSocketMessages pattern. Without this, the connection stalls because
     // unread frames (pings, close frames, etc.) block the underlying TCP stream.
-    const recv_thread = std.Thread.spawn(.{}, recvWebSocketFrames, .{sock}) catch |err| {
+    // Set by the recv thread when the client goes away, so this loop exits
+    // right away instead of holding its thread until the next 30 s ping.
+    var closed: std.atomic.Value(bool) = .init(false);
+    const recv_thread = std.Thread.spawn(.{}, recvWebSocketFrames, .{ ds, sock, &closed }) catch |err| {
         log.err("ws: failed to spawn recv thread: {s}", .{@errorName(err)});
         return err;
     };
@@ -752,6 +755,7 @@ fn serveWebSocket(ds: *DevServer, sock: *http.Server.WebSocket, stream: std.Io.n
 
     while (true) {
         if (ds.shutting_down.load(.acquire)) return error.ShuttingDown;
+        if (closed.load(.acquire)) return error.ConnectionClosed;
         const cur = ds.update_id.load(.acquire);
         if (cur == last_id) {
             // No pending event - wait up to 30 s then ping to keep the connection alive.
@@ -789,11 +793,14 @@ fn serveWebSocket(ds: *DevServer, sock: *http.Server.WebSocket, stream: std.Io.n
 
 /// Continuously reads and discards incoming WebSocket frames so the TCP receive
 /// buffer never fills up and control frames (pings, close) are consumed.
-fn recvWebSocketFrames(sock: *http.Server.WebSocket) void {
+fn recvWebSocketFrames(ds: *DevServer, sock: *http.Server.WebSocket, closed: *std.atomic.Value(bool)) void {
     log.debug("ws: recv thread started", .{});
     while (true) {
         const msg = sock.readSmallMessage() catch |err| {
             log.debug("ws: recv thread exiting: {s}", .{@errorName(err)});
+            closed.store(true, .release);
+            // Waiters re-check their own state, so waking all of them is harmless.
+            ds.io.futexWake(u32, &ds.update_id.raw, std.math.maxInt(u32));
             return;
         };
         log.debug("ws: received frame opcode={s} len={d}", .{ @tagName(msg.opcode), msg.data.len });

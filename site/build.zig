@@ -319,31 +319,6 @@ pub fn build(b: *std.Build) !void {
     if (true) {
         const is_release = optimize != .debug;
         const build_client_wasm = app_client.wasm.link;
-        const branding_dep = b.dependency("branding", .{});
-        const site_scripts = esbuild.addBuild(b, .{
-            .name = "site_scripts",
-            .config = .{
-                .entrypoints = &.{
-                    b.path("app/scripts/client.ts"),
-                    b.path("app/scripts/docs.ts"),
-                    b.path("app/scripts/home.ts"),
-                },
-                // Mascot scripts from the branding repo, bundled into home.js.
-                .alias = &.{
-                    .{ .key = "@branding/runner", .path = branding_dep.path("mascots/runner/runner.js") },
-                    .{ .key = "@branding/ziggy-crawler", .path = branding_dep.path("mascots/ziggy/ziggy-crawler.js") },
-                },
-                .platform = .browser,
-                .minify = is_release,
-                .sourcemap = if (is_release) .none else .@"inline",
-                .define = &.{
-                    .{ .key = "__DEV__", .value = if (is_release) "false" else "true" },
-                    .{ .key = "process.env.NODE_ENV", .value = if (is_release) "\"production\"" else "\"development\"" },
-                },
-            },
-        });
-
-        // const install_main_js = b.addInstallFile(site_scripts.dir.path(b, "client.js"), b.fmt("static/assets/main{s}.js", .{id}));
         if (build_client_wasm and app_client.bindings.link) {
             const ziex_js_files = ziex_js_dep.namedWriteFiles("ziex_js");
             const init_name = if (is_release) "init.js" else "init.dev.js";
@@ -352,12 +327,6 @@ pub fn build(b: *std.Build) !void {
             install_main_js.step.name = "install app.js bindings";
             b.default_step.dependOn(&install_main_js.step);
         }
-        const install_docs_js = b.addInstallFile(site_scripts.dir.path(b, "docs.js"), "static/assets/docs.js");
-        install_docs_js.step.name = "install docs.js";
-        const install_home_js = b.addInstallFile(site_scripts.dir.path(b, "home.js"), "static/assets/home.js");
-        install_home_js.step.name = "install home.js";
-        b.default_step.dependOn(&install_docs_js.step);
-        b.default_step.dependOn(&install_home_js.step);
     }
 
     if (true) {

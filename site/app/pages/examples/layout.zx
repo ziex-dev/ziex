@@ -13,7 +13,6 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
                     {children}
                 </fragment>
             )} />
-            <script src=`/assets/docs.js?v={zx.info.version}` defer="true"></script>
             <style @escaping={.none}>{@embedFile("style.css")}</style>
         </div>
     );

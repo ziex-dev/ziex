@@ -36,7 +36,7 @@ import {
     getMemoryView,
 } from "./core";
 import { bindWasmAlloc, type WasmAllocRef } from "./core";
-import { ref, deref, unref, resetRefs } from "./js";
+import { ref, deref, unref, resetRefs, webHelpers, bindCallbacks, type WebHelpers } from "./js";
 import {
     CallbackType_WebSocketOpen,
     CallbackType_WebSocketMessage,
@@ -48,7 +48,7 @@ import { createKvHandlers } from "../runtime/kv/extern";
 import type { Handlers } from "../runtime/host";
 import { createBrowserKVBindings, type KVNamespace } from "../runtime/kv";
 import { DELEGATED_EVENTS } from "./generated/events";
-import { HIGH_FREQ_EVENT_BITS } from "./generated/event_bits";
+import { EVENT_FLAGS } from "./generated/event_bits";
 
 /**
  * Browser Ziex Bridge - extends ZxBridgeCore with DOM, WebSocket, and form-action support.
@@ -69,22 +69,21 @@ export class ZxBridge extends ZxBridgeCore {
     }
 
     hasEventHandler(velementId: number, eventTypeId: number): boolean {
-        return !!((eventHandlersPresent.get(velementId) ?? 0) & (1 << eventTypeId));
+        return hasBit(eventHandlersPresent.get(velementId), eventTypeId);
     }
 
     registerEventHandler(velementId: number, eventTypeId: number): void {
-        const present = (eventHandlersPresent.get(velementId) ?? 0) | (1 << eventTypeId);
-        eventHandlersPresent.set(velementId, present);
+        let present = eventHandlersPresent.get(velementId);
+        if (!present) eventHandlersPresent.set(velementId, present = new Uint32Array(EVENT_WORDS));
+        present[eventTypeId >>> 5]! |= 1 << (eventTypeId & 31);
         ensureDelegatedListener(eventTypeId);
     }
 
     clearEventHandlers(velementId: number): void {
-        const present = eventHandlersPresent.get(velementId) ?? 0;
+        const present = eventHandlersPresent.get(velementId);
         eventHandlersPresent.delete(velementId);
         // Drop high-freq listeners when no vnode still needs them.
-        for (let bits = present & HIGH_FREQ_EVENT_BITS; bits !== 0; bits &= bits - 1) {
-            maybeRemoveHighFreqListener(31 - Math.clz32(bits));
-        }
+        if (present) releaseHighFreq(present);
     }
 
     /** Submit a form action with bound-state round-trip. */
@@ -306,30 +305,53 @@ export class ZxBridge extends ZxBridgeCore {
 /** JS-side DOM node registry: vnode_id → Node. Number keys avoid BigInt allocs. */
 const domNodes = new Map<number, Node>();
 
-/** Bitset: which event types have a handler for each vnode. */
-const eventHandlersPresent = new Map<number, number>();
+const F_HIGH_FREQ = 1, F_CAPTURE = 2, F_PASSIVE = 4;
+const EVENT_WORDS = Math.ceil(DELEGATED_EVENTS.length / 32);
+const HIGH_FREQ_WORDS = new Uint32Array(EVENT_WORDS);
+for (let id = 0; id < EVENT_FLAGS.length; id++) {
+    if (EVENT_FLAGS[id]! & F_HIGH_FREQ) HIGH_FREQ_WORDS[id >>> 5]! |= 1 << (id & 31);
+}
+
+function hasBit(set: Uint32Array | undefined, id: number): boolean {
+    return set !== undefined && (set[id >>> 5]! & (1 << (id & 31))) !== 0;
+}
+
+/** Bitset per vnode: which event types have a handler. */
+const eventHandlersPresent = new Map<number, Uint32Array>();
+
+/** Detach high-freq listeners in `set` that no vnode needs any more. */
+function releaseHighFreq(set: Uint32Array): void {
+    for (let w = 0; w < EVENT_WORDS; w++) {
+        for (let bits = set[w]! & HIGH_FREQ_WORDS[w]!; bits !== 0; bits &= bits - 1) {
+            maybeRemoveHighFreqListener(w * 32 + 31 - Math.clz32(bits & -bits));
+        }
+    }
+}
 
 /** Remove a detached DOM subtree from domNodes + handler bitsets */
 function cleanupDomNodes(node: Node): void {
-    const stack: Node[] = [node];
-    let highFreqBits = 0;
-    while (stack.length > 0) {
-        const n = stack.pop()!;
+    let removed: Uint32Array | undefined;
+    // Pre-order walk via sibling links: no stack array or NodeList access.
+    let n: Node | null = node;
+    while (n !== null) {
         const ref = (n as any).__zx_ref;
         if (typeof ref === "number") {
             const present = eventHandlersPresent.get(ref);
             if (present !== undefined) {
-                highFreqBits |= present;
+                removed ??= new Uint32Array(EVENT_WORDS);
+                for (let w = 0; w < EVENT_WORDS; w++) removed[w]! |= present[w]!;
                 eventHandlersPresent.delete(ref);
             }
             domNodes.delete(ref);
         }
-        const children = n.childNodes;
-        for (let i = 0; i < children.length; i++) stack.push(children[i]!);
+        if (n.firstChild !== null) {
+            n = n.firstChild;
+            continue;
+        }
+        while (n !== node && n!.nextSibling === null) n = n!.parentNode;
+        n = n === node ? null : n!.nextSibling;
     }
-    for (let bits = highFreqBits & HIGH_FREQ_EVENT_BITS; bits !== 0; bits &= bits - 1) {
-        maybeRemoveHighFreqListener(31 - Math.clz32(bits));
-    }
+    if (removed) releaseHighFreq(removed);
 }
 
 type DelegatedListenerState = {
@@ -340,7 +362,7 @@ type DelegatedListenerState = {
 
 let delegationState: DelegatedListenerState | null = null;
 
-function makeDelegatedListener(bridge: ZxBridge, eventTypeId: number): EventListener {
+function makeDelegatedListener(bridge: ZxBridge, eventTypeId: number, targetOnly: boolean): EventListener {
     return (event: Event) => {
         let eventRef: number | undefined;
         const pending: Promise<unknown>[] = [];
@@ -355,6 +377,8 @@ function makeDelegatedListener(bridge: ZxBridge, eventTypeId: number): EventList
                 }
                 if (event.cancelBubble) break;
             }
+            // Non-bubbling events fire separately on each element that wants them.
+            if (targetOnly) break;
             target = target.parentElement;
         }
         if (eventRef !== undefined) {
@@ -373,23 +397,23 @@ function ensureDelegatedListener(eventTypeId: number): void {
     if (!state || state.attached.has(eventTypeId)) return;
     const domType = DELEGATED_EVENTS[eventTypeId];
     if (!domType) return;
-    const passive = domType.startsWith('touch') || domType === 'scroll';
-    const options: AddEventListenerOptions = { passive };
-    const listener = makeDelegatedListener(state.bridge, eventTypeId);
+    const flags = EVENT_FLAGS[eventTypeId] ?? 0;
+    const capture = (flags & F_CAPTURE) !== 0;
+    const options: AddEventListenerOptions = { passive: (flags & F_PASSIVE) !== 0, capture };
+    const listener = makeDelegatedListener(state.bridge, eventTypeId, capture);
     state.root.addEventListener(domType, listener, options);
     state.attached.set(eventTypeId, { listener, options });
 }
 
 function anyHandlerForType(eventTypeId: number): boolean {
-    const bit = 1 << eventTypeId;
-    for (const mask of eventHandlersPresent.values()) {
-        if (mask & bit) return true;
+    for (const set of eventHandlersPresent.values()) {
+        if (hasBit(set, eventTypeId)) return true;
     }
     return false;
 }
 
 function maybeRemoveHighFreqListener(eventTypeId: number): void {
-    if ((HIGH_FREQ_EVENT_BITS & (1 << eventTypeId)) === 0) return;
+    if (((EVENT_FLAGS[eventTypeId] ?? 0) & F_HIGH_FREQ) === 0) return;
     if (anyHandlerForType(eventTypeId)) return;
     const state = delegationState;
     if (!state) return;
@@ -405,13 +429,8 @@ export function initEventDelegation(bridge: ZxBridge, rootSelector: string = 'bo
     const root = document.querySelector(rootSelector);
     if (!root) return () => {};
 
+    // Listeners attach on the first handler of each type (`registerEventHandler`).
     delegationState = { root, bridge, attached: new Map() };
-
-    // Always-on bubbling events (cheap). High-freq attach lazily via ensureDelegatedListener.
-    for (let eventTypeId = 0; eventTypeId < DELEGATED_EVENTS.length; eventTypeId++) {
-        if ((HIGH_FREQ_EVENT_BITS & (1 << eventTypeId)) !== 0) continue;
-        ensureDelegatedListener(eventTypeId);
-    }
 
     return () => {
         if (!delegationState) return;
@@ -476,6 +495,41 @@ function registerDevReinit(options: InitOptions): void {
     };
 }
 
+type WebShims = (helpers: WebHelpers) => Record<string, Function>;
+type WebGlobal = { __zx_web?: WebShims | false };
+
+/**
+ * Loads `<wasm>.web.js` (written beside the wasm) unless the build prepended
+ * the glue to this script, which always defines `globalThis.__zx_web`.
+ * Started before the wasm fetch so both download in parallel.
+ */
+function loadWebGlue(wasmUrl: string): Promise<void> {
+    if ((globalThis as WebGlobal).__zx_web !== undefined) return Promise.resolve();
+    const glue = new URL(wasmUrl, location.href);
+    if (!glue.pathname.endsWith(".wasm")) return Promise.resolve();
+    glue.pathname = glue.pathname.replace(/\.wasm$/, ".web.js");
+    if (typeof __DEV__ !== "undefined" && __DEV__) glue.searchParams.set("t", String(Date.now()));
+    return import(/* @vite-ignore */ glue.href).then(
+        () => {},
+        (error) => console.error(`ziex: failed to load browser bindings from ${glue.href}`, error),
+    );
+}
+
+/** `__zx_web` imports from the loaded glue; missing ones throw a descriptive error when called. */
+function createWebImports(module: WebAssembly.Module): Record<string, Function> {
+    const imports = WebAssembly.Module.imports(module).filter((imp) => imp.module === "__zx_web");
+    const factory = (globalThis as WebGlobal).__zx_web;
+    const shims = factory ? factory(webHelpers(mem, () => wasm.alloc)) : {};
+    for (const imp of imports) {
+        if (imp.name in shims) continue;
+        console.warn(`ziex: no JS glue for browser binding "${imp.name}"; rebuild the client assets`);
+        shims[imp.name] = () => {
+            throw new Error(`ziex: browser binding "${imp.name}" is missing from the JS glue`);
+        };
+    }
+    return shims;
+}
+
 /** Initialize WASM with the Ziex Bridge */
 export async function init(options: InitOptions = {}): Promise<{ source: WebAssembly.WebAssemblyInstantiatedSource; bridge: ZxBridge }> {
     const normalizedOptions = normalizeOptions(options);
@@ -499,17 +553,20 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
     const handlers: Handlers = typeof __FEAT_KV__ === "undefined" || __FEAT_KV__
         ? createKvHandlers(options.kv ?? createBrowserKVBindings(), getMemory, allocRef, { writes: "background" })
         : {};
-    const importObject: WebAssembly.Imports = {
-        ...ZxBridge.createImportObject(bridgeRef, handlers),
-        ...options.importObject,
-    };
-
+    const glueLoaded = loadWebGlue(url);
     // Streaming requires `application/wasm`, which some hosts (e.g. Safari extension pages) don't send
     const response = await fetch(url);
-    const source = response.headers.get("content-type")?.startsWith("application/wasm")
-        ? await WebAssembly.instantiateStreaming(response, importObject)
-        : await WebAssembly.instantiate(await response.arrayBuffer(), importObject);
-    const { instance } = source;
+    const module = response.headers.get("content-type")?.startsWith("application/wasm")
+        ? await WebAssembly.compileStreaming(response)
+        : await WebAssembly.compile(await response.arrayBuffer());
+
+    const importObject: WebAssembly.Imports = {
+        ...ZxBridge.createImportObject(bridgeRef, handlers),
+        __zx_web: (await glueLoaded, createWebImports(module)),
+        ...options.importObject,
+    };
+    const instance = await WebAssembly.instantiate(module, importObject);
+    const source: WebAssembly.WebAssemblyInstantiatedSource = { module, instance };
 
     wasmMemory = instance.exports.memory as WebAssembly.Memory;
     wasm.memory = wasmMemory;
@@ -518,6 +575,7 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
 
     const bridge = new ZxBridge(instance.exports);
     bridgeRef[0] = bridge;
+    bindCallbacks(wrapPromisingExport(instance.exports.__zx_js_cb as Parameters<typeof bindCallbacks>[0]));
 
     domNodes.clear();
 

@@ -5,6 +5,7 @@ const Manifest = @import("../../build/Manifest.zig");
 const hashing = @import("../../build/init/hashing.zig");
 const AddElementOptions = @import("../../Build.zig").AddElementOptions;
 const cli_args = @import("../root.zig");
+const webglue = @import("../../build/webglue.zig");
 
 const CommandContext = context.CommandContext;
 pub const command = cli_args.@"app.asset";
@@ -41,6 +42,14 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         return error.MissingHrefStem;
     }
 
+    // `.js` + `--wasm`: prepend the `__zx_web` shims the wasm imports.
+    const content: ?[]const u8 = if (nonEmpty(args.wasm)) |wasm_path| blk: {
+        const wasm = try std.Io.Dir.cwd().readFileAlloc(io, wasm_path, allocator, .unlimited);
+        const glue = try webglue.generate(allocator, wasm);
+        const js = try std.Io.Dir.cwd().readFileAlloc(io, src_path, allocator, .unlimited);
+        break :blk try std.mem.concat(allocator, u8, &.{ glue, js });
+    } else null;
+
     const dest_name, const href = if (no_hash) blk: {
         const name = try allocator.print("{s}{s}", .{ file_stem, file_ext });
         const url = if (href_stem) |stem|
@@ -49,11 +58,11 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
             "";
         break :blk .{ name, url };
     } else blk: {
-        const content = try std.Io.Dir.cwd().readFileAlloc(io, src_path, allocator, .unlimited);
+        const bytes = content orelse try std.Io.Dir.cwd().readFileAlloc(io, src_path, allocator, .unlimited);
         const hash_input = if (std.mem.eql(u8, file_ext, ".wasm"))
-            try hashing.hashInput(allocator, content)
+            try hashing.hashInput(allocator, bytes)
         else
-            content;
+            bytes;
 
         const hash_tag = hashing.contentTag(hash_input);
         const name = try allocator.print("{s}.{s}{s}", .{ file_stem, &hash_tag, file_ext });
@@ -74,7 +83,21 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     try std.Io.Dir.cwd().createDirPath(io, dest_dir);
 
     const dest_path = try std.fs.path.join(allocator, &.{ dest_dir, dest_name });
-    try std.Io.Dir.cwd().copyFile(src_path, std.Io.Dir.cwd(), dest_path, io, .{ .make_path = true });
+    if (content) |bytes| {
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = dest_path, .data = bytes });
+    } else {
+        try std.Io.Dir.cwd().copyFile(src_path, std.Io.Dir.cwd(), dest_path, io, .{ .make_path = true });
+    }
+
+    // A client wasm also gets `<name>.web.js` beside it: its `__zx_web` shims,
+    // loaded by init() when the bindings script didn't have them prepended.
+    if (std.mem.eql(u8, file_ext, ".wasm")) {
+        const wasm = try std.Io.Dir.cwd().readFileAlloc(io, src_path, allocator, .unlimited);
+        const glue = try webglue.generate(allocator, wasm);
+        const stem = dest_name[0 .. dest_name.len - file_ext.len];
+        const glue_path = try std.fs.path.join(allocator, &.{ dest_dir, try allocator.print("{s}.web.js", .{stem}) });
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = glue_path, .data = glue });
+    }
 
     if (manifest_in) |min| {
         var manifest = try Manifest.init(io, allocator, min);

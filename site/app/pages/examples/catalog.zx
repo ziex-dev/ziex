@@ -11,6 +11,8 @@ pub const rendering = [_]SidebarProps.Section{
     .{ .title = "Streaming SSR", .href = "/examples/streaming", .tags = &.{ "@async={.stream}", "@fallback" } },
     // .{ .title = "React Integration", .href = "/examples/react" },
     .{ .title = "Typed Events", .href = "/examples/event", .tags = &.{ "zx.client.Event.as", "zx.client.events" } },
+    .{ .title = "Browser APIs", .href = "/examples/web", .tags = &.{ "zx.client.web", "canvas", "drag and drop" } },
+    .{ .title = "WebGPU", .href = "/examples/webgpu", .tags = &.{ "zx.client.web", "@embedFile", "WGSL" } },
     // .{ .title = "MDZX", .href = "/examples/mdzx" },
     // .{ .title = "Markdown", .href = "/examples/md" },
 };

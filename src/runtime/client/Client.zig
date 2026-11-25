@@ -25,6 +25,7 @@ const areComponentsSameType = vtree_mod.areComponentsSameType;
 const js = window.js;
 
 pub const EventType = @import("event_type.zig").EventType;
+const EventSet = std.EnumSet(EventType);
 
 pub const ComponentMeta = struct {
     pub const Type = enum { client };
@@ -124,16 +125,72 @@ const HandlerKey = struct {
     event_type: EventType,
 };
 
+// Cheaper than wyhash for sequential vnode ids; the fold keeps high bits in the slot index.
+fn mixId(k: u64) u64 {
+    const h = k *% 0x9E3779B97F4A7C15;
+    return h ^ (h >> 32);
+}
+
+const IdContext = struct {
+    pub fn hash(_: IdContext, k: u64) u64 {
+        return mixId(k);
+    }
+    pub fn eql(_: IdContext, a: u64, b: u64) bool {
+        return a == b;
+    }
+};
+
+const HandlerKeyContext = struct {
+    pub fn hash(_: HandlerKeyContext, k: HandlerKey) u64 {
+        return mixId((k.velement_id << 8) | @backingInt(k.event_type));
+    }
+    pub fn eql(_: HandlerKeyContext, a: HandlerKey, b: HandlerKey) bool {
+        return a.velement_id == b.velement_id and a.event_type == b.event_type;
+    }
+};
+
+fn IdMap(comptime K: type, comptime V: type, comptime Ctx: type) type {
+    return std.HashMap(K, V, Ctx, std.hash_map.default_max_load_percentage);
+}
+
 const InitOptions = struct {};
 
 allocator: std.mem.Allocator,
 components: []const ComponentMeta,
 vtrees: std.StringHashMap(VDOMTree),
-id_to_velement: std.AutoHashMap(u64, *vtree_mod.VElement),
-handler_registry: std.AutoHashMap(HandlerKey, zx.EventHandler),
-handler_bits: std.AutoHashMap(u64, u32),
+id_to_velement: IdMap(u64, *vtree_mod.VElement, IdContext),
+handler_registry: IdMap(HandlerKey, zx.EventHandler, HandlerKeyContext),
+handler_bits: IdMap(u64, EventSet, IdContext),
 /// Reused across renders to retain DomCmd capacity.
 dom_cmds: dom_cmd.DomCmdBuffer,
+// Per-instance component output arenas, keyed like `vtrees`.
+render_arenas: std.StringHashMap(*RenderArenas),
+// Removals leave tombstones that std.HashMap never clears; see `compactMaps`.
+removed_since_rehash: usize = 0,
+
+// Component trees live in one arena per render. The vtree keeps pointing into the
+// previous render's output until the next diff, so two arenas alternate.
+const RenderArenas = struct {
+    arenas: [2]std.heap.ArenaAllocator,
+    cur: u1 = 0,
+
+    fn next(self: *RenderArenas) std.mem.Allocator {
+        self.cur +%= 1;
+        const arena = &self.arenas[self.cur];
+        _ = arena.reset(.retain_capacity);
+        return arena.allocator();
+    }
+
+    // State created this render may point into the current arena (e.g. an initial
+    // list built with ctx.allocator), so keep it alive and start a fresh one.
+    fn pinCurrent(self: *RenderArenas) void {
+        self.arenas[self.cur] = std.heap.ArenaAllocator.init(self.arenas[self.cur].child_allocator);
+    }
+
+    fn deinit(self: *RenderArenas) void {
+        for (&self.arenas) |*a| a.deinit();
+    }
+};
 
 /// Active component during `render` (for ComponentCtx / ifpl subscriptions).
 var current_render_id: []const u8 = "";
@@ -149,10 +206,11 @@ pub fn init(allocator: std.mem.Allocator, _: InitOptions) Client {
         .allocator = allocator,
         .components = &app.components,
         .vtrees = std.StringHashMap(VDOMTree).init(allocator),
-        .id_to_velement = std.AutoHashMap(u64, *vtree_mod.VElement).init(allocator),
-        .handler_registry = std.AutoHashMap(HandlerKey, zx.EventHandler).init(allocator),
-        .handler_bits = std.AutoHashMap(u64, u32).init(allocator),
+        .id_to_velement = .init(allocator),
+        .handler_registry = .init(allocator),
+        .handler_bits = .init(allocator),
         .dom_cmds = dom_cmd.DomCmdBuffer.init(allocator),
+        .render_arenas = std.StringHashMap(*RenderArenas).init(allocator),
     };
 }
 
@@ -166,6 +224,25 @@ pub fn deinit(self: *Client) void {
     self.handler_registry.deinit();
     self.handler_bits.deinit();
     self.dom_cmds.deinit();
+    var arenas_iter = self.render_arenas.valueIterator();
+    while (arenas_iter.next()) |ra| {
+        ra.*.deinit();
+        self.allocator.destroy(ra.*);
+    }
+    self.render_arenas.deinit();
+}
+
+fn renderArenas(self: *Client, key: []const u8) !*RenderArenas {
+    const gop = try self.render_arenas.getOrPut(key);
+    if (!gop.found_existing) {
+        const ra = try self.allocator.create(RenderArenas);
+        ra.* = .{ .arenas = .{
+            std.heap.ArenaAllocator.init(self.allocator),
+            std.heap.ArenaAllocator.init(self.allocator),
+        } };
+        gop.value_ptr.* = ra;
+    }
+    return gop.value_ptr.*;
 }
 
 pub fn run() !void {
@@ -246,7 +323,9 @@ pub fn renderInstance(self: *Client, cmp: ComponentMeta, occurrence: usize) !voi
     current_render_id = key;
     reactivity.active_component_id = key;
     core_vdom.current_component_owner = key;
-    const Component = cmp.import(allocator, cmp.name, marker.props_zon);
+    const arenas = try self.renderArenas(key);
+    reactivity.state_created = false;
+    const Component = cmp.import(arenas.next(), cmp.name, marker.props_zon);
     reactivity.active_component_id = null;
 
     // Batch all DOM mutations for this render into one `__zx._flush`.
@@ -254,6 +333,8 @@ pub fn renderInstance(self: *Client, cmp: ComponentMeta, occurrence: usize) !voi
     defer {
         self.dom_cmds.flush();
         dom_cmd.deactivate(prev_cmds);
+        self.compactMaps();
+        if (reactivity.state_created) arenas.pinCurrent();
     }
 
     const existing_vtree = self.vtrees.getPtr(key);
@@ -308,10 +389,15 @@ pub fn renderInstance(self: *Client, cmp: ComponentMeta, occurrence: usize) !voi
 }
 
 pub fn registerVElement(self: *Client, velement: *vtree_mod.VElement) void {
-    const existing = self.id_to_velement.get(velement.id);
-    if (existing == null or existing.? != velement) {
-        self.id_to_velement.put(velement.id, velement) catch {};
+    self.registerVElementOnly(velement);
+    for (velement.children.items) |child| {
+        self.registerVElement(child);
     }
+}
+
+// Registers one vnode and its handlers, not its children.
+pub fn registerVElementOnly(self: *Client, velement: *vtree_mod.VElement) void {
+    self.id_to_velement.put(velement.id, velement) catch {};
 
     switch (velement.component) {
         .element => |element| {
@@ -327,18 +413,23 @@ pub fn registerVElement(self: *Client, velement: *vtree_mod.VElement) void {
         },
         else => {},
     }
+}
 
-    for (velement.children.items) |child| {
-        self.registerVElement(child);
-    }
+// Rehash the id maps once tombstones outnumber live entries, else probes grow unbounded.
+fn compactMaps(self: *Client) void {
+    if (self.removed_since_rehash <= self.id_to_velement.count()) return;
+    self.id_to_velement.rehash();
+    self.handler_registry.rehash();
+    self.handler_bits.rehash();
+    self.removed_since_rehash = 0;
 }
 
 pub fn registerHandler(self: *Client, velement_id: u64, event_type: EventType, handler: zx.EventHandler) void {
     const key = HandlerKey{ .velement_id = velement_id, .event_type = event_type };
     self.handler_registry.put(key, handler) catch {};
-    const bit = @as(u32, 1) << @as(u5, @intCast(@backingInt(event_type)));
-    const cur = self.handler_bits.get(velement_id) orelse 0;
-    self.handler_bits.put(velement_id, cur | bit) catch {};
+    var set = self.handler_bits.get(velement_id) orelse EventSet.empty;
+    set.insert(event_type);
+    self.handler_bits.put(velement_id, set) catch {};
     if (zx.platform.role == .client) {
         window.ext._registerEventHandler(velement_id, @backingInt(event_type));
     }
@@ -351,18 +442,12 @@ pub fn getHandler(self: *Client, velement_id: u64, event_type: EventType) ?zx.Ev
 
 /// `clear_js == false` when JS already dropped the handlers via `_rc`/`_rpc`.
 pub fn unregisterVElement(self: *Client, velement: *vtree_mod.VElement, clear_js: bool) void {
-    _ = self.id_to_velement.remove(velement.id);
+    if (self.id_to_velement.remove(velement.id)) self.removed_since_rehash += 1;
 
     if (self.handler_bits.fetchRemove(velement.id)) |entry| {
-        const bits = entry.value;
-        inline for (@typeInfo(EventType).@"enum".field_names, 0..) |name, i| {
-            if (bits & (@as(u32, 1) << @intCast(i)) != 0) {
-                const key = HandlerKey{
-                    .velement_id = velement.id,
-                    .event_type = @field(EventType, name),
-                };
-                _ = self.handler_registry.remove(key);
-            }
+        var it = entry.value.iterator();
+        while (it.next()) |event_type| {
+            _ = self.handler_registry.remove(.{ .velement_id = velement.id, .event_type = event_type });
         }
     }
 

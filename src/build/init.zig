@@ -440,6 +440,8 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         if (use_stable_assets) {
             if (uses_local_bindings and link_client_bindings) {
                 const js_asset = addStaticAssetCopy(b, zx_cli, opts, zxjs_path, client_asset_stem, ".js", true, true, "script");
+                js_asset.addArg("--wasm");
+                js_asset.addFileArg(wasm_binpath);
                 js_asset.setName("install client bindings");
                 b.getInstallStep().dependOn(&js_asset.step);
             }
@@ -456,6 +458,8 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         var js_run: ?*std.Build.Step.Run = null;
         if (uses_local_bindings and link_client_bindings) {
             const js_asset = addStaticAssetRun(b, zx_cli, opts, base_manifest_path, zxjs_path, client_asset_href_stem, client_asset_stem, ".js", "script", true, false);
+            js_asset.run.addArg("--wasm");
+            js_asset.run.addFileArg(wasm_binpath);
             js_asset.run.setName("install client bindings");
             b.getInstallStep().dependOn(&js_asset.run.step);
             js_run = js_asset.run;

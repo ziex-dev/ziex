@@ -2,7 +2,6 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
     return (
         <div @allocator={ctx.arena}>
             <Sidebar allocator={ctx.arena} categories={&categories} toc={toc_links} tabs={&tabs} active_path="/learn" children={children} />
-            <script src=`/assets/docs.js?v={zx.info.version}` defer="true"></script>
         </div>
     );
 }

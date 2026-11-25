@@ -1,0 +1,230 @@
+// Top-bar docs search: a client component. The query, highlighted result and
+// open state are `zx.State`; the index arrives as typed props (built from the
+// sidebars at comptime in docs_nav.zx), so the client never imports the docs.
+
+pub const Entry = struct { title: []const u8, group: []const u8, href: []const u8 };
+
+pub fn DocsSearch(ctx: *zx.ComponentCtx(struct { index: []const Entry })) zx.Component {
+    index = ctx.props.index;
+    const query = ctx.state([]const u8, "");
+    const selected = ctx.state(u32, 0);
+    const open = ctx.state(bool, false);
+    if (zx.platform.role == .client) listenForShortcuts();
+
+    var buf: [max_results]Entry = undefined;
+    const results = search(query.get(), &buf);
+    const sel = selected.get();
+
+    return (
+        <div @allocator={ctx.allocator} class="top-bar-search" role="search" onblur={ctx.bind(onBlur)}>
+            <input
+                id="docs-search"
+                class="top-bar-search-input"
+                type="search"
+                placeholder="Search docs"
+                aria-label="Search documentation"
+                autocomplete="off"
+                role="combobox"
+                aria-expanded={if (open.get()) "true" else "false"}
+                aria-controls="docs-search-results"
+                oninput={ctx.bind(onInput)}
+                onkeydown={ctx.bind(onKeyDown)}
+                onfocus={ctx.bind(onFocus)}
+            />
+            <span class="top-bar-search-hint" aria-hidden="true">/</span>
+            {if (open.get()) (
+                <ul id="docs-search-results" class="top-bar-search-results" role="listbox" onmousedown={ctx.bind(keepFocus)}>
+                    {if (results.len == 0) (
+                        <li class="top-bar-search-empty">No results</li>
+                    ) else (
+                        <fragment>
+                            {for (results, 0..) |r, i| (
+                                <li role="option" aria-selected={if (i == sel) "true" else "false"}>
+                                    <a href={r.href} class="top-bar-search-result" onclick={ctx.bind(onPick)}>
+                                        <span class="top-bar-search-result-title">{r.title}</span>
+                                        <span class="top-bar-search-result-group">{r.group}</span>
+                                    </a>
+                                </li>
+                            )}
+                        </fragment>
+                    )}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+const max_results = 8;
+
+// Set on render; handlers search it too.
+var index: []const Entry = &.{};
+
+/// Top matches for `query`: every term must hit the title or group.
+fn search(query: []const u8, out: *[max_results]Entry) []const Entry {
+    var scores: [max_results]u32 = undefined;
+    var n: usize = 0;
+    if (std.mem.trim(u8, query, &std.ascii.whitespace).len == 0) return out[0..0];
+    for (index) |entry| {
+        const s = score(entry, query);
+        if (s == 0) continue;
+        // Insert keeping highest first; ties keep index order.
+        var at = n;
+        while (at > 0 and scores[at - 1] < s) at -= 1;
+        if (at >= max_results) continue;
+        var k = @min(n, max_results - 1);
+        while (k > at) : (k -= 1) {
+            out[k] = out[k - 1];
+            scores[k] = scores[k - 1];
+        }
+        out[at] = entry;
+        scores[at] = s;
+        n = @min(n + 1, max_results);
+    }
+    return out[0..n];
+}
+
+fn score(entry: Entry, query: []const u8) u32 {
+    var total: u32 = 0;
+    var terms = std.mem.tokenizeAny(u8, query, &std.ascii.whitespace);
+    while (terms.next()) |term| {
+        if (std.ascii.eqlIgnoreCase(entry.title, term)) {
+            total += 100;
+        } else if (entry.title.len >= term.len and std.ascii.eqlIgnoreCase(entry.title[0..term.len], term)) {
+            total += 50;
+        } else if (std.ascii.findIgnoreCase(entry.title, term) != null) {
+            total += 20;
+        } else if (std.ascii.findIgnoreCase(entry.group, term) != null) {
+            total += 5;
+        } else return 0;
+    }
+    return total;
+}
+
+// --- Handlers (states in declaration order: query, selected, open) ---
+
+fn onInput(e: *zx.client.Event.Stateful) void {
+    const query = e.state([]const u8);
+    const selected = e.state(u32);
+    const open = e.state(bool);
+    const value = e.value() orelse "";
+    const prev = query.get();
+    query.set(value);
+    if (prev.len > 0) zx.allocator.free(prev);
+    selected.set(0);
+    open.set(std.mem.trim(u8, value, &std.ascii.whitespace).len > 0);
+}
+
+fn onFocus(e: *zx.client.Event.Stateful) void {
+    const query = e.state([]const u8);
+    _ = e.state(u32);
+    const open = e.state(bool);
+    if (query.get().len > 0) open.set(true);
+}
+
+fn onKeyDown(e: *zx.client.Event.Stateful) void {
+    const query = e.state([]const u8);
+    const selected = e.state(u32);
+    const open = e.state(bool);
+    const key = e.key() orelse return;
+    defer zx.allocator.free(key);
+
+    var buf: [max_results]Entry = undefined;
+    const results = search(query.get(), &buf);
+    if (std.mem.eql(u8, key, "Escape")) {
+        open.set(false);
+        blurTarget(e);
+    } else if (std.mem.eql(u8, key, "ArrowDown") or std.mem.eql(u8, key, "ArrowUp")) {
+        if (results.len == 0) return;
+        e.preventDefault();
+        const n: u32 = @intCast(results.len);
+        const step: u32 = if (std.mem.eql(u8, key, "ArrowDown")) 1 else n - 1;
+        selected.set((selected.get() + step) % n);
+    } else if (std.mem.eql(u8, key, "Enter")) {
+        const sel = selected.get();
+        if (sel >= results.len) return;
+        e.preventDefault();
+        open.set(false);
+        const location = web.window().location();
+        defer location.deinit();
+        location.setHref(results[sel].href);
+    }
+}
+
+/// Closes when focus leaves the search box (results keep focus via keepFocus).
+fn onBlur(e: *zx.client.Event.Stateful) void {
+    _ = e.state([]const u8);
+    _ = e.state(u32);
+    const open = e.state(bool);
+    const ev = e.native(web.FocusEvent);
+    const box = (ev.currentTarget() orelse return).as(web.Element);
+    defer box.deinit();
+    const target = (ev.target() orelse return).as(web.Element);
+    defer target.deinit();
+    const wrapper = target.closest(".top-bar-search") orelse return;
+    defer wrapper.deinit();
+    if (ev.relatedTarget()) |next| {
+        defer next.deinit();
+        if (wrapper.contains(next)) return;
+    }
+    open.set(false);
+}
+
+/// Clicking a result must not blur the input before the click lands.
+fn keepFocus(e: *zx.client.Event.Stateful) void {
+    e.preventDefault();
+}
+
+fn onPick(e: *zx.client.Event.Stateful) void {
+    _ = e.state([]const u8);
+    _ = e.state(u32);
+    e.state(bool).set(false);
+}
+
+fn blurTarget(e: *zx.client.Event.Stateful) void {
+    const target = e.native(web.Event).target() orelse return;
+    defer target.deinit();
+    target.as(web.HTMLElement).blur();
+}
+
+// `/` (when not typing) and Cmd/Ctrl+K focus the search box from anywhere.
+var listening = false;
+
+fn listenForShortcuts() void {
+    if (listening) return;
+    listening = true;
+    const doc = web.document();
+    defer doc.deinit();
+    doc.addEventListener("keydown", .fromFn(onShortcut, .{}), null);
+}
+
+fn onShortcut(args: []const zx.client.js.Value) void {
+    if (args.len == 0) return;
+    const ev: web.KeyboardEvent = .{ .h = args[0] };
+    const key = ev.key(zx.allocator) catch return;
+    defer zx.allocator.free(key);
+    const slash = std.mem.eql(u8, key, "/") and !typing(ev);
+    const k = std.mem.eql(u8, key, "k") and (ev.metaKey() or ev.ctrlKey());
+    if (!slash and !k) return;
+    ev.preventDefault();
+    const doc = web.document();
+    defer doc.deinit();
+    const input = doc.getElementById("docs-search") orelse return;
+    defer input.deinit();
+    input.as(web.HTMLInputElement).focus(null);
+    input.as(web.HTMLInputElement).select();
+}
+
+fn typing(ev: web.KeyboardEvent) bool {
+    const target = ev.target() orelse return false;
+    defer target.deinit();
+    const el = target.as(web.HTMLElement);
+    if (el.isContentEditable()) return true;
+    const tag = el.tagName(zx.allocator) catch return false;
+    defer zx.allocator.free(tag);
+    for ([_][]const u8{ "INPUT", "TEXTAREA", "SELECT" }) |t| if (std.mem.eql(u8, tag, t)) return true;
+    return false;
+}
+
+const web = zx.client.web;
+const std = @import("std");
+const zx = @import("zx");

@@ -4,6 +4,9 @@ pub const Event = @import("client/Event.zig");
 pub const Action = @import("client/Action.zig");
 pub const events = @import("client/events/generated.zig");
 pub const jsx = @import("client/jsx.zig");
+/// Typed browser APIs generated from WebIDL (`zig build webgen`).
+pub const web = @import("client/web/generated.zig");
+pub const Callback = web.Callback;
 
 // Legacy --- may get removed/renamed
 const reactivity = @import("client/reactivity.zig");

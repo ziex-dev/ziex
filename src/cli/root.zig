@@ -178,6 +178,10 @@ pub const @"app.asset": Command = .{
             .default_value = true,
             .help = "Content-hash the installed filename (--no-hash for stable filenames in dev rebuilds)",
         }),
+        Argument.init(.wasm, []const u8, .{
+            .default_value = "",
+            .help = "Client wasm: prepend the browser binding shims it imports to a .js asset",
+        }),
     },
     .positional_args = &.{
         Argument.init(.src, []const u8, .{

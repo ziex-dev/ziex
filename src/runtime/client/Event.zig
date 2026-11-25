@@ -48,6 +48,12 @@ pub fn stopImmediatePropagation(self: Event) void {
     self.getEvent().stopImmediatePropagation();
 }
 
+/// The live DOM event as a `zx.client.web` interface, e.g. `ctx.native(web.DragEvent)`.
+/// Valid during the handler; `.h.dup()` to keep it longer.
+pub fn native(self: Event, comptime T: type) T {
+    return .{ .h = @fromBackingInt(self._internal.event_ref) };
+}
+
 /// Get the input/button value for the element that owns the handler.
 pub fn value(self: Event) ?[]const u8 {
     if (platform_role != .client) return null;
@@ -185,6 +191,10 @@ pub const Stateful = struct {
 
     pub fn value(self: Stateful) ?[]const u8 {
         return self.inner.value();
+    }
+
+    pub fn native(self: Stateful, comptime T: type) T {
+        return self.inner.native(T);
     }
 
     pub fn key(self: Stateful) ?[]const u8 {

@@ -272,6 +272,26 @@ pub fn build(b: *std.Build) !void {
         events_gen_step.dependOn(&events_gen_run.step);
     }
 
+    // --- Steps: Web bindings Generator --- //
+    {
+        const web_gen_step = b.step("webgen", "Generate typed browser bindings from webref");
+        const web_gen_exe = b.addExecutable(.{
+            .name = "webgen",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("tools/codegen/web.zig"),
+                .target = b.graph.host,
+                .optimize = .ReleaseFast,
+            }),
+        });
+        const web_gen_run = b.addRunArtifact(web_gen_exe);
+        web_gen_run.has_side_effects = true;
+        if (b.root.root_dir.handle.access(b.graph.io, "vendor/webref", .{})) |_| {} else |_| {
+            const sync_cmd = b.addSystemCommand(&.{ "./tools/syncvendor", "webref" });
+            web_gen_run.step.dependOn(&sync_cmd.step);
+        }
+        web_gen_step.dependOn(&web_gen_run.step);
+    }
+
     // --- Steps: Tags / delegated events TS Generator (pkg/ziex) --- //
     {
         const tags_gen_step = b.step("tagsgen", "Regenerate pkg/ziex TAG_NAMES + DELEGATED_EVENTS");

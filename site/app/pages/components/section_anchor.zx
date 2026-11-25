@@ -1,0 +1,17 @@
+// A section heading's text as a link to the section. Clicking also copies the
+// link (components/docs.zig); rendered here instead of rewritten in the browser.
+
+pub fn SectionAnchor(allocator: zx.Allocator, props: struct { id: []const u8, children: zx.Component }) zx.Component {
+    const href = allocator.print("#{s}", .{props.id}) catch "#";
+    return (
+        <a @allocator={allocator} href={href} class="section-anchor">
+            {props.children}
+            <svg class="section-anchor-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M7.775 3.275a.75.75 0 0 0 1.06 1.06l1.25-1.25a2 2 0 1 1 2.83 2.83l-2.5 2.5a2 2 0 0 1-2.83 0 .75.75 0 0 0-1.06 1.06 3.5 3.5 0 0 0 4.95 0l2.5-2.5a3.5 3.5 0 0 0-4.95-4.95l-1.25 1.25Z" />
+                <path d="M8.225 12.725a.75.75 0 0 0-1.06-1.06l-1.25 1.25a2 2 0 1 1-2.83-2.83l2.5-2.5a2 2 0 0 1 2.83 0 .75.75 0 0 0 1.06-1.06 3.5 3.5 0 0 0-4.95 0l-2.5 2.5a3.5 3.5 0 0 0 4.95 4.95l1.25-1.25Z" />
+            </svg>
+        </a>
+    );
+}
+
+const zx = @import("zx");

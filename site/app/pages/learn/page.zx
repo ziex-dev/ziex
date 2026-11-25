@@ -189,14 +189,14 @@ const versions: Versions = @import("../versions.zon");
 fn Installation(allocator: zx.Allocator) !zx.Component {
     return (
         <section id="installation" class="section" @allocator={allocator}>
-            <h2>Installation</h2>
+            <h2><SectionAnchor id="installation">Installation</SectionAnchor></h2>
             <p>Install the Ziex CLI to get started:</p>
 
             <InstallCLI />
 
             <p style="margin-top: 1rem;">You can also scaffold a project with <a href="#create-project">Node.js</a>, clone a <a href="#create-project">starter template</a>, or set things up <a href="#create-project">manually</a>. See <a href="#create-project">Create a Project</a> for all options.</p>
 
-            <h3 id="install-zig">Install Zig</h3>
+            <h3 id="install-zig"><SectionAnchor id="install-zig">Install Zig</SectionAnchor></h3>
             <p>Ziex <code>{zx.info.version}</code> requires Zig <code>{zx.info.minimum_zig_version}</code>:</p>
 
             <p>Other available versions:</p>
@@ -218,7 +218,7 @@ const CreateProjectProps = struct {
 fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Component {
     return (
         <section id="create-project" class="section" @allocator={allocator}>
-            <h2>Create a Project</h2>
+            <h2><SectionAnchor id="create-project">Create a Project</SectionAnchor></h2>
             <p>Pick the setup that fits your workflow:</p>
             <ul>
                 <li><strong>CLI</strong> - scaffold a project with <code>zx init</code></li>
@@ -378,7 +378,7 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
                 </div>
             </div>
 
-            <h3 id="project-structure">Project Structure</h3>
+            <h3 id="project-structure"><SectionAnchor id="project-structure">Project Structure</SectionAnchor></h3>
             <ProjectTree />
             <div class="callout tip">
                 <strong>Tip:</strong>{" "}The <code>app/pages/</code>{" "}directory uses file-based routing. Each <code>page.zx</code>{" "}file becomes a route.
@@ -390,10 +390,10 @@ fn CreateProject(allocator: zx.Allocator, props: CreateProjectProps) zx.Componen
 fn EditorSetup(allocator: zx.Allocator) zx.Component {
     return (
         <section id="devtools" class="section" @allocator={allocator}>
-            <h2>Developer Tools</h2>
+            <h2><SectionAnchor id="devtools">Developer Tools</SectionAnchor></h2>
             <p>Editor support for ZX files, a language server, and browser DevTools for running apps.</p>
 
-            <h3 id="editor-setup">Editor Extensions</h3>
+            <h3 id="editor-setup"><SectionAnchor id="editor-setup">Editor Extensions</SectionAnchor></h3>
             <p>Every editor gets syntax highlighting for <code>.zx</code>{" "}files and diagnostics from the language server.</p>
             <div>
                 <div class="simple-tab-header">
@@ -444,13 +444,12 @@ fn EditorSetup(allocator: zx.Allocator) zx.Component {
                 </div>
             </div>
 
-            <h3 id="language-server">Language Server</h3>
+            <h3 id="language-server"><SectionAnchor id="language-server">Language Server</SectionAnchor></h3>
             <p>All editors run the same ZX language server, <code>zx lsp</code>, which ships with the Ziex CLI. It provides diagnostics, completion, hover, and formatting for <code>.zx</code>{" "}files, and forwards the Zig parts to ZLS. See the <a href=`{zx.info.repository}/tree/main/ide#language-server` target="_blank" rel="noopener noreferrer">language server guide</a>{" "}for how it starts and how to configure it.</p>
 
-            <h3 id="browser-devtools">Browser DevTools</h3>
+            <h3 id="browser-devtools"><SectionAnchor id="browser-devtools">Browser DevTools</SectionAnchor></h3>
             <p>The <a href="https://chromewebstore.google.com/detail/ziex-devtools/efnedneccooengjfmahlnmicgkalnopj" target="_blank" rel="noopener noreferrer">Ziex DevTools</a>{" "}Chrome extension adds a Ziex panel to Chrome DevTools for inspecting and debugging running Ziex apps. It also works in other Chromium-based browsers that install Chrome Web Store extensions.</p>
 
-            <script src=`/assets/docs.js?v={zx.info.version}` defer="true"></script>
         </section>
     );
 }
@@ -464,7 +463,7 @@ const CreatingComponentsProps = struct {
 fn CreatingComponents(allocator: zx.Allocator, props: CreatingComponentsProps) zx.Component {
     return (
         <section id="creating-components" class="section" @allocator={allocator}>
-            <h2>Creating and nesting components</h2>
+            <h2><SectionAnchor id="creating-components">Creating and nesting components</SectionAnchor></h2>
             <p>Ziex apps are made out of <em>components</em>. A component is a function that returns a <code>zx.Component</code> type. Components can be as small as a button or as large as an entire page.</p>
             <p>ZX components are Zig functions that return markup. Notice how <code>{"<Greeting />"}</code> starts with a capital letter - that's how ZX distinguishes between custom components and HTML elements:</p>
             <ExampleBlock id="greeting" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="hello_world.zx" />
@@ -484,7 +483,7 @@ const WritingMarkupProps = struct {
 fn WritingMarkup(allocator: zx.Allocator, props: WritingMarkupProps) zx.Component {
     return (
         <section id="writing-markup" class="section" @allocator={allocator}>
-            <h2>Writing markup with ZX</h2>
+            <h2><SectionAnchor id="writing-markup">Writing markup with ZX</SectionAnchor></h2>
             <p>The markup syntax is called <em>ZX</em> - it's similar to JSX but designed for Zig. ZX files use the <code>.zx</code> extension and are transpiled to efficient Zig code.</p>
             <p>ZX is stricter than HTML. You have to close all tags, including self-closing ones like <code>{"<br />"}</code>:</p>
             <ExampleBlock id="markup" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="about_section.zx" />
@@ -503,7 +502,7 @@ const FragmentsProps = struct {
 fn Fragments(allocator: zx.Allocator, props: FragmentsProps) zx.Component {
     return (
         <section id="fragments" class="section" @allocator={allocator}>
-            <h2>Fragments</h2>
+            <h2><SectionAnchor id="fragments">Fragments</SectionAnchor></h2>
             <p>Sometimes you want to return multiple elements from a component without adding an extra wrapper. Use the empty tag syntax <code>{"<>"}...{"</>"}</code>:</p>
             <ExampleBlock id="fragment" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="fragment_demo.zx" />
             <p>Fragments are useful when you need to group elements but don't want to add extra DOM nodes. The children are rendered directly without any wrapper element. Learn more in the <a href="/reference#fragments">Fragments documentation</a>.</p>
@@ -523,7 +522,7 @@ const DisplayingDataProps = struct {
 fn DisplayingData(allocator: zx.Allocator, props: DisplayingDataProps) zx.Component {
     return (
         <section id="displaying-data" class="section" @allocator={allocator}>
-            <h2>Displaying data</h2>
+            <h2><SectionAnchor id="displaying-data">Displaying data</SectionAnchor></h2>
             <p>ZX lets you embed dynamic content using curly braces <code>{"{expression}"}</code>. Expressions are automatically formatted based on their type:</p>
             <ul>
                 <li><strong>Strings</strong> - displayed as text (HTML-escaped for safety)</li>
@@ -551,7 +550,7 @@ const DynamicAttributesProps = struct {
 fn DynamicAttributes(allocator: zx.Allocator, props: DynamicAttributesProps) zx.Component {
     return (
         <section id="dynamic-attributes" class="section" @allocator={allocator}>
-            <h2>Dynamic attributes</h2>
+            <h2><SectionAnchor id="dynamic-attributes">Dynamic attributes</SectionAnchor></h2>
             <p>Use curly braces to pass dynamic values to HTML attributes:</p>
             <ExampleBlock id="dynamic-attr" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="dynamic_attrs.zx" />
             <p>You can use any expression, including conditionals, to compute attribute values dynamically.</p>
@@ -585,15 +584,15 @@ const InteractivityProps = struct {
 fn Interactivity(allocator: zx.Allocator, props: InteractivityProps) zx.Component {
     return (
         <section id="interactivity" class="section" @allocator={allocator}>
-            <h2>Adding interactivity</h2>
+            <h2><SectionAnchor id="interactivity">Adding interactivity</SectionAnchor></h2>
             <p>Interactivity can be added using native HTML attributes. Provide a function as a handler for the event and take action on that event.</p>
 
-            <h3 id="event-handlers">Event handlers</h3>
+            <h3 id="event-handlers"><SectionAnchor id="event-handlers">Event handlers</SectionAnchor></h3>
             <p>Attach event handlers to elements using the <code>{"on<event_name>"}</code> syntax:</p>
             <ExampleBlock id="onclick" zx_code={props.zx_onclick} html_code={props.html_onclick} filename="events.zig" preview_component={props.preview_onclick} />
             <p>Common event handlers include <code>onclick</code>, <code>onsubmit</code>, <code>onchange</code>, <code>onblur</code>, and more. Handler functions receive a <code>zx.client.Event</code> parameter with access to the DOM event object.</p>
 
-            <h3 id="binding-state">Binding state to events</h3>
+            <h3 id="binding-state"><SectionAnchor id="binding-state">Binding state to events</SectionAnchor></h3>
             <p>To update component state in response to events, use <code>ctx.bind(handler)</code> and access state through the event handler:</p>
             <ExampleBlock id="onclick-state" zx_code={props.zx_onclick_state} html_code={props.html_onclick_state} filename="events.zig" preview_component={props.preview_onclick_state} />
             <p>When you use <code>ctx.bind()</code>, the handler receives a <code>zx.client.Event.Stateful</code> which provides access to component state through <code>event.state(T)</code>. Call <code>state(T)</code> in the same order as the <code>ctx.state()</code> calls in the component; the types must match.</p>
@@ -601,7 +600,7 @@ fn Interactivity(allocator: zx.Allocator, props: InteractivityProps) zx.Componen
                 <strong>Note:</strong>{" "}For event handlers to run in the browser, <code>@client</code>{" "}must be set on the interactive component or a parent that wraps it. Without it, the component renders server-side only and event handlers are ignored.
             </div>
 
-            <h3 id="form-actions">Form actions</h3>
+            <h3 id="form-actions"><SectionAnchor id="form-actions">Form actions</SectionAnchor></h3>
             <p>For form submissions, prefer the <code>action</code> attribute with an Action handler. Actions parse form fields into a typed struct via <code>data(T)</code>, instead of reading the raw DOM event.</p>
 
             <h4 id="client-actions">Client actions</h4>
@@ -630,7 +629,7 @@ const ConditionalRenderingProps = struct {
 fn ConditionalRendering(allocator: zx.Allocator, props: ConditionalRenderingProps) zx.Component {
     return (
         <section id="conditional-rendering" class="section" @allocator={allocator}>
-            <h2>Conditional rendering</h2>
+            <h2><SectionAnchor id="conditional-rendering">Conditional rendering</SectionAnchor></h2>
             <p>Use Zig's <code>if</code> expressions to conditionally render content:</p>
             <ExampleBlock id="conditional" zx_code={props.zx_conditional} zig_code={props.zig_conditional} html_code={props.html_conditional} filename="user_status.zx" />
 
@@ -651,7 +650,7 @@ const RenderingListsProps = struct {
 fn RenderingLists(allocator: zx.Allocator, props: RenderingListsProps) zx.Component {
     return (
         <section id="rendering-lists" class="section" @allocator={allocator}>
-            <h2>Rendering lists</h2>
+            <h2><SectionAnchor id="rendering-lists">Rendering lists</SectionAnchor></h2>
             <p>Use <code>for</code> loops to iterate over arrays and render a component for each item:</p>
             <ExampleBlock id="list" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="product_list.zx" />
             <p>The loop variable can be used within the component body to display item-specific content. See the <a href="/reference#for-loops">For Loops documentation</a> for more examples.</p>
@@ -669,11 +668,11 @@ const PassingPropsProps = struct {
 fn PassingProps(allocator: zx.Allocator, props: PassingPropsProps) zx.Component {
     return (
         <section id="passing-props" class="section" @allocator={allocator}>
-            <h2>Passing props to components</h2>
+            <h2><SectionAnchor id="passing-props">Passing props to components</SectionAnchor></h2>
             <p>Components can accept <em>props</em> (properties) to customize their behavior. Define a props struct as the second parameter:</p>
             <ExampleBlock id="props" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="button_demo.zx" />
             <p>ZX automatically coerces attributes to the props struct. Fields with default values are optional. See the <a href="/reference#components">Components documentation</a> for more on props coercion.</p>
-            <h3 id="component-signatures">Component signatures</h3>
+            <h3 id="component-signatures"><SectionAnchor id="component-signatures">Component signatures</SectionAnchor></h3>
             <p>A component takes an allocator (optionally followed by props), or a single context pointer. The context form is needed for state and <code>ctx.bind()</code>:</p>
             <CodeBlock code={props.signatures} />
             <p>See <a href="/reference#components">Components</a>{" "}for the context fields.</p>
@@ -690,7 +689,7 @@ const ChildrenPropsProps = struct {
 fn ChildrenProps(allocator: zx.Allocator, props: ChildrenPropsProps) zx.Component {
     return (
         <section id="children" class="section" @allocator={allocator}>
-            <h2>Passing children to components</h2>
+            <h2><SectionAnchor id="children">Passing children to components</SectionAnchor></h2>
             <p>Components can accept <em>children</em> - content passed between opening and closing tags. Add a <code>children: zx.Component</code> field to your props:</p>
             <ExampleBlock id="children" zx_code={props.zx_code} zig_code={props.zig_code} html_code={props.html_code} filename="card_demo.zx" />
             <p>This pattern is useful for creating wrapper components like cards, modals, or layout containers. See the <a href="/reference#children-props">Children Props documentation</a> for more details.</p>
@@ -712,12 +711,12 @@ const PagesAndLayoutsProps = struct {
 fn PagesAndLayouts(allocator: zx.Allocator, props: PagesAndLayoutsProps) zx.Component {
     return (
         <section id="pages-layouts" class="section" @allocator={allocator}>
-            <h2>Pages and Layouts</h2>
+            <h2><SectionAnchor id="pages-layouts">Pages and Layouts</SectionAnchor></h2>
             <p>Ziex uses file-based routing. Create <code>page.zx</code> files in the <code>app/pages/</code> directory:</p>
             <ExampleBlock id="page-example" zx_code={props.zx_page} zig_code={props.zig_page} html_code={props.html_page} filename="page.zx" />
             <p>The file path determines the URL: <code>app/pages/about/page.zx</code> → <code>/about</code></p>
 
-            <h3 id="dynamic-routes">Dynamic routes</h3>
+            <h3 id="dynamic-routes"><SectionAnchor id="dynamic-routes">Dynamic routes</SectionAnchor></h3>
             <p>Use brackets <code>[param]</code> in folder names to create dynamic segments:</p>
             <ul>
                 <li><code>app/pages/user/[id]/page.zx</code> → <code>/user/:id</code></li>
@@ -726,11 +725,11 @@ fn PagesAndLayouts(allocator: zx.Allocator, props: PagesAndLayoutsProps) zx.Comp
             <p>Access the parameter value using <code>ctx.request.params.get("name")</code>:</p>
             <ExampleBlock id="dynamic-route" zx_code={props.zx_dynamic} zig_code={props.zig_dynamic} html_code={props.html_dynamic} filename="pages/user/[id]/page.zx" />
 
-            <h3 id="layouts">Creating layouts</h3>
+            <h3 id="layouts"><SectionAnchor id="layouts">Creating layouts</SectionAnchor></h3>
             <p>Layouts wrap pages with common UI. Create a <code>layout.zx</code> file:</p>
             <ExampleBlock id="layout-example" files={layoutFiles(allocator, props.zx_layout, props.zx_page)} zig_code={props.zx_layout} html_code={props.html_layout} />
 
-            <h3 id="page-context">PageContext and LayoutContext</h3>
+            <h3 id="page-context"><SectionAnchor id="page-context">PageContext and LayoutContext</SectionAnchor></h3>
             <p>Both contexts have the same fields:</p>
             <ApiTable fields={api_docs.page_context} />
             <div class="callout tip">
@@ -748,7 +747,7 @@ const APIRoutesProps = struct {
 fn APIRoutes(allocator: zx.Allocator, props: APIRoutesProps) zx.Component {
     return (
         <section id="api-routes" class="section" @allocator={allocator}>
-            <h2>API Routes</h2>
+            <h2><SectionAnchor id="api-routes">API Routes</SectionAnchor></h2>
             <p>Ziex makes it easy to create APIs by adding <code>route.zig</code> files to your <code>app/pages/</code> directory. These files handle HTTP methods like GET, POST, and more.</p>
             <p>Create a <code>route.zig</code> file to handle API requests:</p>
             <CodeBlock code={props.zig_code} filename="routes/api/route.zig" />
@@ -767,7 +766,7 @@ const KVStorageProps = struct {
 fn KVStorage(allocator: zx.Allocator, props: KVStorageProps) zx.Component {
     return (
         <section id="kv" class="section" @allocator={allocator}>
-            <h2>Key-Value</h2>
+            <h2><SectionAnchor id="kv">Key-Value</SectionAnchor></h2>
             <p>Ziex includes a key-value store for persisting small pieces of data across requests and restarts. Access it through <code>zx.kv</code>.</p>
 
             <h3>Enabling</h3>
@@ -806,7 +805,7 @@ const DatabaseProps = struct {
 fn Database(allocator: zx.Allocator, props: DatabaseProps) zx.Component {
     return (
         <section id="database" class="section" @allocator={allocator}>
-            <h2>Database</h2>
+            <h2><SectionAnchor id="database">Database</SectionAnchor></h2>
             <p>Ziex ships with a SQL database layer accessed through <code>zx.db</code>.</p>
 
             <h3>Enabling</h3>
@@ -837,10 +836,10 @@ fn Database(allocator: zx.Allocator, props: DatabaseProps) zx.Component {
 fn Deployment(allocator: zx.Allocator) zx.Component {
     return (
         <section id="deployment" class="section" @allocator={allocator}>
-            <h2>Deployment</h2>
+            <h2><SectionAnchor id="deployment">Deployment</SectionAnchor></h2>
             <p>Ziex apps can be deployed in three ways: as a <strong>standalone</strong> binary on your own server, as a <strong>static</strong> site on a CDN, or to an <strong>edge</strong> runtime like Cloudflare Workers or Vercel.</p>
 
-            <h3 id="deployment-standalone">Standalone</h3>
+            <h3 id="deployment-standalone"><SectionAnchor id="deployment-standalone">Standalone</SectionAnchor></h3>
             <p>Compile your app to a single, self-contained binary with zero runtime dependencies. Build for production, then bundle the binary with its static assets:</p>
             <CodeBlock code="zig build --release=fast" />
             <CodeBlock code="zig build zx -- bundle" />
@@ -875,12 +874,12 @@ fn Deployment(allocator: zx.Allocator) zx.Component {
                 repo.
             </p>
 
-            <h3 id="deployment-static">Static</h3>
+            <h3 id="deployment-static"><SectionAnchor id="deployment-static">Static</SectionAnchor></h3>
             <p>For sites without per-request server logic, pre-render every route to static HTML:</p>
             <CodeBlock code="zig build zx -- build --static" />
             <p>This builds your app for the current machine, crawls all routes and writes the output to a <code>dist/</code> directory (change it with <code>--outdir</code>), ready to upload to any static host like Netlify, GitHub Pages, or a CDN. Dynamic routes are expanded using their <code>static</code> function. Skip a route with <code>.rendering = .request</code> in its options.</p>
 
-            <h3 id="deployment-edge">Edge</h3>
+            <h3 id="deployment-edge"><SectionAnchor id="deployment-edge">Edge</SectionAnchor></h3>
             <p>Ziex compiles to WebAssembly (WASI), so it can be deployed to edge runtimes like Cloudflare Workers or Vercel.</p>
 
             <h4 id="deployment-cloudflare">Cloudflare</h4>
@@ -904,7 +903,7 @@ fn Deployment(allocator: zx.Allocator) zx.Component {
             <p>With the CLI installed, the same build is <code>zx build --target=wasm32-wasi --release=small --prerender</code>. The <code>zig build zx --</code> form needs only Zig, so it suits hosted builds: on Cloudflare, put it in <code>build.command</code> of <code>wrangler.jsonc</code> so <code>wrangler deploy</code> does both in one build.</p>
             <p>Pre-rendering runs a native build of your app at build time and saves what each marked page renders, so only mark pages that look the same for every visitor. Pages that read the query string, cookies, KV or a database, or that post back to themselves for actions, should stay unmarked.</p>
 
-            <h3 id="deployment-output">Build output</h3>
+            <h3 id="deployment-output"><SectionAnchor id="deployment-output">Build output</SectionAnchor></h3>
             <p>Ziex doesn't know about hosting platforms. Every build writes the same layout, and a template (or your own config) points the platform at it:</p>
             <ul>
                 <li><code>zig-out/bin/</code>: the app, a native binary or a <code>.wasm</code> module for <code>-Dtarget=wasm32-wasi</code></li>
@@ -920,7 +919,7 @@ fn Deployment(allocator: zx.Allocator) zx.Component {
 fn NextSteps(allocator: zx.Allocator) zx.Component {
     return (
         <section id="next-steps" class="section" @allocator={allocator}>
-            <h2>Next Steps</h2>
+            <h2><SectionAnchor id="next-steps">Next Steps</SectionAnchor></h2>
             <p>You now know the basics of Ziex! Here's what to explore next:</p>
             <div class="next-steps-grid">
                 <a href="/reference" class="next-step-card">
@@ -964,3 +963,4 @@ const project_tree = @import("../components/project_tree.zx");
 
 const zx = @import("zx");
 const std = @import("std");
+const SectionAnchor = @import("../components/section_anchor.zx").SectionAnchor;

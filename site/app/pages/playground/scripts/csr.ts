@@ -1,6 +1,8 @@
 export type PlaygroundBuildArtifacts = {
   ssrWasm: Uint8Array;
   clientWasm: Uint8Array;
+  /** `__zx_web` shims the client wasm imports (see webglue.ts). */
+  webGlue?: string;
 };
 
 export const PLAYGROUND_APP_FILES = [

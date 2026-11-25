@@ -306,7 +306,6 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
     };
 
     const feature_examples = @embedFile("./examples/feature_examples.zx");
-    const feature_canvas_json = buildFeatureCanvasJson(allocator);
 
     const control_tabs = [_]CodeTab{
         .{ .id = "control-tab-if", .label = "If", .section = "Control Flow: if", .code = "", .checked = true },
@@ -401,7 +400,6 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                     </div>
                 </section>
                 <section class="features" id="features">
-                    <script type="application/json" id="feature-canvas-data" @escaping={.none}>{feature_canvas_json}</script>
                     <div class="features-header">
                         <h2 class="section-title">Features</h2>
                         <p class="section-subtitle">
@@ -457,133 +455,9 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
                 </div>
                 <p>Copyright © {current_year} {" ziex.dev"}</p>
             </footer>
-            <script src=`/assets/home.js?v={util.buildId(ctx.io, ctx.arena)}` defer="true"></script>
+            <HomeScripts @client />
         </div>
     );
-}
-
-fn buildFeatureCanvasJson(allocator: zx.Allocator) []const u8 {
-    const PerfBar = struct {
-        label: []const u8,
-        value: f64,
-        display: []const u8,
-        self: bool = false,
-    };
-
-    const bar_count = @min(5, benchmark_ssr_rows.len);
-    var bars: [5]PerfBar = undefined;
-    for (0..bar_count) |i| {
-        bars[i] = .{
-            .label = benchmark_ssr_rows[i].label,
-            .value = benchmark_ssr_rows[i].value,
-            .display = benchmark_ssr_rows[i].display,
-            .self = benchmark_ssr_rows[i].url.len == 0,
-        };
-    }
-
-    const payload = .{
-        .performance = bars[0..bar_count],
-        .routing = [_]struct { file: []const u8, kind: []const u8, url: []const u8, note: []const u8 }{
-            .{ .file = "page.zx", .kind = "page", .url = "/", .note = "Page route" },
-            .{ .file = "layout.zx", .kind = "layout", .url = "/*", .note = "Wraps children" },
-            .{ .file = "about/page.zx", .kind = "page", .url = "/about", .note = "Nested page" },
-            .{ .file = "api/route.zig", .kind = "route", .url = "/api", .note = "API handler" },
-            .{ .file = "error.zx", .kind = "error", .url = "error", .note = "Error boundary" },
-            .{ .file = "notfound.zx", .kind = "notfound", .url = "404", .note = "Not found" },
-        },
-        .api = .{
-            .file = "pages/api/users/route.zig",
-            .signature = "(ctx: zx.RouteContext) !void",
-            .methods = [_]struct { method: []const u8, path: []const u8, status: []const u8, body: []const u8 }{
-                .{ .method = "GET", .path = "/api/users", .status = "200 OK", .body = "[{ \"id\": 1, \"name\": \"Zig\" }]" },
-                .{ .method = "POST", .path = "/api/users", .status = "201 Created", .body = "{ \"id\": 2, \"created\": true }" },
-                .{ .method = "DELETE", .path = "/api/users/1", .status = "204 No Content", .body = "" },
-            },
-        },
-        .control_flow = .{
-            .eyebrow = "zig in markup",
-            .scenes = [_]struct { id: []const u8, snippet: []const u8 }{
-                .{ .id = "if", .snippet = "{if (ok) ( <Ok/> ) else ( <Err/> )}" },
-                .{ .id = "for", .snippet = "{for (items) |item| ( <Row/> )}" },
-                .{ .id = "switch", .snippet = "{switch (role) { .admin => ... }}" },
-            },
-            .if_arms = [_][]const u8{ "<Ok/>", "<Err/>" },
-            .for_item = "<Row/>",
-            .for_count = 3,
-            .switch_title = "switch (role)",
-            .switch_arms = [_][]const u8{ ".admin", ".member", "else" },
-        },
-        .hybrid = .{
-            .server_steps = [_][]const u8{ "render <Page/>", "stream HTML" },
-            .hint = "<Counter @client />",
-            .button = "Click Me",
-            .captions = [_][]const u8{
-                "Start on the server, send HTML",
-                "Hydrate only the islands that need it",
-                "Interactive where it matters",
-            },
-        },
-        .tooling = .{
-            .file = "pages/page.zx",
-            .code = [_][]const u8{
-                "pub fn Page(ctx: zx.PageContext) zx.Component {",
-                "    return (",
-                "        <main @allocator={ctx.arena}>",
-                "            <h1>Hello, Ziex</h1>",
-                "            <Counter @client />",
-                "        </main>",
-                "    );",
-                "}",
-            },
-            .completions = [_][]const u8{ "@client", "@caching", "@allocator", "class" },
-            .command = "zig build dev",
-            .version = zx.info.version,
-            .url = "http://localhost:3000",
-            .restart_time = "0.38s",
-        },
-        .deploy = [_]struct { name: []const u8, artifact: []const u8 }{
-            .{ .name = "Linux / macOS", .artifact = "binary" },
-            .{ .name = "Docker", .artifact = "binary" },
-            .{ .name = "Railway", .artifact = "binary" },
-            .{ .name = "Cloudflare", .artifact = "wasi" },
-            .{ .name = "Vercel", .artifact = "wasi" },
-            .{ .name = "GitHub Pages", .artifact = "static" },
-            .{ .name = "Netlify / S3", .artifact = "static" },
-        },
-        .deploy_artifacts = [_]struct { id: []const u8, label: []const u8, command: []const u8, flag: []const u8, caption: []const u8 }{
-            .{ .id = "binary", .label = "native binary", .command = "zig build", .flag = "--release=fast", .caption = "Single static binary for any server" },
-            .{ .id = "wasi", .label = "wasm32-wasi", .command = "zig build", .flag = "-Dtarget=wasm32-wasi", .caption = "WASI module for edge runtimes" },
-            .{ .id = "static", .label = "static html", .command = "zx build", .flag = "--static", .caption = "Pre-rendered pages for any CDN" },
-        },
-        .memory = .{
-            .file = "pages/feed/page.zx",
-            .code = [_][]const u8{
-                "pub fn Page(ctx: zx.PageContext) !zx.Component {",
-                "    const user = try ctx.arena.create(User);",
-                "    const posts = try ctx.arena.alloc(Post, 32);",
-                "    return (<Feed @allocator={ctx.arena} posts={posts} />);",
-                "}",
-            },
-            .allocs = [_]struct { label: []const u8, size: u32 }{
-                .{ .label = "User", .size = 48 },
-                .{ .label = "[32]Post", .size = 160 },
-                .{ .label = "<Feed/>", .size = 112 },
-            },
-            .capacity = 384,
-        },
-    };
-
-    const raw = std.json.Stringify.valueAlloc(allocator, payload, .{}) catch "{}";
-    var out = std.array_list.Managed(u8).init(allocator);
-    defer out.deinit();
-    for (raw) |c| {
-        if (c == '<') {
-            out.appendSlice("\\u003c") catch unreachable;
-        } else {
-            out.append(c) catch unreachable;
-        }
-    }
-    return allocator.dupe(u8, out.items) catch raw;
 }
 
 const FeatureLink = struct { icon_fn: ?*const fn (zx.Allocator) zx.Component = null, label: []const u8, href: []const u8 };
@@ -878,16 +752,32 @@ const CodeTab = struct {
     checked: bool,
 };
 
-fn resolveCode(allocator: zx.Allocator, source: []const u8, section: []const u8, fallback: []const u8) []const u8 {
-    const raw = if (section.len > 0 and source.len > 0)
+fn rawCode(allocator: zx.Allocator, source: []const u8, section: []const u8, fallback: []const u8) []const u8 {
+    return if (section.len > 0 and source.len > 0)
         util.extractSection(allocator, source, section)
     else
         fallback;
+}
+
+fn resolveCode(allocator: zx.Allocator, source: []const u8, section: []const u8, fallback: []const u8) []const u8 {
+    const raw = rawCode(allocator, source, section, fallback);
     return util.highlightZx(allocator, raw) catch raw;
+}
+
+/// Playground link for one snippet ("" when it can't open there).
+fn playgroundUrl(allocator: zx.Allocator, code: []const u8, filename: []const u8) []const u8 {
+    const link = share.url(allocator, &.{.{ .code = code, .filename = filename }}) catch null;
+    return link orelse "";
+}
+
+fn filenameFromTitle(title: []const u8) []const u8 {
+    const t = std.mem.trim(u8, title, &std.ascii.whitespace);
+    return if (t.len > 0) t else "example.zx";
 }
 
 fn CodeWindow(allocator: zx.Allocator, props: CodeWindowProps) zx.Component {
     const highlighted = resolveCode(allocator, props.source, props.section, props.code);
+    const link = playgroundUrl(allocator, rawCode(allocator, props.source, props.section, props.code), filenameFromTitle(props.title));
     return (
         <div @allocator={allocator} class="code-example code-example--compact">
             <div class="code-example-header">
@@ -897,7 +787,7 @@ fn CodeWindow(allocator: zx.Allocator, props: CodeWindowProps) zx.Component {
                     <span></span>
                 </div>
                 <div class="code-example-actions">
-                    <button class="code-example-open-playground" data-tooltip="Open in playground" aria-label="Open in playground">
+                    <button class="code-example-open-playground" data-playground-url={link} data-tooltip="Open in playground" aria-label="Open in playground">
                         ▶
                     </button>
                 </div>
@@ -927,6 +817,8 @@ const CodePreviewExampleProps = struct {
 
 fn CodePreviewExample(allocator: zx.Allocator, props: CodePreviewExampleProps) zx.Component {
     const highlighted = resolveCode(allocator, props.source, props.section, props.code);
+    const title = std.mem.trim(u8, props.title, &std.ascii.whitespace);
+    const link = playgroundUrl(allocator, rawCode(allocator, props.source, props.section, props.code), if (title.len > 0) title else "page.zx");
     return (
         <div @allocator={allocator} class="code-preview-example code-example code-example--compact" data-code-container-type="preview">
             <div class="code-example-header">
@@ -936,7 +828,7 @@ fn CodePreviewExample(allocator: zx.Allocator, props: CodePreviewExampleProps) z
                     <span></span>
                 </div>
                 <div class="code-example-actions">
-                    <button class="code-example-open-playground" data-code-section={props.section} data-code-source="preview" data-tooltip="Open in playground" aria-label="Open in playground">
+                    <button class="code-example-open-playground" data-playground-url={link} data-tooltip="Open in playground" aria-label="Open in playground">
                         ▶
                     </button>
                 </div>
@@ -977,6 +869,29 @@ fn buildTabStyles(allocator: zx.Allocator, container_id: []const u8, tabs: []con
 fn CodeWindowTabs(allocator: zx.Allocator, props: CodeWindowTabsProps) !zx.Component {
     const tab_styles = try buildTabStyles(allocator, props.id, props.tabs);
 
+    // Routing demos ship page + layout together; other tabs open the visible one.
+    const entries = try allocator.alloc(share.Entry, props.tabs.len);
+    var has_page = false;
+    var has_layout = false;
+    for (props.tabs, entries) |tab, *e| {
+        e.* = .{
+            .code = rawCode(allocator, props.source, tab.section, tab.code),
+            .filename = try share.filenameFromSection(allocator, tab.section, tab.label),
+        };
+        has_page = has_page or std.mem.eql(u8, e.filename, "page.zx");
+        has_layout = has_layout or std.mem.eql(u8, e.filename, "layout.zx");
+    }
+    const together = has_page and has_layout;
+    const tab_urls = try allocator.alloc([]const u8, props.tabs.len);
+    for (entries, tab_urls) |e, *u| u.* = if (together) "" else playgroundUrl(allocator, e.code, e.filename);
+    const container_url = if (!together) "" else blk: {
+        var pair: std.ArrayListUnmanaged(share.Entry) = .empty;
+        for (entries) |e| {
+            if (std.mem.eql(u8, e.filename, "page.zx") or std.mem.eql(u8, e.filename, "layout.zx")) try pair.append(allocator, e);
+        }
+        break :blk (share.url(allocator, pair.items) catch null) orelse "";
+    };
+
     return (
         <div @allocator={allocator} id={props.id} class="code-example code-example--tabs code-example--compact">
             <style @escaping={.none}>{tab_styles}</style>
@@ -1004,31 +919,34 @@ fn CodeWindowTabs(allocator: zx.Allocator, props: CodeWindowTabsProps) !zx.Compo
                     </a>
                 )}
                 <div class="code-example-actions">
-                    <button class="code-example-open-playground" data-code-container-id={props.id} data-tooltip="Open in playground" aria-label="Open in playground">
+                    <button class="code-example-open-playground" data-playground-url={container_url} data-tooltip="Open in playground" aria-label="Open in playground">
                         ▶
                     </button>
                 </div>
                 {if (props.title.len > 0) (<div class="code-example-title">{props.title}</div>)}
             </div>
             <div class="code-example-panels">
-                {for (props.tabs) |tab| (renderTabPanel(allocator, props.source, tab))}
+                {for (props.tabs, tab_urls) |tab, tab_url| (renderTabPanel(allocator, props.source, tab, tab_url))}
             </div>
         </div>
     );
 }
 
-fn renderTabPanel(allocator: zx.Allocator, source: []const u8, tab: CodeTab) zx.Component {
+fn renderTabPanel(allocator: zx.Allocator, source: []const u8, tab: CodeTab, url: []const u8) zx.Component {
     const highlighted = resolveCode(allocator, source, tab.section, tab.code);
     return (
-        <div @allocator={allocator} class="code-example-panel" data-tab={tab.id} data-section={tab.section}>
+        <div @allocator={allocator} class="code-example-panel" data-tab={tab.id} data-section={tab.section} data-playground-url={url}>
             <pre><code class="hljs" @escaping={.none}>{highlighted}</code></pre>
         </div>
     );
 }
 
-const InstallCLI = @import("./components/install_guide.zx").InstallCLI;
+const install_guide = @import("./components/install_guide.zx");
+const InstallCLI = install_guide.InstallCLI;
 const VersionMeta = @import("./components/version.zx").VersionMeta;
 const Examples = @import("./examples/feature_examples.zx");
+pub const HomeScripts = @import("./home/scripts.zx").HomeScripts;
+const share = @import("./home/share.zig");
 
 const icons = @import("./components/icons.zx");
 const util = @import("./reference/util.zig");

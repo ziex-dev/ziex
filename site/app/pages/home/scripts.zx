@@ -1,0 +1,22 @@
+// Home page behaviour, written in Zig with `zx.client.web` (no page JS):
+// feature canvases, feature nav, snippet buttons, copy buttons, mascots.
+// Renders nothing; its first client render wires up the page.
+
+pub fn HomeScripts(ctx: *zx.ComponentContext) zx.Component {
+    if (zx.platform.role == .client and !ready) {
+        ready = true;
+        canvas.setup();
+        ui.setup();
+        mascots.setup();
+        install_os.setup();
+    }
+    return (<span @allocator={ctx.allocator} hidden="true"></span>);
+}
+
+var ready = false;
+
+const canvas = @import("canvas.zig");
+const ui = @import("ui.zig");
+const mascots = @import("mascots.zig");
+const install_os = @import("../components/install_os.zig");
+const zx = @import("zx");

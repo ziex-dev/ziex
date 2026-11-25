@@ -138,120 +138,120 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
             </section>
             // <Introduction />
             <section id="expressions" class="section">
-                <h2>Expressions</h2>
+                <h2><SectionAnchor id="expressions">Expressions</SectionAnchor></h2>
                 <p>Use curly braces <code>{expr_syntax}</code> to embed any Zig expression. Values are automatically formatted based on their type and HTML-escaped for safety.</p>
                 <ExampleBlock id="expressions-example" zx_code={zx_example_expr} zig_code={zig_example_expr} html_code={html_example_expr} filename="expressions.zx" />
 
-                <h3 id="expr-strings">Strings</h3>
+                <h3 id="expr-strings"><SectionAnchor id="expr-strings">Strings</SectionAnchor></h3>
                 <p>String values (<code>[]const u8</code>) are displayed as text and automatically HTML-escaped to prevent XSS attacks. This is the safe default for displaying user input or any dynamic text content.</p>
                 <CodeBlock code={expr_string_example} />
 
-                <h3 id="expr-integers">Integers</h3>
+                <h3 id="expr-integers"><SectionAnchor id="expr-integers">Integers</SectionAnchor></h3>
                 <p>Integer types (<code>i32</code>, <code>u64</code>, <code>comptime_int</code>, etc.) are formatted as decimal numbers. The special case <code>u8</code> is printed as a character if it's a printable ASCII character.</p>
                 <CodeBlock code={expr_int_example} />
 
-                <h3 id="expr-floats">Floats</h3>
+                <h3 id="expr-floats"><SectionAnchor id="expr-floats">Floats</SectionAnchor></h3>
                 <p>Floating-point types (<code>f32</code>, <code>f64</code>, <code>comptime_float</code>) are formatted as decimal numbers.</p>
                 <CodeBlock code={expr_float_example} />
 
-                <h3 id="expr-booleans">Booleans</h3>
+                <h3 id="expr-booleans"><SectionAnchor id="expr-booleans">Booleans</SectionAnchor></h3>
                 <p>Boolean values are displayed as the literal strings "true" or "false".</p>
                 <CodeBlock code={expr_bool_example} />
 
-                <h3 id="expr-enums">Enums</h3>
+                <h3 id="expr-enums"><SectionAnchor id="expr-enums">Enums</SectionAnchor></h3>
                 <p>Enum values are displayed as their tag name. This is useful for displaying status values, categories, or any enumerated type.</p>
                 <CodeBlock code={expr_enum_example} />
 
-                <h3 id="expr-optionals">Optionals</h3>
+                <h3 id="expr-optionals"><SectionAnchor id="expr-optionals">Optionals</SectionAnchor></h3>
                 <p>Optional values (<code>?T</code>) are automatically unwrapped and rendered if present. If the value is <code>null</code>, nothing is rendered. This makes it easy to conditionally display content.</p>
                 <CodeBlock code={expr_optional_example} />
 
-                <h3 id="expr-null">Null</h3>
+                <h3 id="expr-null"><SectionAnchor id="expr-null">Null</SectionAnchor></h3>
                 <p>The <code>null</code> value renders nothing, producing no output in the final HTML.</p>
 
-                <h3 id="expr-components">Components</h3>
+                <h3 id="expr-components"><SectionAnchor id="expr-components">Components</SectionAnchor></h3>
                 <p>A <code>zx.Component</code> value is rendered directly. This allows you to embed components returned from functions or stored in variables.</p>
                 <CodeBlock code={expr_component_example} />
 
-                <h3 id="expr-component-arrays">Component Arrays</h3>
+                <h3 id="expr-component-arrays"><SectionAnchor id="expr-component-arrays">Component Arrays</SectionAnchor></h3>
                 <p>Arrays or slices of components (<code>[]zx.Component</code>) are rendered as a fragment containing all the components in sequence.</p>
                 <CodeBlock code={expr_component_array_example} />
             </section>
             <section id="control-flow" class="section">
-                <h2>Control Flow</h2>
+                <h2><SectionAnchor id="control-flow">Control Flow</SectionAnchor></h2>
                 <p>ZX supports conditional rendering and iteration using familiar Zig control flow constructs. These expressions allow you to conditionally render components or iterate over collections to build dynamic UIs.</p>
-                <h3 id="if-statements">If Statements</h3>
+                <h3 id="if-statements"><SectionAnchor id="if-statements">If Statements</SectionAnchor></h3>
                 <p>Use <code>if</code> expressions to conditionally render components based on boolean conditions. The <code>else</code> branch is optional and can render alternative content when the condition is false.</p>
                 <ExampleBlock id="if" zx_code={zx_example_if} zig_code={zig_example_if} html_code={html_example_if} filename="conditional.zx" />
-                <h3 id="switch-statements">Switch Statements</h3>
+                <h3 id="switch-statements"><SectionAnchor id="switch-statements">Switch Statements</SectionAnchor></h3>
                 <p>Use <code>switch</code> expressions to match against enum values or other types. Each case can return either a string literal or a component. Switch expressions are particularly useful for rendering different UI based on state or user roles.</p>
                 <ExampleBlock id="switch" zx_code={zx_example_switch} zig_code={zig_example_switch} html_code={html_example_switch} filename="role_switch.zx" />
-                <h3 id="for-loops">For Loops</h3>
+                <h3 id="for-loops"><SectionAnchor id="for-loops">For Loops</SectionAnchor></h3>
                 <p>Use <code>for</code> loops to iterate over arrays, slices, or strings and render a component for each item. The loop variable can be used within the component body to display item-specific content. This is ideal for rendering lists, tables, or any repeating UI patterns.</p>
                 <ExampleBlock id="for" zx_code={zx_example_for} zig_code={zig_example_for} html_code={html_example_for} filename="user_list.zx" />
-                <h3 id="while-loops">While Loops</h3>
+                <h3 id="while-loops"><SectionAnchor id="while-loops">While Loops</SectionAnchor></h3>
                 <p>Use <code>while</code> loops for conditional iteration with a continuation expression. The syntax follows Zig's while loop pattern: <code>{"while (condition) : (continue_expr) (body)"}</code>. This is useful for generating numbered sequences or iterating until a condition is met.</p>
                 <ExampleBlock id="while" zx_code={zx_example_while} zig_code={zig_example_while} html_code={html_example_while} filename="counter.zx" />
-                <h3 id="optional-capture">Optional Capture</h3>
+                <h3 id="optional-capture"><SectionAnchor id="optional-capture">Optional Capture</SectionAnchor></h3>
                 <p>Use payload capture syntax to unwrap optional values in <code>if</code> and <code>while</code> expressions:</p>
                 <CodeBlock code={optional_capture_example} />
                 <p>If the optional is <code>null</code>, the body is skipped (or the <code>else</code> branch runs if provided).</p>
-                <h3 id="error-capture">Error Capture</h3>
+                <h3 id="error-capture"><SectionAnchor id="error-capture">Error Capture</SectionAnchor></h3>
                 <p>Capture errors from error unions using <code>else |err|</code> syntax:</p>
                 <CodeBlock code={error_capture_example} />
                 <p>This works with both <code>if</code> and <code>while</code> expressions for handling fallible operations.</p>
             </section>
             <section id="components" class="section">
-                <h2>Components</h2>
+                <h2><SectionAnchor id="components">Components</SectionAnchor></h2>
                 <p>Components are reusable functions that return <code>zx.Component</code>. They allow you to encapsulate UI logic and create modular, maintainable code. Components can accept props (properties) to customize their behavior and appearance.</p>
-                <h3 id="component-signatures">Component Function Signatures</h3>
+                <h3 id="component-signatures"><SectionAnchor id="component-signatures">Component Function Signatures</SectionAnchor></h3>
                 <p>A component takes an allocator (optionally followed by props), or a single context pointer. Any form can return <code>!zx.Component</code>{" "}to propagate errors:</p>
                 <CodeBlock code={component_signatures} />
-                <h3 id="component-context">ComponentContext</h3>
+                <h3 id="component-context"><SectionAnchor id="component-context">ComponentContext</SectionAnchor></h3>
                 <p>Use <code>zx.ComponentContext</code> when your component needs access to children but has no custom props:</p>
                 <CodeBlock code={component_ctx_example} />
-                <h3 id="component-ctx-props">ComponentCtx with Props</h3>
+                <h3 id="component-ctx-props"><SectionAnchor id="component-ctx-props">ComponentCtx with Props</SectionAnchor></h3>
                 <p>Use <code>zx.ComponentCtx(Props)</code> when you need both custom props and children access:</p>
                 <CodeBlock code={component_ctx_props_example} />
                 <p>Fields of <code>zx.ComponentCtx(Props)</code>:</p>
                 <ApiTable fields={api_docs.component_context} />
-                <h3 id="defining-components">Defining Components</h3>
+                <h3 id="defining-components"><SectionAnchor id="defining-components">Defining Components</SectionAnchor></h3>
                 <p>To create a component, define a function that returns a <code>zx.Component</code>. The simplest form takes an allocator as its only parameter. If your component needs configuration, add a props struct as the second parameter:</p>
                 <ExampleBlock id="components" zx_code={zx_example_components} zig_code={zig_example_components} html_code={html_example_components} filename="button_demo.zx" />
-                <h3 id="props-coercion">Props Coercion</h3>
+                <h3 id="props-coercion"><SectionAnchor id="props-coercion">Props Coercion</SectionAnchor></h3>
                 <p>ZX automatically coerces the attributes you pass to a component into the expected props struct. Missing required fields will result in a compile-time error, while fields with default values are optional. This provides type safety while keeping component usage flexible.</p>
             </section>
             <section id="fragments" class="section">
-                <h2>Fragments</h2>
+                <h2><SectionAnchor id="fragments">Fragments</SectionAnchor></h2>
                 <p>Fragments allow you to return multiple elements from a component without adding an extra wrapper element to the DOM. Use the empty tag syntax <code>{"<>...</>"}</code> to create a fragment:</p>
                 <ExampleBlock id="fragment" zx_code={zx_example_fragment} zig_code={zig_example_fragment} html_code={html_example_fragment} filename="fragment_demo.zx" />
                 <p>The fragment's children are rendered directly without any containing element.</p>
             </section>
             <section id="children-props" class="section">
-                <h2>Children Props</h2>
+                <h2><SectionAnchor id="children-props">Children Props</SectionAnchor></h2>
                 <p>Components can accept child elements through a <code>children</code> prop, enabling wrapper and container patterns. Any elements between the opening and closing tags are passed as the <code>children</code> prop:</p>
                 <ExampleBlock id="children" zx_code={zx_example_children} zig_code={zig_example_children} html_code={html_example_children} filename="card_demo.zx" />
             </section>
             <section id="attribute-syntax" class="section">
-                <h2>Attribute Syntax</h2>
+                <h2><SectionAnchor id="attribute-syntax">Attribute Syntax</SectionAnchor></h2>
                 <p>ZX provides convenient syntax for working with attributes beyond simple static values.</p>
-                <h3 id="spread-attributes">Spread Attributes</h3>
+                <h3 id="spread-attributes"><SectionAnchor id="spread-attributes">Spread Attributes</SectionAnchor></h3>
                 <p>Use <code>{"{..struct}"}</code> to spread all fields of a struct as attributes on an element. This is useful for passing groups of attributes or forwarding props:</p>
                 <CodeBlock code={spread_attrs_example} />
                 <p>Spread attributes can be combined with explicit attributes. Explicit attributes take precedence when there are conflicts.</p>
-                <h3 id="shorthand-attributes">Shorthand Attributes</h3>
+                <h3 id="shorthand-attributes"><SectionAnchor id="shorthand-attributes">Shorthand Attributes</SectionAnchor></h3>
                 <p>When the attribute name matches the variable name, use the shorthand syntax <code>{"{variable}"}</code>:</p>
                 <CodeBlock code={shorthand_attrs_example} />
                 <p>This is equivalent to writing <code>class={"{class}"}</code> but more concise.</p>
-                <h3 id="template-attributes">Template Attributes</h3>
+                <h3 id="template-attributes"><SectionAnchor id="template-attributes">Template Attributes</SectionAnchor></h3>
                 <p>Use backticks (<code>`</code>) for string interpolation in attribute values. Embed expressions with <code>{"{expr}"}</code> inside the template:</p>
                 <CodeBlock code={template_attrs_example} />
                 <p>Template attributes are useful for building dynamic URLs, class names, or data attributes that combine static text with dynamic values.</p>
             </section>
             <section id="builtin-attributes" class="section">
-                <h2>Builtin Attributes</h2>
+                <h2><SectionAnchor id="builtin-attributes">Builtin Attributes</SectionAnchor></h2>
                 <p>ZX provides special builtin attributes that control component behavior and memory management. These attributes are prefixed with <code>@</code> to distinguish them from regular HTML attributes.</p>
-                <h3 id="allocator">@allocator</h3>
+                <h3 id="allocator"><SectionAnchor id="allocator">@allocator</SectionAnchor></h3>
                 <p>The <code>@allocator</code> attribute is required to be passed to the topmost component. All child components will inherit the allocator from the parent component. It is available to all child components and expressions within that component tree.</p>
                 <p><strong>Why is @allocator needed?</strong></p>
                 <p>ZX components can allocate memory for various purposes:</p>
@@ -270,7 +270,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                     <li>Set <code>@allocator</code> on the root element of each component that needs memory allocation</li>
                     <li>Child components inherit the allocator from their parent component, so you don't need to pass it explicitly to every nested component</li>
                 </ul>
-                <h3 id="escaping">@escaping</h3>
+                <h3 id="escaping"><SectionAnchor id="escaping">@escaping</SectionAnchor></h3>
                 <p>The <code>@escaping</code> attribute controls how text content is escaped within an element. By default, all text is HTML-escaped to prevent XSS attacks.</p>
                 <p><strong>Values:</strong></p>
                 <ul>
@@ -279,7 +279,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                 </ul>
                 <ExampleBlock id="escaping" zx_code={zx_example_escaping} zig_code={zig_example_escaping} html_code={html_example_escaping} filename="raw_html.zx" />
                 <p><strong>Warning:</strong> Only use <code>@escaping={"{.none}"}</code> for content you trust completely. User-provided content should always use the default escaping.</p>
-                <h3 id="client">@client</h3>
+                <h3 id="client"><SectionAnchor id="client">@client</SectionAnchor></h3>
                 <p>The <code>@client</code> attribute enables client-side rendering for interactive components, compiling the component to WebAssembly. It takes no value. Without it, all components render server-side only and event handlers are not active in the browser.</p>
 
                 <h4 id="client-rendering">Client-side Zig rendering</h4>
@@ -333,19 +333,19 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
 
             </section>
             <section id="syntax" class="section">
-                <h2>Syntax Features</h2>
+                <h2><SectionAnchor id="syntax">Syntax Features</SectionAnchor></h2>
                 <p>ZX supports additional Zig syntax features within templates.</p>
-                <h3 id="multiline-strings">Multiline Strings</h3>
+                <h3 id="multiline-strings"><SectionAnchor id="multiline-strings">Multiline Strings</SectionAnchor></h3>
                 <p>Use Zig's multiline string syntax (<code>\\</code>) to embed formatted text blocks:</p>
                 <CodeBlock code={multiline_string_example} />
                 <p>Each line prefixed with <code>\\</code> is concatenated. This is useful for code snippets, preformatted text, or ASCII art.</p>
-                <h3 id="comments">Comments</h3>
+                <h3 id="comments"><SectionAnchor id="comments">Comments</SectionAnchor></h3>
                 <p>Single-line comments are supported within ZX templates:</p>
                 <CodeBlock code={comments_example} />
                 <p>Comments are stripped from the output and do not appear in the rendered HTML.</p>
             </section>
             <section id="importing" class="section">
-                <h2>Importing</h2>
+                <h2><SectionAnchor id="importing">Importing</SectionAnchor></h2>
                 <p>
                     ZX supports importing components and modules from various sources. You can import ZX components from other files,{" "}
                     and standard Zig modules. You can't import a <code>.zx</code>{" "}file into a standard <code>.zig</code>{" "}file. If you need to, rename the <code>.zig</code>{" "}file to <code>.zx</code>{" "}(for example, <code>route.zx</code>) so you can import from a <code>.zx</code>{" "}file.
@@ -353,9 +353,9 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                 <ExampleBlock id="importing" zx_code={zx_example_importing} zig_code={zig_example_importing} html_code={html_example_importing} filename="import_demo.zx" />
             </section>
             <section id="routing" class="section">
-                <h2>Routing</h2>
+                <h2><SectionAnchor id="routing">Routing</SectionAnchor></h2>
                 <p>Ziex provides a file-based routing system that maps URL paths to page components. Routes can be nested, and layouts can be applied hierarchically to wrap pages with common UI elements.</p>
-                <h3 id="pages">Pages</h3>
+                <h3 id="pages"><SectionAnchor id="pages">Pages</SectionAnchor></h3>
                 <p>Pages are the main content components for each route. A page function must:</p>
                 <ul>
                     <li>Accept a <code>zx.PageContext</code> as its only parameter</li>
@@ -363,7 +363,7 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                     <li>Be exported as <code>pub fn Page</code></li>
                 </ul>
                 <ExampleBlock id="routing" zx_code={zx_example_routing} zig_code={zig_example_routing} html_code={html_example_routing} filename="home_page.zx" />
-                <h3 id="layouts">Layouts</h3>
+                <h3 id="layouts"><SectionAnchor id="layouts">Layouts</SectionAnchor></h3>
                 <p>Layouts wrap pages with common UI elements like headers, footers, or navigation. A layout function must:</p>
                 <ul>
                     <li>Accept a <code>zx.LayoutContext</code> as the first parameter</li>
@@ -372,21 +372,21 @@ pub fn Page(ctx: zx.PageContext) !zx.Component {
                     <li>Be exported as <code>pub fn Layout</code></li>
                 </ul>
                 <ExampleBlock id="layout" files={layout_files} zig_code={zig_example_layout} html_code={html_example_layout} />
-                <h3 id="page-context">PageContext and LayoutContext</h3>
+                <h3 id="page-context"><SectionAnchor id="page-context">PageContext and LayoutContext</SectionAnchor></h3>
                 <p><code>zx.PageContext</code>{" "}and <code>zx.LayoutContext</code>{" "}have the same fields:</p>
                 <ApiTable fields={api_docs.page_context} />
             </section>
             <section id="dynamic-routes" class="section">
-                <h2>Dynamic Routes</h2>
+                <h2><SectionAnchor id="dynamic-routes">Dynamic Routes</SectionAnchor></h2>
                 <p>Ziex supports dynamic route segments using bracket notation in folder names.</p>
-                <h3 id="dynamic-route-segments">Creating Dynamic Routes</h3>
+                <h3 id="dynamic-route-segments"><SectionAnchor id="dynamic-route-segments">Creating Dynamic Routes</SectionAnchor></h3>
                 <p>Create a folder with brackets around the parameter name:</p>
                 <ul>
                     <li><code>app/pages/user/[id]/page.zx</code> → <code>/user/:id</code></li>
                     <li><code>app/pages/blog/[slug]/page.zx</code> → <code>/blog/:slug</code></li>
                     <li><code>app/pages/[category]/[item]/page.zx</code> → <code>/:category/:item</code></li>
                 </ul>
-                <h3 id="route-params">Accessing Route and Query Parameters</h3>
+                <h3 id="route-params"><SectionAnchor id="route-params">Accessing Route and Query Parameters</SectionAnchor></h3>
                 <p>Use <code>ctx.request.params.get("name")</code> to access dynamic route parameters and <code>ctx.request.query("name")</code> for query strings:</p>
                 <ExampleBlock id="dynamic-route" zx_code={zx_example_dynamic} zig_code={zig_example_dynamic} html_code={html_example_dynamic} filename="pages/[id]/page.zx" />
                 <p>Both methods return <code>?[]const u8</code>, so use <code>orelse</code> to provide a default value.</p>
@@ -422,7 +422,8 @@ const CodeBlock = @import("../components/code_block.zig").CodeBlock;
 const ApiTable = @import("../components/api_table.zx").ApiTable;
 const Experimental = @import("../components/experimental.zx").Experimental;
 const api_docs = @import("api_docs.zig");
-const InstallCLI = @import("../components/install_guide.zx").InstallCLI;
+const install_guide = @import("../components/install_guide.zx");
+const InstallCLI = install_guide.InstallCLI;
 
 fn FileConventions(allocator: zx.Allocator) zx.Component {
     const source = @embedFile("file_conventions.zx");
@@ -430,7 +431,7 @@ fn FileConventions(allocator: zx.Allocator) zx.Component {
 
     return (
         <section id="file-conventions" class="section" @allocator={allocator}>
-            <h2>File Conventions</h2>
+            <h2><SectionAnchor id="file-conventions">File Conventions</SectionAnchor></h2>
             <p>Routing is driven by file names inside <code>app/pages/</code>{" "}(and <code>app/routes/</code>). Each directory is a URL segment; these files give it behavior:</p>
             <table class="options-table">
                 <thead>
@@ -451,34 +452,34 @@ fn FileConventions(allocator: zx.Allocator) zx.Component {
             </table>
             <p>Every file in a directory is optional. Files that contain ZX markup use <code>.zx</code>; a plain-Zig file can use <code>.zig</code>{" "}instead (for example <code>page.zig</code>).</p>
 
-            <h3 id="file-page">page.zx</h3>
+            <h3 id="file-page"><SectionAnchor id="file-page">page.zx</SectionAnchor></h3>
             <p>Renders the page for the directory's path. Return <code>!zx.Component</code>{" "}to propagate errors to <code>error.zx</code>.</p>
             <CodeBlock code={util.extractSignatures(allocator, source, "page.zx")} />
             <ApiTable fields={api_docs.page_options} defaults={true} />
 
-            <h3 id="file-layout">layout.zx</h3>
+            <h3 id="file-layout"><SectionAnchor id="file-layout">layout.zx</SectionAnchor></h3>
             <p>Wraps every page at or below its directory. Layouts nest: the root layout wraps the nested one, which wraps the page.</p>
             <CodeBlock code={util.extractSignatures(allocator, source, "layout.zx")} />
             <ApiTable fields={api_docs.layout_options} defaults={true} />
 
-            <h3 id="file-notfound">notfound.zx</h3>
+            <h3 id="file-notfound"><SectionAnchor id="file-notfound">notfound.zx</SectionAnchor></h3>
             <p>Rendered with status 404 when no route matches. Ziex uses the closest <code>notfound.zx</code>{" "}above the requested path and wraps it in that path's layouts. Without one, the response is a plain-text <code>404 Not Found</code>.</p>
             <CodeBlock code={util.extractSignatures(allocator, source, "notfound.zx")} />
             <ApiTable fields={api_docs.notfound_options} defaults={true} />
 
-            <h3 id="file-error">error.zx</h3>
+            <h3 id="file-error"><SectionAnchor id="file-error">error.zx</SectionAnchor></h3>
             <p>Rendered with status 500 when a page or route handler returns an error. <code>ctx.err</code>{" "}holds the error; the other fields match <code>PageContext</code>.</p>
             <CodeBlock code={util.extractSignatures(allocator, source, "error.zx")} />
             <ApiTable fields={api_docs.error_context} />
 
-            <h3 id="file-route">route.zig</h3>
+            <h3 id="file-route"><SectionAnchor id="file-route">route.zig</SectionAnchor></h3>
             <p>Handles raw HTTP requests. Export a function per method (<code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>, <code>HEAD</code>, <code>OPTIONS</code>, or any other all-uppercase name for a custom method), or <code>Route</code>{" "}as a catch-all. A <code>route.zig</code>{" "}next to a <code>page.zx</code>{" "}can't define a method the page handles (see <code>PageOptions.methods</code>). Handlers can return <code>void</code>{" "}or <code>!void</code>.</p>
             <CodeBlock code={util.extractSignatures(allocator, source, "route.zig")} />
             <p>WebSocket handlers live in the same file. See <a href="#websockets">WebSockets</a>.</p>
             <CodeBlock code={util.extractSignatures(allocator, source, "route.zig sockets")} />
             <ApiTable fields={api_docs.route_options} defaults={true} />
 
-            <h3 id="file-proxy">proxy.zig</h3>
+            <h3 id="file-proxy"><SectionAnchor id="file-proxy">proxy.zig</SectionAnchor></h3>
             <p>Runs before handlers, like middleware. <code>Proxy</code>{" "}runs for this path and every path below it; <code>PageProxy</code>{" "}runs only before this directory's page and <code>RouteProxy</code>{" "}only before its <code>route.zig</code>. Call <code>ctx.abort()</code>{" "}to stop the chain and send the response as it is; otherwise the request continues.</p>
             <CodeBlock code={util.extractSignatures(allocator, source, "proxy.zig")} />
             <ApiTable fields={api_docs.proxy_context} />
@@ -498,19 +499,19 @@ fn APIAndWebSockets(allocator: zx.Allocator, props: APIAndWebSocketsProps) zx.Co
 
     return (
         <section id="api-and-websockets" class="section" @allocator={allocator}>
-            <h2>API and WebSockets</h2>
+            <h2><SectionAnchor id="api-and-websockets">API and WebSockets</SectionAnchor></h2>
             <p>Ziex allows you to create server-side APIs and WebSocket handlers by adding a <code>route.zig</code> file to any route directory. This is similar to <code>page.zx</code> but for handling raw HTTP requests and real-time communication.</p>
 
-            <h3 id="api-routes">API Routes</h3>
+            <h3 id="api-routes"><SectionAnchor id="api-routes">API Routes</SectionAnchor></h3>
             <p>To create an API route, define a <code>route.zig</code> file and export functions for the HTTP methods you want to handle (<code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code>, etc.).</p>
             <CodeBlock code={props.api_code} filename="routes/api/route.zig" />
 
-            <h3 id="route-context">RouteContext</h3>
+            <h3 id="route-context"><SectionAnchor id="route-context">RouteContext</SectionAnchor></h3>
             <p>All API handlers receive a <code>zx.RouteContext</code>, which provides everything needed to handle the request:</p>
             <CodeBlock code={route_ctx_example} />
             <ApiTable fields={api_docs.route_context} />
 
-            <h3 id="websockets">WebSockets</h3>
+            <h3 id="websockets"><SectionAnchor id="websockets">WebSockets</SectionAnchor></h3>
             <p>Ziex has first-class support for WebSockets. You can upgrade an API request to a WebSocket connection and handle real-time messages with simple lifecycle hooks.</p>
             <CodeBlock code={props.ws_code} filename="routes/ws/route.zig" />
 
@@ -550,14 +551,14 @@ fn CachingSection(allocator: zx.Allocator) zx.Component {
 
     return (
         <section id="caching" class="section" @allocator={allocator}>
-            <h2>Caching <Experimental /></h2>
+            <h2><SectionAnchor id="caching">Caching <Experimental /></SectionAnchor></h2>
             <p>Ziex provides built-in caching for components, pages, and layouts to improve performance. Cached content is persisted on disk and served directly without re-rendering.</p>
 
-            <h3 id="caching-enabling">Enabling</h3>
+            <h3 id="caching-enabling"><SectionAnchor id="caching-enabling">Enabling</SectionAnchor></h3>
             <p>Caching is disabled by default. Enable it in <code>build.zig</code> by passing <code>features</code> to your <code>ziex.init</code> call:</p>
             <CodeBlock code={enable_cache_build} filename="build.zig" translate="no" />
 
-            <h3 id="caching-overview">Overview</h3>
+            <h3 id="caching-overview"><SectionAnchor id="caching-overview">Overview</SectionAnchor></h3>
             <p>Caching can be applied at three levels:</p>
             <ul>
                 <li><strong>Component caching</strong> - Cache individual components using the <code>@caching</code> attribute</li>
@@ -565,7 +566,7 @@ fn CachingSection(allocator: zx.Allocator) zx.Component {
                 <li><strong>Layout caching</strong> - Cache layouts using <code>LayoutOptions.caching</code></li>
             </ul>
 
-            <h3 id="caching-components">Component Caching</h3>
+            <h3 id="caching-components"><SectionAnchor id="caching-components">Component Caching</SectionAnchor></h3>
             <p>Use the <code>@caching</code> attribute on any component to cache its rendered HTML output. The syntax is <code>{"<duration>"}</code> or <code>{"<duration>:key"}</code>.</p>
 
             <h4>Time Units</h4>
@@ -609,19 +610,19 @@ fn CachingSection(allocator: zx.Allocator) zx.Component {
             <CodeBlock code={component_caching_key} />
             <p>The cache key is prefixed with <code>cmp:</code> internally, so <code>"10m:user-profile"</code> creates a key <code>cmp:user-profile</code>.</p>
 
-            <h3 id="caching-pages">Page Caching</h3>
+            <h3 id="caching-pages"><SectionAnchor id="caching-pages">Page Caching</SectionAnchor></h3>
             <p>Enable page-level caching by exporting a <code>options</code> constant with caching settings:</p>
             <CodeBlock code={page_caching_example} filename="page.zx" />
             <p>Page caching stores the entire rendered response including headers. The server adds <code>ETag</code> and <code>Cache-Control</code> headers automatically.</p>
 
-            <h3 id="caching-layouts">Layout Caching</h3>
+            <h3 id="caching-layouts"><SectionAnchor id="caching-layouts">Layout Caching</SectionAnchor></h3>
             <p>Layouts can also be cached using <code>LayoutOptions</code>:</p>
             <CodeBlock code={layout_caching_example} filename="layout.zx" />
             <div class="callout note">
                 <strong>Note:</strong> Layout caching caches the entire layout including children. Use with caution as it may cache dynamic page content unintentionally.
             </div>
 
-            <h3 id="cache-invalidation">Cache Invalidation</h3>
+            <h3 id="cache-invalidation"><SectionAnchor id="cache-invalidation">Cache Invalidation</SectionAnchor></h3>
             <p>Manually invalidate cache entries using <code>zx.cache</code> functions:</p>
             <CodeBlock code={cache_invalidation_example} />
             <p><strong>Available functions:</strong></p>
@@ -631,7 +632,7 @@ fn CachingSection(allocator: zx.Allocator) zx.Component {
                 <li><code>zx.cache.get(allocator, key)</code> - Get cached HTML by key. Returns <code>!?[]u8</code>, owned by <code>allocator</code>.</li>
             </ul>
 
-            <h3 id="caching-best-practices">Best Practices</h3>
+            <h3 id="caching-best-practices"><SectionAnchor id="caching-best-practices">Best Practices</SectionAnchor></h3>
             <ul>
                 <li><strong>Cache static content aggressively</strong> - Headers, footers, navigation, and other rarely-changing content benefit most from caching.</li>
                 <li><strong>Use custom keys for related content</strong> - Group related cache entries with a common prefix for easy bulk invalidation.</li>
@@ -653,10 +654,10 @@ fn CLISection(allocator: zx.Allocator) zx.Component {
     const cli_commands = @import("cli_docs.zig").docs;
     return (
         <section id="cli" class="section" @allocator={allocator}>
-            <h2>Command Line Interface</h2>
+            <h2><SectionAnchor id="cli">Command Line Interface</SectionAnchor></h2>
             <p>Ziex comes with a built-in CLI tool to help you create, develop, and deploy your projects.</p>
 
-            <h3 id="cli-installation">Installation</h3>
+            <h3 id="cli-installation"><SectionAnchor id="cli-installation">Installation</SectionAnchor></h3>
             <p>Install the Ziex CLI using one of the following methods:</p>
             <InstallCLI />
 
@@ -684,9 +685,7 @@ fn CLICommand(allocator: zx.Allocator, props: struct { command: CLICommandInfo }
 
     return (
         <div @allocator={allocator}>
-            <h3 id={command.id}>
-                {command.name}
-            </h3>
+            <h3 id={command.id}><SectionAnchor id={command.id}>{command.name}</SectionAnchor></h3>
             <p>{command.description}</p>
 
             <div class="install-box install-box-simple">
@@ -726,3 +725,4 @@ fn CLICommand(allocator: zx.Allocator, props: struct { command: CLICommandInfo }
         </div>
     );
 }
+const SectionAnchor = @import("../components/section_anchor.zx").SectionAnchor;

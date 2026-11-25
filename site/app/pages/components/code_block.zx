@@ -6,6 +6,7 @@ pub const CodeBlockProps = struct {
 
 pub fn CodeBlock(allocator: zx.Allocator, props: CodeBlockProps) zx.Component {
     const highlighted = util.highlightZx(allocator, props.code) catch props.code;
+    const playground_url = if (props.filename) |f| share.url(allocator, &.{.{ .code = props.code, .filename = f }}) catch null else null;
 
     return if (props.filename) |filename| (
         <div class="sandbox" style="box-shadow: none;" @allocator={allocator} translate="no">
@@ -17,15 +18,7 @@ pub fn CodeBlock(allocator: zx.Allocator, props: CodeBlockProps) zx.Component {
                     {filename}
                 </div>
                 <div class="sandbox-editor-actions">
-                    <button class="sandbox-open-playground-btn" type="button" title="Open in playground" data-tooltip="Open in playground" aria-label="Open in playground">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M14 3h7v7" />
-                            <path d="M10 14L21 3" />
-                            <path d="M21 14v7h-7" />
-                            <path d="M3 10V3h7" />
-                            <path d="M3 21l11-11" />
-                        </svg>
-                    </button>
+                    <PlaygroundLink href={playground_url} />
                 </div>
             </div>
             <div class="sandbox-code">
@@ -44,3 +37,20 @@ pub fn CodeBlock(allocator: zx.Allocator, props: CodeBlockProps) zx.Component {
 const zx = @import("zx");
 const std = @import("std");
 const util = @import("../reference/util.zig");
+const share = @import("../home/share.zig");
+
+/// Opens the snippet in the playground; omitted when it can't run there.
+pub fn PlaygroundLink(allocator: zx.Allocator, props: struct { href: ?[]const u8 }) ?zx.Component {
+    const href = props.href orelse return null;
+    return (
+        <a @allocator={allocator} class="sandbox-open-playground-btn" href={href} target="_blank" rel="noopener noreferrer" title="Open in playground" data-tooltip="Open in playground" aria-label="Open in playground">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M14 3h7v7" />
+                            <path d="M10 14L21 3" />
+                            <path d="M21 14v7h-7" />
+                            <path d="M3 10V3h7" />
+                            <path d="M3 21l11-11" />
+                        </svg>
+                    </a>
+    );
+}

@@ -1,0 +1,91 @@
+// Browser binding call overhead: generated `zx.client.web` vs dynamic
+// `zx.client.js`. test/e2e/specs/bench/web-perf.spec.ts adds the plain JS
+// baseline and prints the table.
+
+pub fn Page(ctx: zx.PageContext) zx.Component {
+    return (
+        <main @allocator={ctx.arena}>
+            <h1>Web bindings benchmark</h1>
+            <WebBench @client />
+        </main>
+    );
+}
+
+pub fn WebBench(ctx: *zx.ComponentContext) zx.Component {
+    return (
+        <div @allocator={ctx.allocator}>
+            <canvas id="bench-canvas" width="64" height="64"></canvas>
+            <div id="bench-el"></div>
+            <button id="bench-run" onclick={ctx.bind(run)}>Run</button>
+            <output id="bench-result"></output>
+        </div>
+    );
+}
+
+const web = zx.client.web;
+const js = zx.client.js;
+
+const n = 100_000;
+
+fn now() f64 {
+    return web.window().performance().now();
+}
+
+fn run(_: *zx.client.Event.Stateful) void {
+    const doc = web.document();
+    defer doc.deinit();
+    const canvas = doc.getElementById("bench-canvas") orelse return;
+    defer canvas.deinit();
+    const el = doc.getElementById("bench-el") orelse return;
+    defer el.deinit();
+    const c2d = web.context2d(canvas) orelse return;
+    defer c2d.deinit();
+    const dyn: js.Object = .{ .value = c2d.h };
+    const dyn_el: js.Object = .{ .value = el.h };
+    const dyn_canvas: js.Object = .{ .value = canvas.h };
+
+    var t = now();
+    for (0..n) |i| c2d.fillRect(@floatFromInt(i % 64), 0, 1, 1);
+    const fill_direct = now() - t;
+
+    t = now();
+    for (0..n) |i| dyn.call(void, "fillRect", .{ @as(f64, @floatFromInt(i % 64)), 0, 1, 1 }) catch {};
+    const fill_dynamic = now() - t;
+
+    t = now();
+    for (0..n) |i| c2d.setFillStyle(if (i & 1 == 0) "#ff0000" else "#0000ff");
+    const style_direct = now() - t;
+
+    t = now();
+    for (0..n) |i| dyn.set("fillStyle", js.string(if (i & 1 == 0) "#ff0000" else "#0000ff")) catch {};
+    const style_dynamic = now() - t;
+
+    t = now();
+    for (0..n) |i| el.setAttribute("data-x", if (i & 1 == 0) "a" else "b");
+    const attr_direct = now() - t;
+
+    t = now();
+    for (0..n) |i| dyn_el.call(void, "setAttribute", .{ js.string("data-x"), js.string(if (i & 1 == 0) "a" else "b") }) catch {};
+    const attr_dynamic = now() - t;
+
+    var sum: u64 = 0;
+    t = now();
+    for (0..n) |_| sum += canvas.as(web.HTMLCanvasElement).width();
+    const get_direct = now() - t;
+
+    t = now();
+    for (0..n) |_| sum += dyn_canvas.get(u32, "width") catch 0;
+    const get_dynamic = now() - t;
+
+    var buf: [512]u8 = undefined;
+    const out = std.fmt.bufPrint(&buf,
+        \\{{"n":{d},"fillRect":[{d:.2},{d:.2}],"fillStyle":[{d:.2},{d:.2}],"setAttribute":[{d:.2},{d:.2}],"width":[{d:.2},{d:.2}],"sum":{d}}}
+    , .{ n, fill_direct, fill_dynamic, style_direct, style_dynamic, attr_direct, attr_dynamic, get_direct, get_dynamic, sum }) catch return;
+    el.setTextContent(""); // keep the result element the only output
+    const result = doc.getElementById("bench-result") orelse return;
+    defer result.deinit();
+    result.setTextContent(out);
+}
+
+const zx = @import("zx");
+const std = @import("std");

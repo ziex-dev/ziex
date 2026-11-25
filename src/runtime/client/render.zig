@@ -37,6 +37,8 @@ pub fn applyPatches(
     patches: std.ArrayList(Patch),
     options: RenderOptions,
 ) !void {
+    dom_parent_cache = null;
+    defer dom_parent_cache = null;
     for (patches.items) |*patch| {
         switch (patch.type) {
             .UPDATE => {
@@ -330,7 +332,7 @@ pub fn createPlatformNodes(allocator: zx.Allocator, vnode: *VNode, client: anyty
         },
         .element => |elem| blk: {
             if (elem.tag == .fragment) {
-                client.registerVElement(vnode);
+                client.registerVElementOnly(vnode);
                 const child_options = RenderOptions{
                     .base_path = options.base_path,
                     .dom_parent_id = options.dom_parent_id,
@@ -455,6 +457,8 @@ pub fn createPlatformNodes(allocator: zx.Allocator, vnode: *VNode, client: anyty
                 const kept = try dom_cmd.dupeActive(allocator, raw);
                 dom_cmd.setInnerHtml(vnode.id, kept);
                 try attachCreatedNodeIfNeeded(vnode.id, options);
+                // Children have no DOM nodes of their own; register them here.
+                for (vnode.children.items) |child| client.registerVElement(child);
                 break :blk vnode.id;
             }
 
@@ -491,7 +495,8 @@ pub fn createPlatformNodes(allocator: zx.Allocator, vnode: *VNode, client: anyty
         },
     };
 
-    if (root_id) |_| client.registerVElement(vnode);
+    // Children registered themselves while being created.
+    if (root_id) |_| client.registerVElementOnly(vnode);
     return root_id;
 }
 
@@ -520,12 +525,19 @@ fn attachCreatedNodeIfNeeded(vnode_id: u64, options: RenderOptions) !void {
     }
 }
 
+// Last fragment → DOM parent lookup; list patches hit the same parent repeatedly.
+var dom_parent_cache: ?struct { vnode_id: u64, dom_id: u64 } = null;
+
 fn resolveDomParentId(client: anytype, parent_vnode_id: u64) u64 {
+    if (dom_parent_cache) |c| if (c.vnode_id == parent_vnode_id) return c.dom_id;
     if (client.getVElementById(parent_vnode_id)) |parent| {
         if (parent.component == .element and parent.component.element.tag == .fragment) {
             var vtrees_iter = client.vtrees.iterator();
             while (vtrees_iter.next()) |entry| {
-                if (findDomParentInSubtree(entry.value_ptr.vtree, parent_vnode_id, null)) |id| return id;
+                if (findDomParentInSubtree(entry.value_ptr.vtree, parent_vnode_id, null)) |id| {
+                    dom_parent_cache = .{ .vnode_id = parent_vnode_id, .dom_id = id };
+                    return id;
+                }
             }
         }
     }

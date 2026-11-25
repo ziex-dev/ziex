@@ -242,6 +242,7 @@ pub fn diff(
 ) anyerror!void {
     if (old_vnode.component == .component_fn and new_component == .component_fn) {
         if (old_vnode.component.component_fn.data == new_component.component_fn.data) {
+            old_vnode.component = new_component;
             return;
         }
     }
@@ -335,6 +336,10 @@ pub fn diff(
                         const new_html = try concatRawText(allocator, new_element.children orelse &.{});
                         old_vnode.component = resolved_component;
                         assignVNodeKey(old_vnode, resolved_component);
+                        const new_raw = new_element.children orelse &.{};
+                        for (old_vnode.children.items, 0..) |child, i| {
+                            if (i < new_raw.len) child.component = new_raw[i];
+                        }
                         if (!std.mem.eql(u8, old_html, new_html)) {
                             try patches.append(allocator, Patch{
                                 .type = .RAW_HTML,
@@ -375,12 +380,14 @@ pub fn diff(
                                 },
                             },
                         });
-                        old_vnode.component = .{ .text = new_text };
                     }
+                    // Always repoint: the old slice lives in the previous render's arena.
+                    old_vnode.component = .{ .text = new_text };
                 },
                 else => {},
             }
         },
+        .component_fn => old_vnode.component = resolved_component,
         else => {},
     }
 }

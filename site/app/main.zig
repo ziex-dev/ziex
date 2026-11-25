@@ -3,7 +3,7 @@ const Context = @import("Context.zig");
 const site_opts = @import("site_opts");
 
 const context: Context = .{ .port = 5588 };
-const config: zx.AppConfig = .{ .server = .{ .port = context.port } };
+const config: zx.AppConfig = .{};
 
 pub fn main(init: zx.Init) !void {
     var app = try zx.App.init(init, zx.Io.default(), zx.allocator, config, context);

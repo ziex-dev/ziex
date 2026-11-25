@@ -1,7 +1,7 @@
 pub fn ExamplesSection(allocator: zx.Allocator) zx.Component {
     return (
         <section id="examples" class="section" @allocator={allocator}>
-            <h2>Examples</h2>
+            <h2><SectionAnchor id="examples">Examples</SectionAnchor></h2>
             <ul>
                 <li>
                     <strong>This Documentation Site: </strong>
@@ -19,3 +19,4 @@ pub fn ExamplesSection(allocator: zx.Allocator) zx.Component {
 }
 
 const zx = @import("zx");
+const SectionAnchor = @import("section_anchor.zx").SectionAnchor;

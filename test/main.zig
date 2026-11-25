@@ -22,6 +22,8 @@ test {
     _ = @import("core/db.zig");
     _ = @import("core/db_postgres.zig");
     _ = @import("core/wire.zig");
+    _ = @import("core/web.zig");
+    _ = @import("core/web_smoke.zig");
     _ = @import("core/cache.zig");
     _ = @import("core/kv.zig");
     _ = @import("core/secrets.zig");

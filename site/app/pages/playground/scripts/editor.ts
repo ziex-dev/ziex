@@ -1146,7 +1146,7 @@ type PersistedFilesPayload = {
 
 type StoredBuild =
     | { mode: "playground"; wasm: ArrayBuffer; duration: number }
-    | { mode: "app"; ssrWasm: ArrayBuffer; clientWasm: ArrayBuffer; duration: number };
+    | { mode: "app"; ssrWasm: ArrayBuffer; clientWasm: ArrayBuffer; webGlue?: string; duration: number };
 
 function copyBuffer(bytes: Uint8Array): ArrayBuffer {
     const buf = new ArrayBuffer(bytes.byteLength);
@@ -1162,6 +1162,7 @@ function storeBuildArtifact(compiled: PlaygroundBuildArtifacts | Uint8Array, dur
         mode: "app",
         ssrWasm: copyBuffer(compiled.ssrWasm),
         clientWasm: copyBuffer(compiled.clientWasm),
+        webGlue: compiled.webGlue,
         duration,
     };
 }
@@ -1171,6 +1172,7 @@ function restoreBuildArtifact(stored: StoredBuild): PlaygroundBuildArtifacts | U
     return {
         ssrWasm: new Uint8Array(stored.ssrWasm),
         clientWasm: new Uint8Array(stored.clientWasm),
+        webGlue: stored.webGlue,
     };
 }
 
@@ -1555,7 +1557,7 @@ function showResponsePreview(body: string, meta?: PreviewResponseMeta) {
     vp.appendChild(wrap);
 }
 
-function showHydratedPreview(html: string, clientWasm: Uint8Array) {
+function showHydratedPreview(html: string, clientWasm: Uint8Array, webGlue = "") {
     if (lastClientWasmUrl) URL.revokeObjectURL(lastClientWasmUrl);
     const wasmBytes = clientWasm.slice();
     lastClientWasmUrl = URL.createObjectURL(new Blob([wasmBytes.buffer], { type: "application/wasm" }));
@@ -1570,6 +1572,8 @@ function showHydratedPreview(html: string, clientWasm: Uint8Array) {
         );
     }
     doc = doc.split(CLIENT_WASM_PLACEHOLDER).join(lastClientWasmUrl);
+    // Browser bindings for this wasm; must run before the deferred init.js.
+    if (webGlue) doc = doc.replace(/<head([^>]*)>/i, (m) => `${m}<script>${webGlue}</script>`);
     if (/<base\s/i.test(doc)) {
         doc = doc.replace(/<base\b[^>]*>/i, `<base href="${baseHref}">`);
     } else {
@@ -1759,7 +1763,7 @@ function runAppArtifacts(compiled: PlaygroundBuildArtifacts, loc: PreviewLocatio
                 if (!isHtml) {
                     showResponsePreview(rev.data.preview, meta);
                 } else if (clientWasm instanceof Uint8Array) {
-                    showHydratedPreview(rev.data.preview, clientWasm);
+                    showHydratedPreview(rev.data.preview, clientWasm, compiled.webGlue);
                 } else {
                     showHtmlPreview(rev.data.preview);
                 }

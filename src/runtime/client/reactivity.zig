@@ -34,6 +34,9 @@ var component_subscriptions = std.HashMapUnmanaged(
 
 pub var active_component_id: ?[]const u8 = null;
 
+// Set when a render creates state; its initial value may live in the render arena.
+pub var state_created: bool = false;
+
 /// Key for the per-component per-slot state store.
 const StateKey = struct {
     component_id: []const u8,
@@ -138,9 +141,10 @@ pub fn State(comptime T: type) type {
                     return @ptrCast(@alignCast(entry.ptr));
                 }
 
+                state_created = true;
                 const state_ptr = try getGlobalAllocator().create(Self);
-                state_ptr.* = Self.init(initial, component_id);
                 const id_copy = try getGlobalAllocator().dupe(u8, component_id);
+                state_ptr.* = Self.init(initial, id_copy);
                 const stored_key = StateKey{ .component_id = id_copy, .slot = slot };
                 try state_store.put(getGlobalAllocator(), stored_key, .{
                     .ptr = @ptrCast(state_ptr),

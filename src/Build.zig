@@ -7,6 +7,7 @@ const element = @import("element.zig");
 pub const Manifest = @import("build/Manifest.zig");
 pub const BuildConfig = @import("build/init/BuildConfig.zig");
 pub const Testing = @import("build/testing.zig");
+pub const webglue = @import("build/webglue.zig");
 
 pub const AddElementOptions = struct {
     id: ?[]const u8 = null,

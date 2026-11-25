@@ -1,0 +1,136 @@
+// Typed browser APIs from `zx.client.web`, generated from WebIDL: canvas,
+// drag and drop, requestAnimationFrame, and a non-bubbling `mouseenter`.
+// No hand-written JS: the build ships only the bindings this page calls.
+
+pub fn Page(ctx: zx.PageContext) zx.Component {
+    return (
+        <main @allocator={ctx.arena} class="example-page">
+            <header class="example-header">
+                <h1>Browser APIs</h1>
+                <p>Canvas, drag and drop, and animation frames from Zig via zx.client.web.</p>
+            </header>
+            <WebDemo @client />
+        </main>
+    );
+}
+
+pub fn WebDemo(ctx: *zx.ComponentContext) zx.Component {
+    return (
+        <div @allocator={ctx.allocator} class="example-test">
+            <section>
+                <h2>Canvas 2D</h2>
+                <canvas id="web-canvas" width="200" height="100"></canvas>
+                <div class="example-actions">
+                    <button id="web-draw" onclick={ctx.bind(onDraw)}>Draw</button>
+                </div>
+            </section>
+
+            <section>
+                <h2>Drag and drop</h2>
+                <ul>
+                    <li id="web-item-a" draggable="true" ondragstart={ctx.bind(onDragStart)} ondragover={ctx.bind(onDragOver)} ondrop={ctx.bind(onDrop)}>Item A</li>
+                    <li id="web-item-b" draggable="true" ondragstart={ctx.bind(onDragStart)} ondragover={ctx.bind(onDragOver)} ondrop={ctx.bind(onDrop)}>Item B</li>
+                </ul>
+                <output id="web-dropped"></output>
+            </section>
+
+            <section>
+                <h2>requestAnimationFrame</h2>
+                <div class="example-actions">
+                    <button id="web-frames" onclick={ctx.bind(onFrames)}>Count 10 frames</button>
+                </div>
+                <output id="web-frame-count"></output>
+            </section>
+
+            <section>
+                <h2>Non-bubbling events</h2>
+                <p id="web-hover" onmouseenter={ctx.bind(onEnter)}>Hover me</p>
+                <output id="web-hovered"></output>
+            </section>
+        </div>
+    );
+}
+
+const web = zx.client.web;
+
+// Outputs are empty in the vtree, so writing their text doesn't fight the renderer.
+fn setText(id: []const u8, text: []const u8) void {
+    const doc = web.document();
+    defer doc.deinit();
+    const el = doc.getElementById(id) orelse return;
+    defer el.deinit();
+    el.setTextContent(text);
+}
+
+fn onDraw(_: *zx.client.Event.Stateful) void {
+    const doc = web.document();
+    defer doc.deinit();
+    const el = doc.getElementById("web-canvas") orelse return;
+    defer el.deinit();
+
+    // getContext returns a union of context types; this canvas asked for "2d".
+    const c2d: web.CanvasRenderingContext2D = .{ .h = el.as(web.HTMLCanvasElement).getContext("2d", null) };
+    defer c2d.deinit();
+    c2d.setFillStyle("rgb(255, 0, 0)");
+    c2d.fillRect(10, 10, 80, 80);
+    c2d.setFillStyle("#0000ff");
+    c2d.fillRect(110, 10, 80, 80);
+}
+
+fn onDragStart(ctx: *zx.client.Event.Stateful) void {
+    const ev = ctx.native(web.DragEvent);
+    const dt = ev.dataTransfer() orelse return;
+    defer dt.deinit();
+    const target = ev.target() orelse return;
+    defer target.deinit();
+    const id = target.as(web.Element).id(zx.allocator) catch return;
+    defer zx.allocator.free(id);
+    dt.setData("text/plain", id);
+}
+
+fn onDragOver(ctx: *zx.client.Event.Stateful) void {
+    // Allows dropping here.
+    ctx.preventDefault();
+}
+
+fn onDrop(ctx: *zx.client.Event.Stateful) void {
+    ctx.preventDefault();
+    const ev = ctx.native(web.DragEvent);
+    const dt = ev.dataTransfer() orelse return;
+    defer dt.deinit();
+    const from = dt.getData(zx.allocator, "text/plain") catch return;
+    defer zx.allocator.free(from);
+    const target = ev.target() orelse return;
+    defer target.deinit();
+    const to = target.as(web.Element).id(zx.allocator) catch return;
+    defer zx.allocator.free(to);
+
+    const msg = std.fmt.allocPrint(zx.allocator, "Dropped {s} on {s}", .{ from, to }) catch return;
+    defer zx.allocator.free(msg);
+    setText("web-dropped", msg);
+}
+
+var frames: u32 = 0;
+
+fn onFrames(_: *zx.client.Event.Stateful) void {
+    frames = 0;
+    _ = web.window().requestAnimationFrame(.fromFn(onFrame, .{ .once = true }));
+}
+
+fn onFrame(_: []const zx.client.js.Value) void {
+    frames += 1;
+    var buf: [32]u8 = undefined;
+    setText("web-frame-count", std.fmt.bufPrint(&buf, "{d} frames", .{frames}) catch return);
+    if (frames < 10) _ = web.window().requestAnimationFrame(.fromFn(onFrame, .{ .once = true }));
+}
+
+fn onEnter(_: *zx.client.Event.Stateful) void {
+    setText("web-hovered", "Entered");
+}
+
+pub const options: zx.PageOptions = .{
+    .methods = &.{ .GET, .POST },
+};
+
+const zx = @import("zx");
+const std = @import("std");

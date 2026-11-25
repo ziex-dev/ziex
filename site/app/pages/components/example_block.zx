@@ -62,6 +62,11 @@ pub fn ExampleBlock(allocator: zx.Allocator, props: ExampleBlockProps) zx.Compon
     };
 
     const html_with_style = allocator.print("{s}{s}", .{ dark_mode_style, props.html_code }) catch unreachable;
+    const html_formatted = html_pretty.format(allocator, props.html_code) catch null;
+
+    var entries = allocator.alloc(share.Entry, files.len) catch unreachable;
+    for (files, 0..) |file, i| entries[i] = .{ .code = file.code, .filename = normalizeFileName(file.filename) };
+    const playground_url = share.url(allocator, entries) catch null;
 
     const preview_id = allocator.print("tab-{s}-preview", .{props.id}) catch unreachable;
     const html_id = allocator.print("tab-{s}-html", .{props.id}) catch unreachable;
@@ -90,7 +95,7 @@ pub fn ExampleBlock(allocator: zx.Allocator, props: ExampleBlockProps) zx.Compon
                             )}
                         </div>
                         <div class="sandbox-editor-actions">
-                            <button class="sandbox-open-playground-btn" type="button" title="Open in playground" data-tooltip="Open in playground" aria-label="Open in playground">
+                            {if (playground_url) |href| (<a class="sandbox-open-playground-btn" href={href} target="_blank" rel="noopener noreferrer" title="Open in playground" data-tooltip="Open in playground" aria-label="Open in playground">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <path d="M14 3h7v7" />
                                     <path d="M10 14L21 3" />
@@ -98,7 +103,7 @@ pub fn ExampleBlock(allocator: zx.Allocator, props: ExampleBlockProps) zx.Compon
                                     <path d="M3 10V3h7" />
                                     <path d="M3 21l11-11" />
                                 </svg>
-                            </button>
+                            </a>)}
                         </div>
                     </div>
                     {for (files) |file| (
@@ -134,7 +139,11 @@ pub fn ExampleBlock(allocator: zx.Allocator, props: ExampleBlockProps) zx.Compon
                         )}
                     </div>
                     <div class="sandbox-preview-content sandbox-code-content" id={html_content_id}>
-                        <pre translate="no"><code class="language-markup">{props.html_code}</code></pre>
+                        {if (html_formatted) |formatted| (
+                            <pre translate="no"><code class="language-markup" @escaping={.none}>{formatted}</code></pre>
+                        ) else (
+                            <pre translate="no"><code class="language-markup">{props.html_code}</code></pre>
+                        )}
                     </div>
                     <div class="sandbox-preview-content sandbox-code-content" id={zig_content_id} style="display: none;">
                         <pre translate="no"><code class="language-zig">{props.zig_code}</code></pre>
@@ -172,3 +181,12 @@ const dark_mode_style =
 const zx = @import("zx");
 const std = @import("std");
 const util = @import("../reference/util.zx");
+
+// Collapses whitespace in a tab label into a filename (as docs.ts did).
+fn normalizeFileName(raw: []const u8) []const u8 {
+    const t = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    return if (t.len > 0) t else "Playground.zx";
+}
+
+const share = @import("../home/share.zig");
+const html_pretty = @import("../reference/html_pretty.zig");

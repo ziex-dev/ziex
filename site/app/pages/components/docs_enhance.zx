@@ -1,0 +1,9 @@
+// Docs page behaviour from Zig (components/docs.zig). Renders nothing.
+
+pub fn DocsEnhance(ctx: *zx.ComponentContext) zx.Component {
+    if (zx.platform.role == .client) docs.setup();
+    return (<span @allocator={ctx.allocator} hidden="true"></span>);
+}
+
+const docs = @import("docs.zig");
+const zx = @import("zx");

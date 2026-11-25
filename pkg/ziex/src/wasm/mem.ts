@@ -2,6 +2,8 @@
 export const textDecoder = new TextDecoder();
 export const textEncoder = new TextEncoder();
 
+const SHORT_STRING = 64;
+
 export type MemoryIO = {
     view(): Uint8Array;
     data(): DataView;
@@ -40,8 +42,20 @@ export function memoryIO(getMemory: () => WebAssembly.Memory | null | undefined)
             const length = len >>> 0;
             if (length === 0) return "";
             refresh();
-            if (start + length > u8.byteLength) return "";
-            return textDecoder.decode(u8.subarray(start, start + length));
+            const end = start + length;
+            if (end > u8.byteLength) return "";
+            // TextDecoder has a high fixed cost; short ASCII (most DOM/canvas
+            // strings) is faster to build directly.
+            if (length <= SHORT_STRING) {
+                let out = "";
+                for (let i = start; i < end; i++) {
+                    const c = u8[i]!;
+                    if (c >= 0x80) return textDecoder.decode(u8.subarray(start, end));
+                    out += String.fromCharCode(c);
+                }
+                return out;
+            }
+            return textDecoder.decode(u8.subarray(start, end));
         },
         writeBytes(ptr, data) {
             const start = ptr >>> 0;
