@@ -520,3 +520,230 @@
         flex-direction: column;
     }
 }
+
+.sqlite-page {
+    max-width: 1100px;
+}
+
+.studio {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    height: 600px;
+    overflow: hidden;
+}
+
+.studio-sidebar {
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    min-height: 0;
+    padding: .6rem;
+}
+
+.studio-search {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    color: var(--text-color);
+    font: inherit;
+    font-size: .85rem;
+    padding: .45rem .6rem;
+}
+
+.studio-sidebar-bar {
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--subtitle-color);
+    display: flex;
+    font-size: .8rem;
+    justify-content: space-between;
+    padding-bottom: .4rem;
+}
+
+.studio-icon-button {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-color);
+    cursor: pointer;
+    padding: .1rem .45rem;
+}
+
+.studio-tables {
+    list-style: none;
+    margin: 0;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.studio-table {
+    align-items: center;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-color);
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    font-size: .85rem;
+    gap: .5rem;
+    padding: .4rem .5rem;
+    text-align: left;
+    width: 100%;
+}
+
+.studio-table:hover {
+    background: var(--hover-bg);
+}
+
+.studio-table-icon {
+    color: var(--subtitle-color);
+}
+
+.studio-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+.studio-tabs {
+    background: var(--hover-bg);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+}
+
+.studio-tab {
+    background: var(--bg-color);
+    border-right: 1px solid var(--border-color);
+    color: var(--text-color);
+    font-size: .85rem;
+    margin-bottom: -1px;
+    padding: .5rem 1rem;
+}
+
+.studio-editor {
+    display: flex;
+    font-family: ui-monospace, monospace;
+    font-size: .9rem;
+    height: 180px;
+    line-height: 1.5;
+    overflow-y: auto;
+}
+
+.studio-gutter {
+    color: var(--subtitle-color);
+    min-width: 2.5rem;
+    padding: .6rem .5rem;
+    text-align: right;
+    user-select: none;
+}
+
+.studio-editor textarea {
+    background: transparent;
+    border: 0;
+    color: var(--text-color);
+    flex: 1;
+    font: inherit;
+    line-height: inherit;
+    outline: none;
+    overflow: hidden;
+    padding: .6rem .5rem;
+    resize: none;
+    white-space: pre;
+}
+
+.studio-toolbar {
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--subtitle-color);
+    display: flex;
+    font-size: .8rem;
+    justify-content: space-between;
+    padding: .45rem .75rem;
+}
+
+.studio-run {
+    background: #2563eb;
+    border: 0;
+    border-radius: 7px;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-size: .85rem;
+    padding: .4rem .9rem;
+}
+
+.studio-results {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.studio-results-empty {
+    background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
+    background-size: 14px 14px;
+}
+
+.studio-grid {
+    flex: 1;
+    overflow: auto;
+}
+
+.studio-grid table {
+    border-collapse: collapse;
+    font-family: ui-monospace, monospace;
+    font-size: .8rem;
+    width: max-content;
+    min-width: 100%;
+}
+
+.studio-grid th,
+.studio-grid td {
+    border-bottom: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: .35rem .6rem;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.studio-grid th {
+    background: var(--hover-bg);
+    position: sticky;
+    top: 0;
+}
+
+.studio-status {
+    max-width: none;
+    border-top: 1px solid var(--border-color);
+    color: var(--subtitle-color);
+    font-size: .8rem;
+    margin: 0;
+    padding: .4rem .75rem;
+}
+
+.studio-error {
+    color: #d14343;
+}
+
+@media (max-width: 700px) {
+    .studio {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .studio-sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--border-color);
+        max-height: 180px;
+    }
+
+    .studio-results {
+        min-height: 240px;
+    }
+}
