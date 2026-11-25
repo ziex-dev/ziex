@@ -5,6 +5,7 @@ pub const cli_command: []const u8 = "--";
 pub const enable_httpz: bool = false;
 pub const omit_prerendered: bool = false;
 pub const feat_sqlite_server: bool = false;
+pub const feat_sqlite_client: bool = false;
 pub const feat_pg_server: bool = false;
 pub const feat_kv_server: bool = false;
 pub const feat_kv_client: bool = false;

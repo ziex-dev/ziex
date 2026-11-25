@@ -27,6 +27,24 @@ test.describe('Ziex Playground', () => {
     await expect(previewFrame.getByRole('heading', { name: /Ziex Playground/ })).toBeVisible({ timeout: 120_000 });
   });
 
+  // App mode compiles SSR + client wasm against playground stubs; catches stub drift.
+  test('App Mode Run', async ({ page }) => {
+    await page.goto('/playground');
+    const runButton = page.getByRole('button', { name: 'Run' });
+    await expect(runButton).toBeEnabled({ timeout: 60_000 });
+    const appToggle = page.getByRole('button', { name: 'App mode' });
+    if ((await appToggle.getAttribute('aria-pressed')) !== 'true') await appToggle.click();
+    await expect(appToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(runButton).toBeEnabled();
+    await runButton.click();
+    const previewFrame = page.frameLocator('iframe');
+    await expect(previewFrame.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 180_000 });
+    await expect(page.getByText(/compile failed|error:/i)).toHaveCount(0);
+    const counter = previewFrame.getByRole('button', { name: /Count: 0/ });
+    await counter.click();
+    await expect(previewFrame.getByRole('button', { name: /Count: 1/ })).toBeVisible({ timeout: 30_000 });
+  });
+
   test('Edit Code and Run', async ({ page }) => {
     await page.goto('/playground');
     const editor = page.getByRole('textbox').first();
