@@ -1,3 +1,5 @@
+import { type KVValue, type PutOptions, expiresAt, isExpired, own } from "./entry";
+
 export type Options = {
     databaseName?: string;
     storeName?: string;
@@ -7,6 +9,9 @@ export type Options = {
 const databaseName = "ziex-kv";
 const storeName = "kv";
 const namespace = "default";
+
+// Bare string rows are legacy and never expire.
+type Row = { v: string | Uint8Array; e?: number };
 
 let dbPromise: Promise<IDBDatabase> | undefined;
 
@@ -47,38 +52,72 @@ function transactionToPromise(transaction: IDBTransaction): Promise<void> {
     });
 }
 
-export async function get(key: string): Promise<string | null> {
-    const db = await openDb();
-    const tx = db.transaction(storeName, "readonly");
-    const value = await requestToPromise(tx.objectStore(storeName).get(`${namespace}:${key}`));
-    await transactionToPromise(tx);
-    return typeof value === "string" ? value : null;
+function unwrap(row: unknown): Row | null {
+    if (typeof row === "string") return { v: row };
+    if (row && typeof row === "object" && "v" in row) return row as Row;
+    return null;
 }
 
-export async function put(key: string, value: string): Promise<void> {
+function id(key: string): string {
+    return `${namespace}:${key}`;
+}
+
+// Rechecked in a write transaction so a newer put survives.
+async function evict(db: IDBDatabase, key: string): Promise<void> {
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    const row = unwrap(await requestToPromise(store.get(id(key))));
+    if (row && isExpired(row.e)) store.delete(id(key));
+    await transactionToPromise(tx);
+}
+
+export async function get(key: string): Promise<string | Uint8Array | null> {
+    const db = await openDb();
+    const tx = db.transaction(storeName, "readonly");
+    const row = unwrap(await requestToPromise(tx.objectStore(storeName).get(id(key))));
+    await transactionToPromise(tx);
+    if (!row) return null;
+    if (isExpired(row.e)) {
+        await evict(db, key);
+        return null;
+    }
+    return row.v;
+}
+
+export async function put(key: string, value: KVValue, options?: PutOptions): Promise<void> {
     const db = await openDb();
     const tx = db.transaction(storeName, "readwrite");
-    tx.objectStore(storeName).put(value, `${namespace}:${key}`);
+    const row: Row = { v: own(value) };
+    const e = expiresAt(options);
+    if (e !== undefined) row.e = e;
+    tx.objectStore(storeName).put(row, id(key));
     await transactionToPromise(tx);
 }
 
 export async function del(key: string): Promise<void> {
     const db = await openDb();
     const tx = db.transaction(storeName, "readwrite");
-    tx.objectStore(storeName).delete(`${namespace}:${key}`);
+    tx.objectStore(storeName).delete(id(key));
     await transactionToPromise(tx);
 }
 
 export async function list(options?: { prefix?: string }): Promise<{ keys: { name: string }[] }> {
     const db = await openDb();
+    const prefix = id(options?.prefix ?? "");
+    const range = IDBKeyRange.bound(prefix, `${prefix}￿`);
     const tx = db.transaction(storeName, "readonly");
-    const keys = await requestToPromise(tx.objectStore(storeName).getAllKeys());
+    const store = tx.objectStore(storeName);
+    const [ids, rows] = await Promise.all([
+        requestToPromise(store.getAllKeys(range)),
+        requestToPromise(store.getAll(range)),
+    ]);
     await transactionToPromise(tx);
 
-    const prefix = `${namespace}:${options?.prefix ?? ""}`;
-    return {
-        keys: keys
-            .filter((key): key is string => typeof key === "string" && key.startsWith(prefix))
-            .map((key) => ({ name: key.slice(namespace.length + 1) })),
-    };
+    const keys: { name: string }[] = [];
+    ids.forEach((k, i) => {
+        if (typeof k !== "string" || !k.startsWith(prefix)) return;
+        const row = unwrap(rows[i]);
+        if (row && !isExpired(row.e)) keys.push({ name: k.slice(namespace.length + 1) });
+    });
+    return { keys };
 }

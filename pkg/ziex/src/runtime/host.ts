@@ -37,6 +37,18 @@ export const ops = [
     "db_values",
     "env_call",
     "email_send",
+    "fs_open",
+    "fs_close",
+    "fs_read",
+    "fs_write",
+    "fs_stat",
+    "fs_set_len",
+    "fs_seek",
+    "fs_mkdir",
+    "fs_remove",
+    "fs_rename",
+    "fs_readdir",
+    "fs_sync",
 ] as const;
 
 export type Op = (typeof ops)[number];

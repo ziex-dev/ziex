@@ -19,11 +19,16 @@ fn get(_: ?*anyopaque, ns: []const u8, allocator: std.mem.Allocator, key: []cons
 }
 
 fn put(_: ?*anyopaque, ns: []const u8, key: []const u8, value: []const u8, opts: Kv.PutOptions) !void {
-    const ttl: u32 = if (opts.ttl) |d| blk: {
-        const secs = d.toSeconds();
-        break :blk if (secs <= 0) 0 else @intCast(secs);
-    } else 0;
+    const ttl: u32 = if (opts.ttl) |d| ttlSeconds(d) else 0;
     if (write(.kv_put, .{ ns, key, value, ttl }) < 0) return error.PutFailed;
+}
+
+// Rounded up: 0 means never expires.
+pub fn ttlSeconds(d: std.Io.Duration) u32 {
+    const ns = d.toNanoseconds();
+    if (ns <= 0) return 0;
+    const secs = std.math.divCeil(i96, ns, std.time.ns_per_s) catch unreachable;
+    return std.math.cast(u32, secs) orelse std.math.maxInt(u32);
 }
 
 fn delete(_: ?*anyopaque, ns: []const u8, key: []const u8) !void {

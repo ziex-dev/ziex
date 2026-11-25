@@ -47,6 +47,7 @@ import { flushDomCmds } from "./dom_cmd";
 import { createKvHandlers } from "../runtime/kv/extern";
 import type { Handlers } from "../runtime/host";
 import { createBrowserKVBindings, type KVNamespace } from "../runtime/kv";
+import { createFsHandlers, mountBrowserFs, type Store, type Vfs } from "../runtime/fs";
 import { DELEGATED_EVENTS } from "./generated/events";
 import { EVENT_FLAGS } from "./generated/event_bits";
 
@@ -448,7 +449,12 @@ export type InitOptions = {
     eventDelegationRoot?: string;
     importObject?: WebAssembly.Imports;
     kv?: Record<string, KVNamespace>;
+    /** Store behind the client's `std.Io.Dir.cwd()` (OPFS by default); `false` disables files. */
+    fs?: Store | false;
 };
+
+// Mounted once per page, so a dev reinit keeps unflushed writes.
+let browserFs: Promise<Vfs> | null = null;
 
 type ActiveRuntime = {
     dispose: () => void;
@@ -482,6 +488,7 @@ function normalizeOptions(options: InitOptions = {}): InitOptions {
         eventDelegationRoot: options.eventDelegationRoot,
         importObject: options.importObject,
         kv: options.kv,
+        fs: options.fs,
     };
 }
 
@@ -559,6 +566,14 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
     const module = response.headers.get("content-type")?.startsWith("application/wasm")
         ? await WebAssembly.compileStreaming(response)
         : await WebAssembly.compile(await response.arrayBuffer());
+
+    // Only for wasm built with the `fs` feature (it exports `__zx_fs`).
+    const fsEnabled = (typeof __FEAT_FS__ === "undefined" || __FEAT_FS__) && options.fs !== false
+        && WebAssembly.Module.exports(module).some((e) => e.name === "__zx_fs");
+    if (fsEnabled) {
+        browserFs ??= mountBrowserFs(options.fs || undefined);
+        Object.assign(handlers, createFsHandlers(await browserFs, getMemory));
+    }
 
     const importObject: WebAssembly.Imports = {
         ...ZxBridge.createImportObject(bridgeRef, handlers),

@@ -71,6 +71,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             .@"type-decl" = false,
             .@"feature-kv-client" = if (features.kv) |k| k.client != null else false,
             .@"feature-kv-server" = if (features.kv) |k| k.server != null else false,
+            .@"feature-fs-client" = if (features.fs) |f| f.client != null else false,
             .@"feature-sqlite" = if (features.sqlite) |s| s.server != null else false,
             .@"feature-wasm-client" = build_client_wasm,
         }) orelse break :blk b.path(".");
@@ -349,17 +350,28 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     b.installArtifact(exe);
 
     // --- Ziex WASM Main Executable --- //
+    const fs_client = if (opts.features.fs) |f| f.client != null else false;
     var client_root: ?*std.Build.Module = null;
     const clients: ?*Clients = if (build_client_wasm) try b.allocator.create(Clients) else null;
     const manifest_path: LazyPath = if (build_client_wasm) blk: {
+        // With fs, main.zig is not the root: with libc linked, std would export a C entry for its `pub fn main`.
+        const app_main = b.createModule(.{
+            .root_source_file = exe.root_module.root_source_file,
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
         const wasm_exe = b.addExecutable(.{
             .name = b.fmt("main", .{}),
-            .root_module = b.createModule(.{
-                .root_source_file = exe.root_module.root_source_file,
+            .root_module = if (fs_client) b.createModule(.{
+                .root_source_file = b.addWriteFiles().add("client_root.zig", client_root_source),
                 .target = wasm_target,
                 .optimize = wasm_optimize,
-            }),
+            }) else app_main,
         });
+        if (fs_client) {
+            wasm_exe.root_module.addImport("__zx_app_main", app_main);
+            withFdHandles(b, wasm_exe);
+        }
 
         wasm_exe.entry = .disabled;
         wasm_exe.export_memory = true;
@@ -379,7 +391,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
                 import.module;
 
             try wasm_imports.append(.{ .name = import.name, .module = wasm_module });
-            wasm_exe.root_module.addImport(import.name, wasm_module);
+            app_main.addImport(import.name, wasm_module);
         }
 
         var wasm_import_it = zx_wasm_module.?.import_table.iterator();
@@ -430,7 +442,8 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             .features = opts.features,
         }));
 
-        wasm_exe.root_module.addImport("zx", wasm_app_module);
+        app_main.addImport("zx", wasm_app_module);
+        if (fs_client) wasm_exe.root_module.addImport("zx", wasm_app_module);
         wasm_exe.step.dependOn(&transpile_cmd.step);
         client_root = wasm_exe.root_module;
 
@@ -537,6 +550,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             const client_check = b.addExecutable(.{ .name = "check-client", .root_module = root });
             client_check.entry = .disabled;
             client_check.rdynamic = true;
+            if (fs_client) withFdHandles(b, client_check);
             client_check.step.dependOn(&transpile_cmd.step);
             check_step.dependOn(&client_check.step);
         }
@@ -849,6 +863,38 @@ fn moduleRequiresLibCRec(module: *std.Build.Module, visited: *std.AutoHashMap(*s
     }
 
     return false;
+}
+
+// Forwards the root decls std reads from the app's main.zig.
+const client_root_source =
+    \\const std = @import("std");
+    \\const app = @import("__zx_app_main");
+    \\
+    \\// Analyzing `main` reaches the client's `@export`s; it is never called.
+    \\comptime {
+    \\    if (@hasDecl(app, "main")) _ = &app.main;
+    \\}
+    \\
+    \\pub const std_options: std.Options = if (@hasDecl(app, "std_options")) app.std_options else .{};
+    \\pub const panic = if (@hasDecl(app, "panic")) app.panic else std.debug.FullPanic(std.debug.defaultPanic);
+    \\pub const std_options_cwd = @import("zx").Io.Web.cwd;
+    \\
+;
+
+// Freestanding `fd_t` is `void`; with libc std uses `std.c`'s i32. Nothing from the empty libc is linked.
+fn withFdHandles(b: *std.Build, compile: *std.Build.Step.Compile) void {
+    compile.root_module.link_libc = true;
+    compile.setLibCFile(b.addWriteFiles().add("libc.txt",
+        \\include_dir=/zx-no-libc
+        \\sys_include_dir=/zx-no-libc
+        \\crt_dir=/zx-no-libc
+        \\msvc_lib_dir=
+        \\kernel32_lib_dir=
+        \\gcc_dir=
+        \\darwin_sdk_dir=
+        \\haiku_dir=
+        \\
+    ));
 }
 
 fn moduleRequiresLibC(allocator: std.mem.Allocator, module: *std.Build.Module) !bool {

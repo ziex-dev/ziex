@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) !void {
     // npm package includes all bindings; `.build = .enabled` apps pass the app's flags.
     const feat_kv_client = b.option(bool, "feature-kv-client", "Include browser KV client bindings") orelse true;
     const feat_kv_server = b.option(bool, "feature-kv-server", "Include server/edge KV bindings") orelse true;
+    const feat_fs_client = b.option(bool, "feature-fs-client", "Include the browser file system (OPFS)") orelse true;
     const feat_sqlite = b.option(bool, "feature-sqlite", "Include SQLite/D1 database bindings") orelse true;
     const feat_wasm_client = b.option(bool, "feature-wasm-client", "Include browser wasm init bindings") orelse true;
 
@@ -40,6 +41,7 @@ pub fn build(b: *std.Build) !void {
             .version = version,
             .feat_kv_client = feat_kv_client,
             .feat_kv_server = feat_kv_server,
+            .feat_fs_client = feat_fs_client,
             .feat_sqlite = feat_sqlite,
             .feat_wasm_client = feat_wasm_client,
         });
@@ -58,12 +60,13 @@ const FromSourceOptions = struct {
     version: []const u8,
     feat_kv_client: bool,
     feat_kv_server: bool,
+    feat_fs_client: bool,
     feat_sqlite: bool,
     feat_wasm_client: bool,
 };
 
 fn buildFromSource(b: *std.Build, dist_files: *std.Build.Step.WriteFile, opts: FromSourceOptions) !void {
-    const feature_defines = featureDefines(b, opts.feat_kv_client, opts.feat_kv_server, opts.feat_sqlite, opts.feat_wasm_client);
+    const feature_defines = featureDefines(b, opts.feat_kv_client, opts.feat_kv_server, opts.feat_fs_client, opts.feat_sqlite, opts.feat_wasm_client);
 
     // --- JS bundles (esbuild) --- //
     const packages = esbuild.addBuild(b, .{
@@ -150,12 +153,14 @@ fn featureDefines(
     b: *std.Build,
     feat_kv_client: bool,
     feat_kv_server: bool,
+    feat_fs_client: bool,
     feat_sqlite: bool,
     feat_wasm_client: bool,
 ) []const esbuild.BuildConfig.Define {
     return b.allocator.dupe(esbuild.BuildConfig.Define, &.{
         .{ .key = "__FEAT_KV__", .value = if (feat_kv_client) "true" else "false" },
         .{ .key = "__FEAT_KV_SERVER__", .value = if (feat_kv_server) "true" else "false" },
+        .{ .key = "__FEAT_FS__", .value = if (feat_fs_client) "true" else "false" },
         .{ .key = "__FEAT_DB__", .value = if (feat_sqlite) "true" else "false" },
         .{ .key = "__FEAT_WASM__", .value = if (feat_wasm_client) "true" else "false" },
     }) catch @panic("OOM");

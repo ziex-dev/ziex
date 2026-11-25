@@ -17,20 +17,28 @@ import {
     type Options as IndexedDbOptions,
 } from "./kv/indexdb";
 
+import type { KVValue, PutOptions } from "./kv/entry";
+export type { KVBytes, KVValue, PutOptions } from "./kv/entry";
+
 type MaybePromise<T> = T | Promise<T>;
 
-/** Key/value namespace binding (get/put/del/list). */
+/**
+ * Key/value namespace binding (get/put/del/list), shaped like Cloudflare KV.
+ * `put` gets text when the value is valid UTF-8 and bytes otherwise; `get` is
+ * called with `"arrayBuffer"` and may return either. Bindings must honor the
+ * expiry options.
+ */
 export interface KVNamespace {
-    get(key: string): MaybePromise<string | null>;
-    put(key: string, value: string, options?: { expiration?: number; expirationTtl?: number }): MaybePromise<void>;
+    get(key: string, type?: "arrayBuffer"): MaybePromise<KVValue | null>;
+    put(key: string, value: KVValue, options?: PutOptions): MaybePromise<void>;
     del(key: string): MaybePromise<void>;
     list(options?: { prefix?: string }): MaybePromise<{ keys: { name: string }[] }>;
 }
 
 /** Synchronous KV used when JSPI is unavailable (e.g. localStorage). Same method names, sync returns. */
 export interface SyncKVNamespace {
-    get(key: string): string | null;
-    put(key: string, value: string, options?: { expiration?: number; expirationTtl?: number }): void;
+    get(key: string, type?: "arrayBuffer"): KVValue | null;
+    put(key: string, value: KVValue, options?: PutOptions): void;
     del(key: string): void;
     list(options?: { prefix?: string }): { keys: { name: string }[] };
 }

@@ -1,10 +1,10 @@
 import {
     type WasmAllocRef,
     textDecoder,
-    textEncoder,
     writeBytesOut,
 } from "../../wasm/core";
 import type { KVNamespace, SyncKVNamespace } from "../kv";
+import { type KVValue, textOrBytes, toBytes } from "./entry";
 import { Suspending } from "../jspi";
 import type { Handlers } from "../host";
 import { encodeStrings } from "../wire";
@@ -41,6 +41,11 @@ function readStr(getMemory: () => WebAssembly.Memory, ptr: number, len: number):
     return textDecoder.decode(new Uint8Array(getMemory().buffer, ptr >>> 0, len >>> 0));
 }
 
+function readBytes(getMemory: () => WebAssembly.Memory, ptr: number, len: number): Uint8Array {
+    if (len === 0) return new Uint8Array(0);
+    return new Uint8Array(getMemory().buffer, ptr >>> 0, len >>> 0).slice();
+}
+
 function resolve(
     bindings: Record<string, KVNamespace>,
     ns: string,
@@ -53,11 +58,11 @@ function resolve(
 function encodeGet(
     getMemory: () => WebAssembly.Memory,
     allocRef: WasmAllocRef,
-    value: string | null,
+    value: KVValue | null | undefined,
     out_ptr: number,
 ): number {
-    if (value === null) return -1;
-    return writeBytesOut(getMemory, allocRef, out_ptr, textEncoder.encode(value));
+    if (value === null || value === undefined) return -1;
+    return writeBytesOut(getMemory, allocRef, out_ptr, toBytes(value));
 }
 
 function encodeList(
@@ -80,11 +85,12 @@ function get(
     getMemory: () => WebAssembly.Memory,
     allocRef: WasmAllocRef,
 ): number | Promise<number> {
-    return maybeThen(b.get(key), (v) => encodeGet(getMemory, allocRef, v, out_ptr));
+    // Cloudflare KV returns text by default, which would mangle binary values.
+    return maybeThen(b.get(key, "arrayBuffer"), (v) => encodeGet(getMemory, allocRef, v, out_ptr));
 }
 
 /** TTL is passed through as is; puts the binding rejects surface as `error.PutFailed`. */
-function put(b: KVNamespace, key: string, val: string, ttl: number): number | Promise<number> {
+function put(b: KVNamespace, key: string, val: KVValue, ttl: number): number | Promise<number> {
     try {
         const r = b.put(key, val, putOptions(ttl));
         return r instanceof Promise ? r.then(() => 0, () => -1) : 0;
@@ -144,7 +150,7 @@ export function createKvHandlers(
             return write(put(
                 b,
                 readStr(getMemory, key_ptr, key_len),
-                readStr(getMemory, val_ptr, val_len),
+                textOrBytes(readBytes(getMemory, val_ptr, val_len)),
                 ttl_seconds,
             ));
         },

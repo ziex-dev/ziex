@@ -117,6 +117,16 @@ pub const AppOptions = struct {
             client: ?KvClientOptions = null,
         };
 
+        /// `std.Io.Dir`/`File` in the browser, persisted to OPFS. `Dir.cwd()` is its root.
+        pub const FsOptions = struct {
+            pub const FsClientOptions = struct {
+                pub const enabled: FsClientOptions = .{};
+            };
+            pub const enabled: FsOptions = .{ .client = .enabled };
+
+            client: ?FsClientOptions = null,
+        };
+
         /// Filesystem-backed cache (used by component-level caching),
         /// exposed at runtime as `zx.cache`.
         pub const CacheOptions = struct {
@@ -191,6 +201,7 @@ pub const AppOptions = struct {
         postgres: ?PostgresOptions = null,
         kv: ?KvOptions = null,
         cache: ?CacheOptions = null,
+        fs: ?FsOptions = null,
         ai: ?AiOptions = null,
         flag: ?FlagOptions = null,
         email: ?EmailOptions = null,

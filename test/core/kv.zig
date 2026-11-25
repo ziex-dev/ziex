@@ -285,3 +285,12 @@ test "meta line roundtrips and rejects bad input" {
     try std.testing.expect(Meta.split(Meta.Typed, "[2,42]\nfuture version") == null);
     try std.testing.expect(Meta.split(Meta.Typed, "not zxon\nvalue") == null);
 }
+
+test "wasm ttl rounds sub-second up so it still expires" {
+    const ttlSeconds = zx.Kv.Wasm.ttlSeconds;
+    try std.testing.expectEqual(@as(u32, 1), ttlSeconds(.fromMilliseconds(500)));
+    try std.testing.expectEqual(@as(u32, 1), ttlSeconds(.fromSeconds(1)));
+    try std.testing.expectEqual(@as(u32, 2), ttlSeconds(.fromMilliseconds(1001)));
+    try std.testing.expectEqual(@as(u32, 0), ttlSeconds(.fromSeconds(0)));
+    try std.testing.expectEqual(@as(u32, 0), ttlSeconds(.fromSeconds(-5)));
+}

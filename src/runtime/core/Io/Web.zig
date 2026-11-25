@@ -1,5 +1,5 @@
-//! `std.Io` for the browser. Clocks, entropy and sleep go to the page's JS;
-//! everything else fails like `std.Io.failing`.
+//! `std.Io` for the browser. Clocks, entropy and sleep go to the page's JS, files
+//! to OPFS (see `Web/fs.zig`); everything else fails like `std.Io.failing`.
 //!
 //! `sleep` suspends the calling handler through JSPI, like a blocking `Client.fetch`.
 //! Without JSPI it busy-waits.
@@ -8,6 +8,18 @@ const Web = @This();
 const std = @import("std");
 const Io = std.Io;
 const host = @import("../../wasm/imports.zig");
+const fs = @import("Web/fs.zig");
+
+pub const cwd = fs.cwd;
+
+// Freestanding has a real `File.Handle` only with libc linked (see `withFdHandles`).
+const has_fs = @import("builtin").os.tag == .freestanding and std.posix.fd_t != void;
+
+// Tells the host to mount the file system.
+var fs_marker: u8 = 0;
+comptime {
+    if (has_fs) @export(&fs_marker, .{ .name = "__zx_fs" });
+}
 
 pub fn io() Io {
     return .{ .userdata = null, .vtable = &vtable };
@@ -22,6 +34,7 @@ const vtable: Io.VTable = blk: {
     vt.sleep = &sleep;
     vt.random = &random;
     vt.randomSecure = &randomSecure;
+    if (has_fs) fs.install(&vt);
     break :blk vt;
 };
 
