@@ -154,7 +154,8 @@ services:
       cache_to:
         - type=gha,mode=max,scope=bench
     # depends_on removed to allow selective startup
-    cpuset: "2,3"
+    # All cores not used by servers (set by run.sh)
+    cpuset: "${BENCH_CPUSET:-2-3}"
     networks:
       - bench-net
 

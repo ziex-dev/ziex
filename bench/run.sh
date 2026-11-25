@@ -26,6 +26,15 @@ CONCURRENCY=$(zon_field concurrency)
 RUNS=$(zon_field runs)
 ENDPOINT=$(zon_field endpoint)
 
+# Servers are pinned to cores 0,1; give the load generator every remaining core.
+DOCKER_NCPU=$(docker info --format '{{.NCPU}}' 2>/dev/null || echo 4)
+if [ "$DOCKER_NCPU" -gt 2 ]; then
+  export BENCH_CPUSET="2-$((DOCKER_NCPU - 1))"
+else
+  echo "warning: only $DOCKER_NCPU CPUs available, load generator will share cores with servers" >&2
+  export BENCH_CPUSET="0-$((DOCKER_NCPU - 1))"
+fi
+
 MEASURE_BUILD_TIME=false
 ARGS=()
 for arg in "$@"; do
