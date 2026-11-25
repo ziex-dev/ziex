@@ -99,6 +99,11 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = glue_path, .data = glue });
     }
 
+    if (nonEmpty(args.@"href-out")) |out| {
+        if (href_stem == null) return error.MissingHrefStem;
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = out, .data = href });
+    }
+
     if (manifest_in) |min| {
         var manifest = try Manifest.init(io, allocator, min);
 

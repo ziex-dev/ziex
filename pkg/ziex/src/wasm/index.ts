@@ -48,6 +48,9 @@ import { createKvHandlers } from "../runtime/kv/extern";
 import type { Handlers } from "../runtime/host";
 import { createBrowserKVBindings, type KVNamespace } from "../runtime/kv";
 import { createFsHandlers, mountBrowserFs, type Store, type Vfs } from "../runtime/fs";
+import { createWorkerHandlers } from "../runtime/worker";
+
+export { runWorker } from "../runtime/worker";
 import { DELEGATED_EVENTS } from "./generated/events";
 import { EVENT_FLAGS } from "./generated/event_bits";
 
@@ -450,6 +453,8 @@ export type InitOptions = {
     importObject?: WebAssembly.Imports;
     kv?: Record<string, KVNamespace>;
     /** Store behind the client's `std.Io.Dir.cwd()` (OPFS by default); `false` disables files. */
+    /** Classic script that runs `zx.worker` Workers: these bindings' URL (set by `init.js`). */
+    workerScript?: string;
     fs?: Store | false;
 };
 
@@ -489,6 +494,7 @@ function normalizeOptions(options: InitOptions = {}): InitOptions {
         importObject: options.importObject,
         kv: options.kv,
         fs: options.fs,
+        workerScript: options.workerScript,
     };
 }
 
@@ -566,6 +572,8 @@ export async function init(options: InitOptions = {}): Promise<{ source: WebAsse
     const module = response.headers.get("content-type")?.startsWith("application/wasm")
         ? await WebAssembly.compileStreaming(response)
         : await WebAssembly.compile(await response.arrayBuffer());
+
+    Object.assign(handlers, createWorkerHandlers(getMemory, allocRef, options.workerScript));
 
     // Only for wasm built with the `fs` feature (it exports `__zx_fs`).
     const fsEnabled = (typeof __FEAT_FS__ === "undefined" || __FEAT_FS__) && options.fs !== false

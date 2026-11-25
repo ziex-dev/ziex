@@ -3,22 +3,24 @@ import { i64, type Handlers } from "./host";
 // Guest file ops run sync against an in-memory mirror; a Store persists it in the background.
 
 // Negative results; mapped back in `Io/Web/fs.zig`.
-const ENOENT = -2;
-const EBADF = -9;
-const EEXIST = -17;
-const ENOTDIR = -20;
-const EISDIR = -21;
-const EINVAL = -22;
-const ENOTEMPTY = -39;
+export const ENOENT = -2;
+export const EBADF = -9;
+export const EBUSY = -16;
+export const EEXIST = -17;
+export const ENOTDIR = -20;
+export const EISDIR = -21;
+export const EINVAL = -22;
+export const ENOSPC = -28;
+export const ENOTEMPTY = -39;
 
 // Mirrored in `Io/Web/fs.zig`.
-const O_READ = 1;
-const O_WRITE = 2;
-const O_CREATE = 4;
-const O_EXCLUSIVE = 8;
-const O_TRUNCATE = 16;
-const O_DIRECTORY = 32;
-const O_ALLOW_DIRECTORY = 64;
+export const O_READ = 1;
+export const O_WRITE = 2;
+export const O_CREATE = 4;
+export const O_EXCLUSIVE = 8;
+export const O_TRUNCATE = 16;
+export const O_DIRECTORY = 32;
+export const O_ALLOW_DIRECTORY = 64;
 
 export const ROOT_FD = 3;
 
@@ -46,16 +48,16 @@ export interface Store {
 
 type Op = { kind: "write" | "mkdir" | "remove"; path: string };
 
-function parent(path: string): string {
+export function parent(path: string): string {
     const i = path.lastIndexOf("/");
     return i <= 0 ? "/" : path.slice(0, i);
 }
 
-function basename(path: string): string {
+export function basename(path: string): string {
     return path.slice(path.lastIndexOf("/") + 1);
 }
 
-function join(dir: string, sub: string): string {
+export function join(dir: string, sub: string): string {
     const parts = sub.startsWith("/") ? [] : dir.split("/").filter(Boolean);
     for (const seg of sub.split("/")) {
         if (seg === "" || seg === ".") continue;

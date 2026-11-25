@@ -49,6 +49,7 @@ export const ops = [
     "fs_rename",
     "fs_readdir",
     "fs_sync",
+    "worker_call",
 ] as const;
 
 export type Op = (typeof ops)[number];

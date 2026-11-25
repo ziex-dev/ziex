@@ -94,14 +94,20 @@ async function instantiate(wasm: Uint8Array, vfs: Vfs) {
 const wasm = buildFixture();
 
 describe.skipIf(!wasm)("zx.Db.Sqlite on the browser file system (needs zig on PATH)", () => {
+    test("sqlite and libzigc add no host imports or exports", () => {
+        const mod = new WebAssembly.Module(wasm!);
+        expect(WebAssembly.Module.imports(mod).every((i) => i.module === "__zx")).toBe(true);
+        expect(WebAssembly.Module.exports(mod).map((e) => e.name)).not.toContain("errno");
+    });
+
     test("writes persist and a fresh mount reads them back", async () => {
         const { store, files } = mapStore();
         const first = new Vfs(store);
         expect(await (await instantiate(wasm!, first))("write")).toBe("");
         await first.flush();
         expect(files.get("/db/default.db")?.length).toBeGreaterThan(0);
-        // The rollback journal is gone once its transaction ends.
-        expect([...files.keys()].filter((p) => p.includes("journal"))).toEqual([]);
+        // Exclusive WAL is checkpointed and removed on close; no journal files are left.
+        expect([...files.keys()].filter((p) => p !== "/db/default.db")).toEqual([]);
 
         const second = new Vfs(store);
         await second.load();

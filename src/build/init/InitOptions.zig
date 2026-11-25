@@ -92,10 +92,15 @@ pub const AppOptions = struct {
             pub const SqliteClientOptions = struct {
                 pub const enabled: SqliteClientOptions = .{};
             };
+            // For `zx.worker` modules: built into client wasm without opening `zx.db` on the page.
+            pub const SqliteWorkerOptions = struct {
+                pub const enabled: SqliteWorkerOptions = .{};
+            };
             pub const enabled: SqliteOptions = .{ .server = .enabled };
 
             server: ?SqliteServerOptions = null,
             client: ?SqliteClientOptions = null,
+            worker: ?SqliteWorkerOptions = null,
         };
 
         /// Enable Postgres database client, available through `zx.Db.Postgres`.

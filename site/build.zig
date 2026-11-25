@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) !void {
     const jsbinding_name = b.fmt("app.{s}.js", .{id});
 
     const app_features: ziex.InitOptions.AppOptions.FeatureOptions = .{
-        .sqlite = .enabled,
+        .sqlite = .{ .server = .enabled, .worker = .enabled },
         // .postgres = .enabled,
         .kv = .enabled,
         .cache = .enabled,

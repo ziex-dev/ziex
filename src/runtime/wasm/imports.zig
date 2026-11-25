@@ -51,6 +51,7 @@ pub const Op = enum(u32) {
     fs_rename,
     fs_readdir,
     fs_sync,
+    worker_call,
 };
 
 // Returned by hosts that don't implement an op.
@@ -94,11 +95,11 @@ fn slots(args: anytype) [7]u32 {
         switch (@typeInfo(T)) {
             .pointer => |p| if (p.size == .slice or (p.size == .one and @typeInfo(p.child) == .array)) {
                 const slice: []const u8 = arg;
-                s[i] = @intFromPtr(slice.ptr);
-                s[i + 1] = slice.len;
+                s[i] = @truncate(@intFromPtr(slice.ptr));
+                s[i + 1] = @intCast(slice.len);
                 i += 2;
             } else {
-                s[i] = @intFromPtr(arg);
+                s[i] = @truncate(@intFromPtr(arg));
                 i += 1;
             },
             .int => |int| if (int.bits > 32) {
@@ -129,7 +130,15 @@ fn slots(args: anytype) [7]u32 {
     return s;
 }
 
-const ext = struct {
+const ext = if (@import("builtin").cpu.arch.isWasm()) struct {
     extern "__zx" fn call(op: u32, a: u32, b: u32, c: u32, d: u32, e: u32, f: u32, g: u32) i32;
     extern "__zx" fn wait(op: u32, a: u32, b: u32, c: u32, d: u32, e: u32, f: u32, g: u32) i32;
+} else struct {
+    // Native builds never reach a host; this only lets them compile code that could.
+    fn call(_: u32, _: u32, _: u32, _: u32, _: u32, _: u32, _: u32, _: u32) i32 {
+        return unsupported;
+    }
+    fn wait(_: u32, _: u32, _: u32, _: u32, _: u32, _: u32, _: u32, _: u32) i32 {
+        return unsupported;
+    }
 };

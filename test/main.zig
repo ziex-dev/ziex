@@ -26,6 +26,7 @@ test {
     _ = @import("core/web_smoke.zig");
     _ = @import("core/cache.zig");
     _ = @import("core/kv.zig");
+    _ = @import("core/worker.zig");
     _ = @import("core/secrets.zig");
     _ = @import("core/ai.zig");
     _ = @import("core/flag.zig");

@@ -182,6 +182,11 @@ pub const @"app.asset": Command = .{
             .default_value = "",
             .help = "Client wasm: prepend the browser binding shims it imports to a .js asset",
         }),
+        Argument.init(.@"href-out", []const u8, .{
+            .default_value = "",
+            .hidden = true,
+            .help = "Write the installed asset's URL (needs --href-stem) to this file",
+        }),
     },
     .positional_args = &.{
         Argument.init(.src, []const u8, .{

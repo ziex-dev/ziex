@@ -2,6 +2,7 @@ const std = @import("std");
 const html_util = @import("../util/html.zig");
 const build_zig = @import("../../build.zig");
 const CliConstant = @import("../cli/shared/constant.zig");
+const WorkerName = @import("../runtime/core/Worker/name.zig");
 pub const InitOptions = @import("init/InitOptions.zig");
 pub const BuildConfig = @import("init/BuildConfig.zig");
 
@@ -61,6 +62,18 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             .@"feature-sqlite" = if (features.sqlite) |s| s.client != null else false,
         });
         break :blk zx_wasm_dep.module("zx");
+    } else null;
+    // `zx.worker` wasm: sqlite here doesn't reach the page's wasm.
+    const zx_worker_module: ?*std.Build.Module = if (build_client_wasm) blk: {
+        const zx_worker_dep = b.dependencyFromBuildZig(build_zig, .{
+            .optimize = wasm_optimize,
+            .target = wasm_target,
+
+            .lsp = false,
+            .@"is-client" = true,
+            .@"feature-sqlite" = if (features.sqlite) |s| s.client != null or s.worker != null else false,
+        });
+        break :blk zx_worker_dep.module("zx");
     } else null;
 
     const ziex_js_root: LazyPath = blk: {
@@ -398,6 +411,8 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             app_main.addImport(import.name, wasm_module);
         }
 
+        const user_wasm_imports = b.allocator.dupe(std.Build.Module.Import, wasm_imports.items) catch @panic("OOM");
+
         var wasm_import_it = zx_wasm_module.?.import_table.iterator();
         while (wasm_import_it.next()) |entry| {
             try wasm_imports.append(.{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
@@ -437,19 +452,72 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             .stub_mode = opts.server_only_stub_mode,
         };
         // Client/wasm builds must not analyze Httpz (no httpz module on that dep).
-        wasm_app_module.addOptions("app_opts", addAppOpts(b, .{
+        const wasm_app_opts = addAppOpts(b, .{
             .base_path = opts.base_path,
             .server_port = config.port,
             .server_address = config.address,
             .cli_command = cli_command,
             .enable_httpz = false,
             .features = opts.features,
-        }));
+        });
+        wasm_app_module.addOptions("app_opts", wasm_app_opts);
 
         app_main.addImport("zx", wasm_app_module);
         if (fs_client) wasm_exe.root_module.addImport("zx", wasm_app_module);
         wasm_exe.step.dependOn(&transpile_cmd.step);
         client_root = wasm_exe.root_module;
+
+        // Workers get their own zx and app modules, from a zx built with worker-only features.
+        // Their URLs reach `zx.worker` in the page's wasm through `zx_worker_assets`.
+        const worker_paths = workerPaths(b, opts.site_path);
+        const worker_assets = b.addWriteFiles();
+        var worker_entries: std.ArrayList(u8) = .empty;
+        if (worker_paths.len > 0) {
+            const zx_worker = zx_worker_module.?;
+            var worker_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
+            try worker_imports.appendSlice(user_wasm_imports);
+            var it = zx_worker.import_table.iterator();
+            while (it.next()) |entry| try worker_imports.append(.{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
+            const worker_zx = b.createModule(.{
+                .root_source_file = zx_worker.root_source_file,
+                .target = wasm_target,
+                .optimize = zx_worker.optimize,
+                .imports = worker_imports.items,
+            });
+            var worker_app_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
+            try worker_app_imports.appendSlice(user_wasm_imports);
+            try worker_app_imports.append(.{ .name = "zx", .module = worker_zx });
+            const worker_app = b.createModule(.{
+                .root_source_file = transpile_store.path(b, "app.zig"),
+                .imports = worker_app_imports.items,
+            });
+            worker_zx.addImport("app", worker_app);
+            worker_zx.addOptions("app_opts", wasm_app_opts);
+            for (worker_paths, 0..) |rel, i| {
+                const worker = addWorker(b, rel, wasm_target, wasm_optimize, worker_zx, worker_app);
+                worker.root_module.strip = !is_dev_build;
+                worker.step.dependOn(&transpile_cmd.step);
+                const href = addWorkerAsset(b, zx_cli, opts, worker, rel, is_dev_build, use_stable_assets);
+                _ = worker_assets.addCopyFile(href, b.fmt("{d}.href", .{i}));
+                const type_name = WorkerName.typeNameFromPath(b.allocator.alloc(u8, rel.len) catch @panic("OOM"), rel);
+                worker_entries.print(b.allocator, "    .{{ \"{s}\", @embedFile(\"{d}.href\") }},\n", .{ type_name, i }) catch @panic("OOM");
+            }
+        }
+        wasm_app_module.addImport("zx_worker_assets", b.createModule(.{
+            .root_source_file = worker_assets.add("worker_assets.zig", b.fmt(
+                \\// `worker.zig` type name -> URL of its wasm.
+                \\pub fn href(comptime type_name: []const u8) []const u8 {{
+                \\    inline for (entries) |entry| {{
+                \\        if (comptime @import("std").mem.eql(u8, entry[0], type_name)) return entry[1];
+                \\    }}
+                \\    @compileError("zx.worker: " ++ type_name ++ " is not a worker.zig");
+                \\}}
+                \\
+                \\const entries = .{{
+                \\{s}}};
+                \\
+            , .{worker_entries.items})),
+        }));
 
         const wasm_binpath = wasm_exe.getEmittedBin();
         const zxjs_path = opts.ziex_js_root.path(b, if (is_dev_build) "wasm/init.dev.js" else "wasm/init.js");
@@ -799,6 +867,111 @@ fn appRun(b: *std.Build, zx_exe: *std.Build.Step.Compile, opts: Resolved) *std.B
 
 /// Newline-separated route files under `site_path`, relative to it. Every route
 /// directory is a configure dependency, so the list stays current under `--watch`.
+// `worker.zig` files under the route dirs, relative to the app root (`pages/foo/worker.zig`).
+fn workerPaths(b: *std.Build, site_path: std.Build.LazyPath) []const []const u8 {
+    const io = b.graph.io;
+    const owner = site_path.src_path.owner;
+    var rels: std.ArrayList([]const u8) = .empty;
+    for (CliConstant.route_dirnames) |dirname| {
+        const sub = b.pathJoin(&.{ site_path.src_path.sub_path, dirname });
+        var dir = owner.root.openDir(io, sub, .{ .iterate = true }) catch continue;
+        defer dir.close(io);
+        var walker = dir.walk(b.allocator) catch @panic("OOM");
+        defer walker.deinit();
+        while (walker.next(io) catch |err| std.debug.panic("unable to walk {s}: {t}", .{ sub, err })) |entry| {
+            if (entry.kind != .file or !std.mem.eql(u8, entry.basename, "worker.zig")) continue;
+            const rel = b.pathJoin(&.{ dirname, entry.path });
+            std.mem.replaceScalar(u8, rel, '\\', '/');
+            rels.append(b.allocator, rel) catch @panic("OOM");
+        }
+    }
+    return rels.items;
+}
+
+// One wasm per `worker.zig`, at `assets/_/workers/<name>.wasm` where `zx.worker` looks for it.
+fn addWorker(
+    b: *std.Build,
+    rel: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: ?std.builtin.OptimizeMode,
+    zx_module: *std.Build.Module,
+    app_module: *std.Build.Module,
+) *std.Build.Step.Compile {
+    const type_name = WorkerName.typeNameFromPath(b.allocator.alloc(u8, rel.len) catch @panic("OOM"), rel);
+    const asset = WorkerName.asset(b.allocator.alloc(u8, type_name.len) catch @panic("OOM"), type_name);
+    const root = b.addWriteFiles().add("worker_root.zig", b.fmt(
+        \\const zx = @import("zx");
+        \\const app = @import("app");
+        \\
+        \\pub const zx_worker = true;
+        \\pub const std_options = zx.std_options;
+        \\pub const std_options_cwd = zx.Io.Web.cwd;
+        \\
+        \\comptime {{
+        \\    zx.Worker.serve(app.workers.@"{s}");
+        \\}}
+        \\
+    , .{type_name}));
+    const exe = b.addExecutable(.{
+        .name = b.fmt("worker-{s}", .{asset}),
+        .root_module = b.createModule(.{
+            .root_source_file = root,
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zx", .module = zx_module },
+                .{ .name = "app", .module = app_module },
+            },
+        }),
+    });
+    exe.entry = .disabled;
+    exe.export_memory = true;
+    exe.rdynamic = true;
+    // Workers always get files: OPFS sync access handles.
+    withFdHandles(b, exe);
+    return exe;
+}
+
+// Installs a worker's wasm like the app's: `assets/_/<route>/worker.dev.wasm` in dev,
+// `worker.<hash>.wasm` otherwise. Returns a file holding its URL.
+fn addWorkerAsset(
+    b: *std.Build,
+    zx_cli: *std.Build.Step.Compile,
+    opts: Resolved,
+    exe: *std.Build.Step.Compile,
+    rel: []const u8,
+    is_dev_build: bool,
+    stable: bool,
+) LazyPath {
+    // `pages/examples/worker/worker.zig` -> `examples/worker`.
+    const dir = std.fs.path.dirname(rel) orelse "";
+    const route = if (std.mem.indexOfScalar(u8, dir, '/')) |i| dir[i + 1 ..] else "";
+    const sub = if (route.len == 0) "_" else b.fmt("_/{s}", .{route});
+    const stem = if (is_dev_build) "worker.dev" else "worker";
+
+    const run = cliRun(b, zx_cli, opts);
+    run.setName(b.fmt("install worker {s}", .{rel}));
+    run.addArgs(&.{ "app", "asset" });
+    run.addFileArg(exe.getEmittedBin());
+    run.addArg("--outdir");
+    const out = run.addOutputDirectoryArg("asset");
+    run.addArgs(&.{ "--file-stem", stem, "--ext", ".wasm", "--clean" });
+    run.addArgs(&.{ "--href-stem", html_util.prefixPathWithBasePath(b.allocator, opts.base_path, b.fmt("/assets/{s}/{s}", .{ sub, stem })) });
+    if (stable) run.addArg("--no-hash");
+    run.addArg("--href-out");
+    const href = run.addOutputFileArg("href");
+    run.expectExitCode(0);
+
+    const install = b.addInstallDirectory(.{
+        .source_dir = out,
+        .install_dir = .{ .custom = "static/assets/" },
+        .install_subdir = sub,
+    });
+    install.step.dependOn(&run.step);
+    b.getInstallStep().dependOn(&install.step);
+    return href;
+}
+
 fn routeRoots(b: *std.Build, site_path: std.Build.LazyPath) []const u8 {
     const io = b.graph.io;
     const owner = site_path.src_path.owner;

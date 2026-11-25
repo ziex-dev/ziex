@@ -971,6 +971,11 @@ fn configureConnection(conn: Conn, busy_timeout_ms: c_int) !void {
     if (busy_timeout_ms > 0) {
         try conn.busyTimeout(busy_timeout_ms);
     }
+    // One connection per file in the browser. Exclusive WAL keeps the WAL open and
+    // appends to it instead of creating and deleting a journal per transaction, and
+    // needs no shared memory; ~50x faster writes on OPFS. NORMAL is SQLite's WAL default
+    // advice: always consistent, an OS crash may drop the latest commits.
+    if (browser) try conn.exec("PRAGMA locking_mode=EXCLUSIVE; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
 }
 
 fn openFlags(options: OpenOptions) c_int {

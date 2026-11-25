@@ -1,0 +1,34 @@
+pub fn Page(ctx: zx.PageContext) zx.Component {
+    return (
+        <main @allocator={ctx.arena} class="example-page">
+            <header class="example-header">
+                <h1>Worker</h1>
+                <p>SQLite running in a Web Worker, called like a local function.</p>
+            </header>
+            <Notes @client />
+        </main>
+    );
+}
+
+pub fn Notes(ctx: *zx.ComponentContext) zx.Component {
+    const total = ctx.state(i64, 0);
+    return (
+        <div @allocator={ctx.allocator}>
+            <button onclick={ctx.bind(addNote)}>Add note</button>
+            <span>Notes stored: {total}</span>
+        </div>
+    );
+}
+
+const notes = zx.worker(@import("worker.zig"));
+
+fn addNote(e: *zx.client.Event.Stateful) void {
+    const total = e.state(i64);
+    const n = notes.add("hello from the page") catch |err| {
+        zx.log.err("worker: {t}", .{err});
+        return;
+    };
+    total.set(n);
+}
+
+const zx = @import("zx");

@@ -1,4 +1,6 @@
-// Browser file system for `Io.Web`: sync ops against the host's OPFS mirror (runtime/fs.ts).
+// Browser file system for `Io.Web`. On the page it's an in-memory OPFS mirror (runtime/fs.ts);
+// in a Worker, OPFS sync access handles (runtime/fs_worker.ts), whose path ops are async and
+// so go through `host.wait`. File reads and writes never suspend.
 const std = @import("std");
 const Io = std.Io;
 const File = Io.File;
@@ -77,6 +79,8 @@ fn fail(comptime E: type, rc: i32) E {
     const names: []const []const u8 = switch (rc) {
         -2 => &.{"FileNotFound"},
         -9 => &.{ "NotOpenForReading", "NotOpenForWriting" },
+        // Another tab holds the file's sync access handle.
+        -16 => &.{ "FileBusy", "DeviceBusy", "AccessDenied" },
         -13 => &.{"AccessDenied"},
         -17 => &.{"PathAlreadyExists"},
         -20 => &.{"NotDir"},
@@ -96,23 +100,23 @@ fn fail(comptime E: type, rc: i32) E {
 }
 
 fn open(comptime E: type, dir: Dir, sub_path: []const u8, flags: u32) E!i32 {
-    const rc = host.call(.fs_open, .{ dir.handle, sub_path, flags });
+    const rc = host.wait(.fs_open, .{ dir.handle, sub_path, flags });
     return if (rc < 0) fail(E, rc) else rc;
 }
 
 fn statAt(comptime E: type, fd: i32, sub_path: []const u8) E!File.Stat {
     var s: Stat = undefined;
-    const rc = host.call(.fs_stat, .{ fd, sub_path, &s });
+    const rc = host.wait(.fs_stat, .{ fd, sub_path, &s });
     return if (rc < 0) fail(E, rc) else s.toFile();
 }
 
 fn dirCreateDir(_: ?*anyopaque, dir: Dir, sub_path: []const u8, _: Dir.Permissions) Dir.CreateDirError!void {
-    const rc = host.call(.fs_mkdir, .{ dir.handle, sub_path, false });
+    const rc = host.wait(.fs_mkdir, .{ dir.handle, sub_path, false });
     if (rc < 0) return fail(Dir.CreateDirError, rc);
 }
 
 fn dirCreateDirPath(_: ?*anyopaque, dir: Dir, sub_path: []const u8, _: Dir.Permissions) Dir.CreateDirPathError!Dir.CreatePathStatus {
-    const rc = host.call(.fs_mkdir, .{ dir.handle, sub_path, true });
+    const rc = host.wait(.fs_mkdir, .{ dir.handle, sub_path, true });
     if (rc < 0) return fail(Dir.CreateDirPathError, rc);
     return if (rc == 1) .existed else .created;
 }
@@ -224,7 +228,7 @@ fn dirRead(_: ?*anyopaque, r: *Dir.Reader, entries: []Dir.Entry) Dir.Reader.Erro
             if (r.state == .finished) break;
             const reset = r.state == .reset;
             r.state = .reading;
-            const rc = host.call(.fs_readdir, .{ r.dir.handle, reset, r.buffer });
+            const rc = host.wait(.fs_readdir, .{ r.dir.handle, reset, r.buffer });
             if (rc < 0) return fail(Dir.Reader.Error, rc);
             r.index = 0;
             r.end = @intCast(rc);
@@ -247,22 +251,22 @@ fn dirRead(_: ?*anyopaque, r: *Dir.Reader, entries: []Dir.Entry) Dir.Reader.Erro
 }
 
 fn dirDeleteFile(_: ?*anyopaque, dir: Dir, sub_path: []const u8) Dir.DeleteFileError!void {
-    const rc = host.call(.fs_remove, .{ dir.handle, sub_path, false });
+    const rc = host.wait(.fs_remove, .{ dir.handle, sub_path, false });
     if (rc < 0) return fail(Dir.DeleteFileError, rc);
 }
 
 fn dirDeleteDir(_: ?*anyopaque, dir: Dir, sub_path: []const u8) Dir.DeleteDirError!void {
-    const rc = host.call(.fs_remove, .{ dir.handle, sub_path, true });
+    const rc = host.wait(.fs_remove, .{ dir.handle, sub_path, true });
     if (rc < 0) return fail(Dir.DeleteDirError, rc);
 }
 
 fn dirRename(_: ?*anyopaque, old_dir: Dir, old_sub_path: []const u8, new_dir: Dir, new_sub_path: []const u8) Dir.RenameError!void {
-    const rc = host.call(.fs_rename, .{ old_dir.handle, old_sub_path, new_dir.handle, new_sub_path, true });
+    const rc = host.wait(.fs_rename, .{ old_dir.handle, old_sub_path, new_dir.handle, new_sub_path, true });
     if (rc < 0) return fail(Dir.RenameError, rc);
 }
 
 fn dirRenamePreserve(_: ?*anyopaque, old_dir: Dir, old_sub_path: []const u8, new_dir: Dir, new_sub_path: []const u8) Dir.RenamePreserveError!void {
-    const rc = host.call(.fs_rename, .{ old_dir.handle, old_sub_path, new_dir.handle, new_sub_path, false });
+    const rc = host.wait(.fs_rename, .{ old_dir.handle, old_sub_path, new_dir.handle, new_sub_path, false });
     if (rc < 0) return fail(Dir.RenamePreserveError, rc);
 }
 

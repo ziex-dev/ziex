@@ -6,6 +6,7 @@ const Manifest = @import("../build/Manifest.zig");
 const context = @import("shared/context.zig");
 const cli_args = @import("root.zig");
 const CliConstant = @import("shared/constant.zig");
+const WorkerName = @import("../runtime/core/Worker/name.zig");
 
 const CommandContext = context.CommandContext;
 pub const command = cli_args.transpile;
@@ -1301,6 +1302,8 @@ fn genRoutes(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8, _
         try writer.print("    .{{ \"{s}\", @import(\"{s}\"), {} }},\n", .{ module.path, module.path, module.client });
     }
     try writer.writeAll("};\n\n");
+    try writeWorkers(io, allocator, writer, output_dir);
+
     try writer.writeAll("const zx = @import(\"zx\");\n");
 
     const meta_path = try std.fs.path.join(allocator, &.{ output_dir, "app.zig" });
@@ -1319,6 +1322,41 @@ fn genRoutes(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8, _
     try writeFile(io, meta_path, rendered_zig_source);
 
     if (verbose) std.debug.print("Generated app.zig at: {s}\n", .{meta_path});
+}
+
+// `worker.zig` modules, keyed by `@typeName`; each is built into its own wasm.
+fn writeWorkers(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.Writer, output_dir: []const u8) !void {
+    var rels: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (rels.items) |r| allocator.free(r);
+        rels.deinit(allocator);
+    }
+    for (CliConstant.route_dirnames) |dirname| {
+        const sub = try std.fs.path.join(allocator, &.{ output_dir, dirname });
+        defer allocator.free(sub);
+        var dir = std.Io.Dir.cwd().openDir(io, sub, .{ .iterate = true }) catch continue;
+        defer dir.close(io);
+        var walker = try dir.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next(io)) |entry| {
+            if (entry.kind != .file or !std.mem.eql(u8, entry.basename, "worker.zig")) continue;
+            const rel = try std.fs.path.join(allocator, &.{ dirname, entry.path });
+            std.mem.replaceScalar(u8, rel, '\\', '/');
+            try rels.append(allocator, rel);
+        }
+    }
+    std.mem.sort([]const u8, rels.items, {}, struct {
+        fn less(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.order(u8, a, b) == .lt;
+        }
+    }.less);
+
+    try writer.writeAll("pub const workers = struct {\n");
+    for (rels.items) |rel| {
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        try writer.print("    pub const @\"{s}\" = @import(\"{s}\");\n", .{ WorkerName.typeNameFromPath(&buf, rel), rel });
+    }
+    try writer.writeAll("};\n\n");
 }
 
 fn writeRoute(writer: anytype, route: Route) !void {
