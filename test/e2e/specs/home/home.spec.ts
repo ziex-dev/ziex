@@ -36,7 +36,10 @@ test.describe('Home page (Zig)', () => {
     const errors = collectErrors(page);
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    const scripts = await page.$$eval('script[src]', (els) => els.map((e) => e.getAttribute('src')!));
+    // Same-origin only: release builds also load analytics (GTM / Clarity).
+    const scripts = await page.$$eval('script[src]', (els) =>
+      els.map((e) => (e as HTMLScriptElement).src).filter((s) => new URL(s).origin === location.origin),
+    );
     const page_scripts = scripts.filter((s) => !/\/assets\/(_\/)?app[.\w]*\.js|devscript\.js/.test(s));
     expect(page_scripts).toEqual([]);
     expect(errors).toEqual([]);

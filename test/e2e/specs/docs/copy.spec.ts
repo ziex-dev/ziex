@@ -28,9 +28,8 @@ test.describe('Docs copy buttons', () => {
     expect(Math.max(...counts)).toBe(1);
   });
 
-  test('docs.js no longer ships the clipboard script', async ({ page }) => {
+  test('docs.js is no longer shipped', async ({ page }) => {
     const res = await page.request.get('/assets/docs.js');
-    expect(res.ok()).toBeTruthy();
-    expect(await res.text()).not.toContain('copyButtonHTML');
+    expect(res.status()).toBe(404);
   });
 });

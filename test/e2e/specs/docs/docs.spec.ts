@@ -10,7 +10,9 @@ import {
 test.describe('Docs pages', () => {
   test('load no page script besides the ziex runtime', async ({ page }) => {
     await page.goto('/learn');
-    const scripts = await page.$$eval('script[src]', (els) => els.map((e) => e.getAttribute('src')!));
+    const scripts = await page.$$eval('script[src]', (els) =>
+      els.map((e) => (e as HTMLScriptElement).src).filter((s) => new URL(s).origin === location.origin),
+    );
     expect(scripts.filter((s) => !/\/assets\/(_\/)?app[.\w]*\.js|devscript\.js/.test(s))).toEqual([]);
   });
 

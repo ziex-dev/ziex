@@ -6,7 +6,11 @@ test.describe('WebGPU Example', () => {
   test.describe('with WebGPU', () => {
     test('renders the embedded WGSL triangle every frame', async ({ browserName, baseURL }) => {
       test.skip(browserName !== 'chromium', 'WebGPU flag is chromium-only');
-      const browser = await chromium.launch({ channel: 'chromium', args: ['--enable-unsafe-webgpu'] });
+      const linux_args = ['--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--disable-vulkan-surface'];
+      const browser = await chromium.launch({
+        channel: 'chromium',
+        args: ['--enable-unsafe-webgpu', ...(process.platform === 'linux' ? linux_args : [])],
+      });
       test.info().attach('browser', { body: browser.version() });
       const page = await (await browser.newContext({ baseURL })).newPage();
       const warnings: string[] = [];
