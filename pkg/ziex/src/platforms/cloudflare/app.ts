@@ -31,6 +31,7 @@ export function stateful<Env>(app: Ziex<Env>, options: StatefulOptions<Env>) {
         kv: (env) => host.kv(env as Env) ?? defaultKV(),
         db: (env) => host.db(env as Env) ?? {},
         email: (env) => host.email(env as Env),
+        bucket: (env) => host.bucket(env as Env),
         imports: host.imports,
     });
 }

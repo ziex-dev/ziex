@@ -7,6 +7,7 @@ import type { WASI } from "./wasi";
 import type { KVNamespace } from "./kv";
 import type { Database } from "./db";
 import type { EmailBinding } from "./email";
+import type { BucketBinding } from "./bucket";
 
 export { createHttpHandlers } from "./http";
 export { createWsHandlers, attachWebSocket } from "./ws";
@@ -30,6 +31,8 @@ export type RunOptions = {
     db?: Record<string, Database>;
     /** Email bindings - `{ default: env.EMAIL }` */
     email?: Record<string, EmailBinding>;
+    /** Bucket bindings - `{ default: env.BUCKET }` */
+    bucket?: Record<string, BucketBinding>;
     imports?: ImportsFactory;
     wasi?: WASI;
     /**
@@ -67,6 +70,7 @@ export async function run({
     kv = defaultKV(),
     db = {},
     email,
+    bucket,
     imports,
     wasi,
     sticky,
@@ -86,12 +90,12 @@ export async function run({
         : undefined;
 
     if (reuse && hasJspi && !isUpgrade && supportsReuse(module)) {
-        return serveReused({ module, request, stdinData, env, kv, db, email, imports, wasi });
+        return serveReused({ module, request, stdinData, env, kv, db, email, bucket, imports, wasi });
     }
 
     const http = newHttpState();
     const ws = newWsState();
-    const { instance } = instantiate({ module, request, stdinData, env, kv, db, email, imports, wasi, http, ws });
+    const { instance } = instantiate({ module, request, stdinData, env, kv, db, email, bucket, imports, wasi, http, ws });
     const done = start(instance, ws);
 
     // start() runs synchronously until the first suspension (`ws_recv` for sockets),

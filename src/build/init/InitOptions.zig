@@ -205,6 +205,29 @@ pub const AppOptions = struct {
             server: ?EmailServerOptions = null,
         };
 
+        // `zx.bucket`, S3-compatible object storage. Without a provider, objects live under
+        // `<datadir>/bucket` natively and go through the edge host's bucket binding on wasm
+        // (e.g. Cloudflare R2 with `new Ziex({ bucket: "BUCKET" })`). `.s3` reads
+        // `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_SESSION_TOKEN`, `S3_REGION`,
+        // `S3_ENDPOINT` and `S3_BUCKET`, or the same `AWS_*` names.
+        pub const BucketOptions = struct {
+            pub const Provider = enum { fs, wasm, s3 };
+            pub const BucketServerOptions = struct {
+                pub const enabled: BucketServerOptions = .{};
+
+                provider: ?Provider = null,
+                // Wasm only: the host binding name.
+                binding: ?[]const u8 = null,
+                // S3 only; the env overrides these.
+                bucket: ?[]const u8 = null,
+                endpoint: ?[]const u8 = null,
+                region: ?[]const u8 = null,
+            };
+            pub const enabled: BucketOptions = .{ .server = .enabled };
+
+            server: ?BucketServerOptions = null,
+        };
+
         pub const default = FeatureOptions{};
 
         sqlite: ?SqliteOptions = null,
@@ -215,6 +238,7 @@ pub const AppOptions = struct {
         ai: ?AiOptions = null,
         flag: ?FlagOptions = null,
         email: ?EmailOptions = null,
+        bucket: ?BucketOptions = null,
     };
 
     /// Path to the Ziex app source directory.

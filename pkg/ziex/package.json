@@ -18,7 +18,8 @@
     "./vercel": "./platforms/vercel/index.js",
     "./kv": "./runtime/kv.js",
     "./db": "./runtime/db.js",
-    "./email": "./runtime/email.js"
+    "./email": "./runtime/email.js",
+    "./bucket": "./runtime/bucket.js"
   },
   "homepage": "https://ziex.dev",
   "repository": {
@@ -41,7 +42,7 @@
   "license": "MIT",
   "scripts": {
     "build": "zig build -p dist -Dfrom-source=true",
-    "test": "bun test src/runtime/wire.test.ts src/runtime/host.test.ts src/runtime/kv.test.ts src/runtime/fs.test.ts src/runtime/db.test.ts",
+    "test": "bun test src/runtime/wire.test.ts src/runtime/host.test.ts src/runtime/kv.test.ts src/runtime/fs.test.ts src/runtime/db.test.ts src/runtime/bucket.test.ts",
     "test:jspi": "node --experimental-wasm-jspi --test src/runtime/jspi.test.ts",
     "publish": "zig build -p dist -Dfrom-source=true && cd dist && npm publish"
   },

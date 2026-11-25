@@ -5,6 +5,7 @@ import { hasJspi, promising } from "../../runtime/jspi";
 import type { KVNamespace } from "../../runtime/kv";
 import type { Database } from "../../runtime/db";
 import type { EmailBinding } from "../../runtime/email";
+import type { BucketBinding } from "../../runtime/bucket";
 
 type ConnState = WsState & { topics: Set<string> };
 
@@ -66,6 +67,7 @@ export function createStatefulFetch(
         kv?: (env: any) => Record<string, KVNamespace>;
         db?: (env: any) => Record<string, Database>;
         email?: (env: any) => Record<string, EmailBinding> | undefined;
+        bucket?: (env: any) => Record<string, BucketBinding> | undefined;
         imports?: ImportsFactory;
     },
 ) {
@@ -98,6 +100,7 @@ export function createStatefulFetch(
                 kv: options?.kv?.(this.env) ?? defaultKV(),
                 db: options?.db?.(this.env) ?? {},
                 email: options?.email?.(this.env),
+                bucket: options?.bucket?.(this.env),
                 imports: options?.imports,
                 http: newHttpState(),
                 ws: conn,

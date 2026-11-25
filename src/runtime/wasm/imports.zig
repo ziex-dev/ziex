@@ -52,6 +52,18 @@ pub const Op = enum(u32) {
     fs_readdir,
     fs_sync,
     worker_call,
+    bucket_head,
+    bucket_get,
+    bucket_put,
+    bucket_delete,
+    bucket_list,
+    bucket_open,
+    bucket_read,
+    bucket_close,
+    bucket_upload,
+    bucket_upload_part,
+    bucket_upload_finish,
+    bucket_upload_abort,
 };
 
 // Returned by hosts that don't implement an op.

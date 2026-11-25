@@ -79,6 +79,7 @@ fn buildFromSource(b: *std.Build, dist_files: *std.Build.Step.WriteFile, opts: F
                 b.path("src/runtime/kv.ts"),
                 b.path("src/runtime/db.ts"),
                 b.path("src/runtime/email.ts"),
+                b.path("src/runtime/bucket.ts"),
                 b.path("src/platforms/cloudflare/index.ts"),
                 b.path("src/platforms/aws-lambda/index.ts"),
                 b.path("src/platforms/vercel/index.ts"),

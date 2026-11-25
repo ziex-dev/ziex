@@ -93,6 +93,7 @@ pub const Router = app_mod.Router;
 // --- Storage --- //
 pub const Db = @import("runtime/core/Db.zig");
 pub const Kv = @import("runtime/core/Kv.zig");
+pub const Bucket = @import("runtime/core/Bucket.zig");
 pub const Worker = @import("runtime/core/Worker.zig");
 
 // Proxies in the main client wasm; direct calls on the server and inside the worker itself.
@@ -118,6 +119,7 @@ pub const Secrets = @import("runtime/core/Secrets.zig");
 
 pub var db: Db = .failing;
 pub var kv: Kv = .failing;
+pub var bucket: Bucket = .failing;
 pub var cache: Cache = .failing;
 pub var ai: Ai = .failing;
 pub var flag: Flag = .failing;

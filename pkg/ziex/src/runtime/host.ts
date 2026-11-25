@@ -50,6 +50,18 @@ export const ops = [
     "fs_readdir",
     "fs_sync",
     "worker_call",
+    "bucket_head",
+    "bucket_get",
+    "bucket_put",
+    "bucket_delete",
+    "bucket_list",
+    "bucket_open",
+    "bucket_read",
+    "bucket_close",
+    "bucket_upload",
+    "bucket_upload_part",
+    "bucket_upload_finish",
+    "bucket_upload_abort",
 ] as const;
 
 export type Op = (typeof ops)[number];

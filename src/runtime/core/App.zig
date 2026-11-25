@@ -238,6 +238,11 @@ var email_wasm: zx.Email.Wasm = undefined;
 var email_memory: ?zx.Email.Memory = null;
 var email_env: std.heap.ArenaAllocator = undefined;
 
+var bucket_fs: zx.Bucket.Fs = undefined;
+var bucket_wasm: zx.Bucket.Wasm = undefined;
+var bucket_s3: zx.Bucket.S3 = undefined;
+var bucket_env: std.heap.ArenaAllocator = undefined;
+
 var secrets_env: ?zx.Secrets.Env = null;
 var secrets_wasm: zx.Secrets.Wasm = .{};
 var secrets_stores: [2]zx.Secrets = undefined;
@@ -327,6 +332,11 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
                 if (os == .wasi) initEmail(alloc, inita);
             }
 
+            // Feature ==> zx.bucket
+            if (comptime app_opts.feat_bucket_server) {
+                if (os == .wasi) try initBucket(alloc, inita, datadir);
+            }
+
             return cfg;
         },
         else => {},
@@ -384,6 +394,9 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
 
     // Feature ==> zx.email
     if (comptime app_opts.feat_email_server) initEmail(alloc, inita);
+
+    // Feature ==> zx.bucket
+    if (comptime app_opts.feat_bucket_server) try initBucket(alloc, inita, datadir);
 
     resolved.datadir = datadir;
     resolved.staticdir = staticdir;
@@ -476,6 +489,43 @@ fn initEmail(alloc: std.mem.Allocator, inita: zx.Init) void {
     };
 }
 
+fn initBucket(alloc: std.mem.Allocator, inita: zx.Init, datadir: []const u8) !void {
+    bucket_env = .init(alloc);
+    const env = bucket_env.allocator();
+    const provider: zx.Bucket.Provider = comptime if (app_opts.bucket_provider) |p|
+        std.meta.stringToEnum(zx.Bucket.Provider, p).?
+    else if (platform.os == .wasi) .wasm else .fs;
+
+    zx.bucket = switch (provider) {
+        .s3 => blk: {
+            bucket_s3 = .{
+                .io = inita.io,
+                .allocator = alloc,
+                .access_key_id = firstEnvVar(env, &zx.Bucket.S3.env.access_key_id) orelse "",
+                .secret_access_key = firstEnvVar(env, &zx.Bucket.S3.env.secret_access_key) orelse "",
+                .session_token = firstEnvVar(env, &zx.Bucket.S3.env.session_token) orelse "",
+                .region = firstEnvVar(env, &zx.Bucket.S3.env.region) orelse app_opts.bucket_region orelse "",
+                .endpoint = firstEnvVar(env, &zx.Bucket.S3.env.endpoint) orelse app_opts.bucket_endpoint orelse "",
+                .bucket_name = firstEnvVar(env, &zx.Bucket.S3.env.bucket_name) orelse app_opts.bucket_name orelse "",
+            };
+            break :blk bucket_s3.bucket();
+        },
+        // A directory can't be reached from wasm, and a host binding not from native.
+        .wasm, .fs => if (platform.os == .wasi) blk: {
+            bucket_wasm = .{ .binding = app_opts.bucket_binding orelse "default" };
+            break :blk bucket_wasm.bucket();
+        } else blk: {
+            bucket_fs = .{ .io = inita.io, .root = try std.fs.path.join(env, &.{ datadir, "bucket" }) };
+            break :blk bucket_fs.bucket();
+        },
+    };
+}
+
+fn firstEnvVar(alloc: std.mem.Allocator, names: []const []const u8) ?[]const u8 {
+    for (names) |name| if (envVar(alloc, name)) |v| return v;
+    return null;
+}
+
 fn initEmailMemory(alloc: std.mem.Allocator, inita: zx.Init) zx.Email {
     email_memory = .init(alloc, inita.io);
     email_memory.?.log = true;
@@ -535,6 +585,12 @@ fn freeResolved(alloc: std.mem.Allocator) void {
         if (email_memory) |*m| m.deinit();
         email_memory = null;
         email_env.deinit();
+    }
+
+    // Feature ==> zx.bucket
+    if (comptime app_opts.feat_bucket_server) {
+        zx.bucket = .failing;
+        bucket_env.deinit();
     }
 
     if (resolved.staticdir) |s| alloc.free(s);

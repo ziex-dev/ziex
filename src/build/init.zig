@@ -844,6 +844,13 @@ fn addAppOpts(b: *std.Build, params: AppOptsParams) *std.Build.Step.Options {
     app_opts.addOption(?[]const u8, "email_from", email.from);
     app_opts.addOption(?[]const u8, "email_base_url", email.base_url);
     app_opts.addOption(?[]const u8, "email_binding", email.binding);
+    const bucket: InitOptions.AppOptions.FeatureOptions.BucketOptions.BucketServerOptions = if (params.features.bucket) |o| o.server orelse .{} else .{};
+    app_opts.addOption(bool, "feat_bucket_server", if (params.features.bucket) |o| o.server != null else false);
+    app_opts.addOption(?[]const u8, "bucket_provider", if (bucket.provider) |p| @tagName(p) else null);
+    app_opts.addOption(?[]const u8, "bucket_binding", bucket.binding);
+    app_opts.addOption(?[]const u8, "bucket_name", bucket.bucket);
+    app_opts.addOption(?[]const u8, "bucket_endpoint", bucket.endpoint);
+    app_opts.addOption(?[]const u8, "bucket_region", bucket.region);
     return app_opts;
 }
 

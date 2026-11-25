@@ -41,6 +41,12 @@ pub fn configure(b: *std.Build, zx_mod: *std.Build.Module, opts: Options) *std.B
     app_opts.addOption(?[]const u8, "email_from", null);
     app_opts.addOption(?[]const u8, "email_base_url", null);
     app_opts.addOption(?[]const u8, "email_binding", null);
+    app_opts.addOption(bool, "feat_bucket_server", false);
+    app_opts.addOption(?[]const u8, "bucket_provider", null);
+    app_opts.addOption(?[]const u8, "bucket_binding", null);
+    app_opts.addOption(?[]const u8, "bucket_name", null);
+    app_opts.addOption(?[]const u8, "bucket_endpoint", null);
+    app_opts.addOption(?[]const u8, "bucket_region", null);
     zx_mod.addOptions("app_opts", app_opts);
 
     if (opts.enable_httpz) {

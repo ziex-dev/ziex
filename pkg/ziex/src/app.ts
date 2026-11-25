@@ -3,6 +3,7 @@ import type { StickyNamespace } from "./runtime";
 import type { KVNamespace } from "./runtime/kv";
 import type { Database } from "./runtime/db";
 import type { EmailBinding } from "./runtime/email";
+import type { BucketBinding } from "./runtime/bucket";
 import type { WASI } from "./runtime/wasi";
 
 /**
@@ -75,6 +76,11 @@ type DBKey<Env> = {
     [K in keyof Env]-?: Env[K] extends { prepare(query: string): any } ? K : never;
 }[keyof Env];
 
+/** Keys of `Env` with an object storage binding (e.g. Cloudflare R2). */
+type BucketKey<Env> = {
+    [K in keyof Env]-?: Env[K] extends { head(key: string): any; list(...args: any[]): any } ? K : never;
+}[keyof Env];
+
 /** Keys of `Env` with an email `send()` binding (e.g. Cloudflare `send_email`). */
 type EmailKey<Env> = {
     [K in keyof Env]-?: Env[K] extends { send(message: any): any } ? K : never;
@@ -120,6 +126,16 @@ export type ZiexOptions<Env = Record<string, unknown>> = {
      * {@link EmailBinding} on `env`.
      */
     email?: EmailKey<Env> | Record<string, EmailKey<Env>>;
+    /**
+     * Bucket bindings behind `zx.bucket` with the wasm provider. Same shape as `kv`:
+     *
+     * - `"BUCKET"` maps `env.BUCKET` to the `"default"` binding.
+     * - `{ default: "BUCKET", media: "MEDIA_BUCKET" }` maps multiple bindings.
+     *
+     * A Cloudflare R2 binding works as is; elsewhere provide any
+     * {@link BucketBinding} on `env`.
+     */
+    bucket?: BucketKey<Env> | Record<string, BucketKey<Env>>;
     /**
      * Keep initialized instances alive and serve later requests on them instead of
      * instantiating the module per request. Needs JSPI and a module that exports
@@ -208,6 +224,7 @@ export class Ziex<Env = Record<string, unknown>> {
             kv: (env: Env) => this.resolveKV(env),
             db: (env: Env) => this.resolveDB(env),
             email: (env: Env) => this.resolveEmail(env),
+            bucket: (env: Env) => this.resolveBucket(env),
         };
     }
 
@@ -250,6 +267,19 @@ export class Ziex<Env = Record<string, unknown>> {
         return { default: env[email as keyof Env] as unknown as EmailBinding };
     }
 
+    private resolveBucket(env: Env): Record<string, BucketBinding> | undefined {
+        const { bucket } = this.options;
+        if (bucket === undefined) return undefined;
+        if (typeof bucket === "object" && bucket !== null) {
+            const result: Record<string, BucketBinding> = {};
+            for (const [name, key] of Object.entries(bucket)) {
+                result[name] = env[key as keyof Env] as unknown as BucketBinding;
+            }
+            return result;
+        }
+        return { default: env[bucket as keyof Env] as unknown as BucketBinding };
+    }
+
     /**
      * Fetch handler called by the runtime on every request.
      *
@@ -274,6 +304,7 @@ export class Ziex<Env = Record<string, unknown>> {
             kv: this.resolveKV(env),
             db: this.resolveDB(env),
             email: this.resolveEmail(env),
+            bucket: this.resolveBucket(env),
             sticky:
                 sticky !== undefined
                     ? (env[sticky as keyof Env] as unknown as StickyNamespace)

@@ -175,8 +175,12 @@ pub fn fetchThenErased(client: *Client, options: FetchOptions, context: *anyopaq
 pub const Body = struct {
     status: Status,
     reader: *std.Io.Reader,
+    // Response headers; empty from hosts that don't report them.
+    headers: []const Header = &.{},
     allocator: std.mem.Allocator,
     transport: Transport,
+    // Backing memory for `headers`.
+    head: []const u8 = &.{},
 
     const Transport = if (is_wasm) struct {
         handle: u32,
@@ -192,7 +196,28 @@ pub const Body = struct {
 
     pub fn close(body: *Body) void {
         if (comptime is_wasm) _ = imports.call(.net_close, .{body.transport.handle}) else body.transport.request.deinit();
+        body.allocator.free(body.headers);
+        body.allocator.free(body.head);
         body.allocator.destroy(body);
+    }
+
+    /// First header with `name`, compared case-insensitively.
+    pub fn header(body: *const Body, name: []const u8) ?[]const u8 {
+        for (body.headers) |h| {
+            if (std.ascii.eqlIgnoreCase(h.name, name)) return h.value;
+        }
+        return null;
+    }
+
+    // Takes ownership of `head`, a raw HTTP/1.1 response head.
+    fn setHead(body: *Body, head: []const u8) error{OutOfMemory}!void {
+        errdefer body.allocator.free(head);
+        var headers: std.ArrayList(Header) = .empty;
+        errdefer headers.deinit(body.allocator);
+        var it = std.http.HeaderIterator.init(head);
+        while (it.next()) |h| try headers.append(body.allocator, h);
+        body.headers = try headers.toOwnedSlice(body.allocator);
+        body.head = head;
     }
 
     fn stream(r: *std.Io.Reader, w: *std.Io.Writer, limit: std.Io.Limit) std.Io.Reader.StreamError!usize {
@@ -212,6 +237,8 @@ pub fn open(client: *Client, options: FetchOptions) Error!*Body {
     const body = try client.allocator.create(Body);
     errdefer client.allocator.destroy(body);
     body.allocator = client.allocator;
+    body.headers = &.{};
+    body.head = &.{};
     if (comptime is_wasm) try openHost(body, options) else try client.openNative(body, options);
     return body;
 }
@@ -226,12 +253,20 @@ fn openHost(body: *Body, options: FetchOptions) Error!void {
 
     var status: u16 = 0;
     var handle: u32 = 0;
+    var head_ptr: [*]u8 = undefined;
     const req = host.request(options, method, headers, payload, 0);
-    const rc = imports.wait(.net_open, .{ &req, &status, &handle });
+    // A positive result is the length of the response head the host wrote to `head_ptr`.
+    const rc = imports.wait(.net_open, .{ &req, &status, &handle, &head_ptr });
     if (rc < 0) return error.NetworkError;
 
     const t = &body.transport;
     t.handle = handle;
+    errdefer _ = imports.call(.net_close, .{handle});
+    if (rc > 0) {
+        const raw = imports.owned(head_ptr, rc);
+        defer imports.free(raw);
+        try body.setHead(try body.allocator.dupe(u8, raw));
+    }
     t.interface = .{ .vtable = &.{ .stream = Body.stream }, .buffer = &t.buffer, .seek = 0, .end = 0 };
     body.status = @fromBackingInt(@intCast(status));
     body.reader = &t.interface;
@@ -254,6 +289,8 @@ fn openNative(client: *Client, body: *Body, options: FetchOptions) Error!void {
 
     t.response = t.request.receiveHead(if (options.redirect == .follow) &t.redirect else &.{}) catch |err| return mapError(err);
     body.status = t.response.head.status;
+    // `head.bytes` is invalidated once the body is read.
+    try body.setHead(try body.allocator.dupe(u8, t.response.head.bytes));
     body.reader = t.response.reader(&t.transfer);
 }
 

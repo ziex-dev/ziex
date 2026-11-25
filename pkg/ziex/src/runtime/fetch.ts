@@ -1,5 +1,6 @@
 import { Suspending } from "./jspi";
 import type { Handlers } from "./host";
+import { type WasmAllocRef, writeBytesOut } from "../wasm/core";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -83,7 +84,7 @@ export function fetchMeta(status: number, headLen: number): bigint {
  * `net_close` stream a body chunk by chunk instead. Without JSPI `net_fetch` and
  * `net_open` return -1 (network error).
  */
-export function createFetchHandlers(getMemory: () => WebAssembly.Memory): Handlers {
+export function createFetchHandlers(getMemory: () => WebAssembly.Memory, allocRef?: WasmAllocRef): Handlers {
     const held = new Map<number, Uint8Array>();
     let nextHandle = 1;
 
@@ -134,7 +135,8 @@ export function createFetchHandlers(getMemory: () => WebAssembly.Memory): Handle
     const bodies = new Map<number, Body>();
 
     // Resolves once the head arrives; the body is then pulled with `net_read`.
-    async function open(req: FetchRequest, statusOut: number, handleOut: number): Promise<number> {
+    // With `headOut` set, the response head is written there and its length returned.
+    async function open(req: FetchRequest, statusOut: number, handleOut: number, headOut: number): Promise<number> {
         try {
             const response = await fetch(resolveFetchUrl(req.url), {
                 method: req.method,
@@ -148,7 +150,9 @@ export function createFetchHandlers(getMemory: () => WebAssembly.Memory): Handle
             const view = new DataView(getMemory().buffer);
             view.setUint16(statusOut >>> 0, response.status, true);
             view.setUint32(handleOut >>> 0, handle, true);
-            return 0;
+            if (!headOut || !allocRef) return 0;
+            const head = encodeResponse(response.status, response.statusText, response.headers, new Uint8Array(0));
+            return Math.max(0, writeBytesOut(getMemory, allocRef, headOut, head.bytes));
         } catch (err) {
             return report(req.url, err);
         }
@@ -182,7 +186,8 @@ export function createFetchHandlers(getMemory: () => WebAssembly.Memory): Handle
             held.delete(handle);
             new Uint8Array(getMemory().buffer, bufPtr >>> 0, bytes.length).set(bytes);
         },
-        net_open: (req, statusOut, handleOut) => Suspending ? open(readRequest(req), statusOut, handleOut) : -1,
+        net_open: (req, statusOut, handleOut, headOut) =>
+            Suspending ? open(readRequest(req), statusOut, handleOut, headOut) : -1,
         net_read: (handle, bufPtr, bufLen) => Suspending ? read(handle, bufPtr, bufLen >>> 0) : -1,
         net_close: (handle) => {
             const body = bodies.get(handle);

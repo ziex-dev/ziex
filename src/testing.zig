@@ -73,6 +73,7 @@ pub const Harness = struct {
         workers: zx.AppConfig.ServerConfig.Worker = .{ .count = 1, .min_conn = 1, .max_conn = 8 },
         thread_pool: zx.AppConfig.ServerConfig.ThreadPool = .{ .count = 1 },
         timeout: zx.AppConfig.ServerConfig.Timeout = .{ .keepalive = .fromSeconds(2) },
+        request: zx.AppConfig.ServerConfig.Request = .{},
     };
 
     pub fn start(backend: Backend, io: std.Io, allocator: Allocator, opts: StartOptions) !Harness {
@@ -95,6 +96,7 @@ pub const Harness = struct {
                 .workers = opts.workers,
                 .thread_pool = opts.thread_pool,
                 .timeout = opts.timeout,
+                .request = opts.request,
             },
         };
 
