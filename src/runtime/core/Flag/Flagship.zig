@@ -18,9 +18,26 @@ api_token: ?[]const u8 = null,
 
 pub const default_base_url = "https://api.cloudflare.com/client/v4";
 pub const default_binding = "FLAGS";
-pub const env_account_id = "CLOUDFLARE_ACCOUNT_ID";
-pub const env_app_id = "FLAGSHIP_APP_ID";
-pub const env_api_token = "CLOUDFLARE_API_TOKEN";
+
+pub const Env = enum {
+    CLOUDFLARE_ACCOUNT_ID,
+    FLAGSHIP_APP_ID,
+    CLOUDFLARE_API_TOKEN,
+    FLAGSHIP_BASE_URL,
+    FLAGSHIP_BINDING,
+
+    pub fn key(self: Env) []const u8 {
+        return @tagName(self);
+    }
+};
+
+pub const env = struct {
+    pub const account_id = Env.CLOUDFLARE_ACCOUNT_ID;
+    pub const app_id = Env.FLAGSHIP_APP_ID;
+    pub const api_token = Env.CLOUDFLARE_API_TOKEN;
+    pub const base_url = Env.FLAGSHIP_BASE_URL;
+    pub const binding = Env.FLAGSHIP_BINDING;
+};
 
 pub fn flag(f: *Flagship) Flag {
     return .{ .userdata = f, .vtable = &.{ .resolve = &resolve } };

@@ -231,22 +231,31 @@ var ai_provider: AiProvider = undefined;
 
 const FlagProvider = if (app_opts.feat_flag_server) std.meta.stringToEnum(zx.Flag.Provider, app_opts.flag_provider).?.Type() else void;
 var flag_provider: FlagProvider = undefined;
-var flag_env: std.heap.ArenaAllocator = undefined;
+var flag_env: if (app_opts.feat_flag_server) std.heap.ArenaAllocator else void = undefined;
 
-var email_resend: zx.Email.Resend = undefined;
-var email_wasm: zx.Email.Wasm = undefined;
-var email_memory: ?zx.Email.Memory = null;
-var email_env: std.heap.ArenaAllocator = undefined;
+const EmailBackend = if (app_opts.feat_email_server) switch (std.meta.stringToEnum(zx.Email.Provider, app_opts.email_provider).?) {
+    .resend => zx.Email.Resend,
+    .smtp => if (platform.os == .wasi) zx.Email.Memory else zx.Email.Smtp,
+    .wasm => if (platform.os == .wasi) zx.Email.Wasm else zx.Email.Memory,
+    .memory => zx.Email.Memory,
+} else void;
+var email_backend: EmailBackend = undefined;
+var email_env: if (app_opts.feat_email_server) std.heap.ArenaAllocator else void = undefined;
 
-var bucket_fs: zx.Bucket.Fs = undefined;
-var bucket_wasm: zx.Bucket.Wasm = undefined;
-var bucket_s3: zx.Bucket.S3 = undefined;
-var bucket_env: std.heap.ArenaAllocator = undefined;
+const BucketBackend = if (app_opts.feat_bucket_server) switch (if (app_opts.bucket_provider) |p|
+    std.meta.stringToEnum(zx.Bucket.Provider, p).?
+else if (platform.os == .wasi) .wasm else .fs) {
+    .s3 => zx.Bucket.S3,
+    .wasm, .fs => if (platform.os == .wasi) zx.Bucket.Wasm else zx.Bucket.Fs,
+} else void;
+var bucket_backend: BucketBackend = undefined;
+var bucket_env: if (app_opts.feat_bucket_server) std.heap.ArenaAllocator else void = undefined;
 
+const wasi = platform.os == .wasi;
 var secrets_env: ?zx.Secrets.Env = null;
-var secrets_wasm: zx.Secrets.Wasm = .{};
-var secrets_stores: [2]zx.Secrets = undefined;
-var secrets_chain: zx.Secrets.Chain = .{ .stores = &secrets_stores };
+var secrets_wasm: if (wasi) zx.Secrets.Wasm else void = if (wasi) .{} else {};
+var secrets_stores: if (wasi) [2]zx.Secrets else void = undefined;
+var secrets_chain: if (wasi) zx.Secrets.Chain else void = undefined;
 
 const Resolved = struct {
     datadir: ?[]const u8 = null,
@@ -257,6 +266,8 @@ const Resolved = struct {
     host: ?[]const u8 = null,
     ai_api_key: ?[]const u8 = null,
     ai_base_url: ?[]const u8 = null,
+    ai_model: ?[]const u8 = null,
+    ai_image_model: ?[]const u8 = null,
 };
 
 var resolved: Resolved = .{};
@@ -413,8 +424,9 @@ fn initSecrets(alloc: std.mem.Allocator, inita: zx.Init) !void {
     secrets_env = try .fromEnviron(alloc, inita.minimal.environ);
     const env = &secrets_env.?;
 
-    if (platform.os == .wasi) {
+    if (comptime wasi) {
         secrets_stores = .{ env.secrets(), secrets_wasm.secrets() };
+        secrets_chain = .{ .stores = &secrets_stores };
         zx.secrets = secrets_chain.secrets();
         return;
     }
@@ -426,15 +438,19 @@ fn initSecrets(alloc: std.mem.Allocator, inita: zx.Init) !void {
 }
 
 fn initAi(alloc: std.mem.Allocator, inita: zx.Init) void {
-    resolved.ai_api_key = envVar(alloc, AiProvider.env_api_key);
-    resolved.ai_base_url = envVar(alloc, AiProvider.env_base_url);
+    resolved.ai_api_key = envVar(alloc, AiProvider.env.api_key.key());
+    resolved.ai_base_url = envVar(alloc, AiProvider.env.base_url.key());
+    resolved.ai_model = envVar(alloc, AiProvider.env.model.key());
+    if (comptime @hasDecl(AiProvider.env, "image_model")) {
+        resolved.ai_image_model = envVar(alloc, AiProvider.env.image_model.key());
+    }
     ai_provider = .{
         .io = inita.io,
         .api_key = resolved.ai_api_key,
-        .base_url = resolved.ai_base_url orelse app_opts.ai_base_url orelse AiProvider.default_base_url,
-        .model = app_opts.ai_model,
+        .base_url = resolved.ai_base_url orelse AiProvider.default_base_url,
+        .model = resolved.ai_model,
     };
-    if (@hasField(AiProvider, "image_model")) ai_provider.image_model = app_opts.ai_image_model;
+    if (comptime @hasField(AiProvider, "image_model")) ai_provider.image_model = resolved.ai_image_model;
     zx.ai = ai_provider.ai();
 }
 
@@ -444,16 +460,16 @@ fn initFlag(alloc: std.mem.Allocator, inita: zx.Init) void {
     flag_provider = switch (FlagProvider) {
         zx.Flag.Ofrep => .{
             .io = inita.io,
-            .base_url = envVar(env, zx.Flag.Ofrep.env_url) orelse app_opts.flag_base_url orelse "",
-            .api_key = envVar(env, zx.Flag.Ofrep.env_api_key),
+            .base_url = envVar(env, zx.Flag.Ofrep.env.url.key()) orelse "",
+            .api_key = envVar(env, zx.Flag.Ofrep.env.api_key.key()),
         },
         zx.Flag.Flagship => .{
             .io = inita.io,
-            .binding = app_opts.flag_binding orelse zx.Flag.Flagship.default_binding,
-            .base_url = app_opts.flag_base_url orelse zx.Flag.Flagship.default_base_url,
-            .account_id = envVar(env, zx.Flag.Flagship.env_account_id),
-            .app_id = envVar(env, zx.Flag.Flagship.env_app_id) orelse app_opts.flag_app_id,
-            .api_token = envVar(env, zx.Flag.Flagship.env_api_token),
+            .binding = envVar(env, zx.Flag.Flagship.env.binding.key()) orelse zx.Flag.Flagship.default_binding,
+            .base_url = envVar(env, zx.Flag.Flagship.env.base_url.key()) orelse zx.Flag.Flagship.default_base_url,
+            .account_id = envVar(env, zx.Flag.Flagship.env.account_id.key()),
+            .app_id = envVar(env, zx.Flag.Flagship.env.app_id.key()),
+            .api_token = envVar(env, zx.Flag.Flagship.env.api_token.key()),
         },
         zx.Flag.Kv => if (app_opts.feat_kv_server) .{ .store = zx.kv } else @compileError("the .kv flag provider needs the .kv server feature"),
         else => unreachable,
@@ -464,25 +480,33 @@ fn initFlag(alloc: std.mem.Allocator, inita: zx.Init) void {
 fn initEmail(alloc: std.mem.Allocator, inita: zx.Init) void {
     email_env = .init(alloc);
     const env = email_env.allocator();
-    const provider = comptime std.meta.stringToEnum(zx.Email.Provider, app_opts.email_provider).?;
-    zx.email = switch (provider) {
-        .resend => blk: {
-            email_resend = .{
-                .io = inita.io,
-                .api_key = envVar(env, zx.Email.Resend.env_api_key),
-                .base_url = envVar(env, zx.Email.Resend.env_base_url) orelse app_opts.email_base_url orelse zx.Email.Resend.default_base_url,
-            };
-            break :blk email_resend.email();
-        },
-        // No host binding natively, so messages are kept and logged instead.
-        .wasm => if (platform.os == .wasi) blk: {
-            email_wasm = .{ .binding = app_opts.email_binding orelse "default" };
-            break :blk email_wasm.email();
-        } else initEmailMemory(alloc, inita),
-        .memory => initEmailMemory(alloc, inita),
-    };
 
-    const from = envVar(env, "EMAIL_FROM") orelse app_opts.email_from orelse return;
+    if (comptime EmailBackend == zx.Email.Resend) {
+        email_backend = .{
+            .io = inita.io,
+            .api_key = envVar(env, zx.Email.Resend.env.api_key.key()),
+            .base_url = envVar(env, zx.Email.Resend.env.base_url.key()) orelse zx.Email.Resend.default_base_url,
+        };
+    } else if (comptime EmailBackend == zx.Email.Smtp) {
+        const tls_name = envVar(env, zx.Email.Smtp.env.tls.key());
+        email_backend = .{
+            .io = inita.io,
+            .host = envVar(env, zx.Email.Smtp.env.host.key()) orelse "",
+            .port = parsePort(envVar(env, zx.Email.Smtp.env.port.key())) orelse zx.Email.Smtp.default_port,
+            .username = envVar(env, zx.Email.Smtp.env.username.key()),
+            .password = envVar(env, zx.Email.Smtp.env.password.key()),
+            .tls_mode = if (tls_name) |n| zx.Email.Smtp.parseTls(n) orelse .starttls else .starttls,
+        };
+    } else if (comptime EmailBackend == zx.Email.Wasm) {
+        email_backend = .{ .binding = envVar(env, zx.Email.Wasm.env.binding.key()) orelse "default" };
+    } else if (comptime EmailBackend == zx.Email.Memory) {
+        email_backend = .init(alloc, inita.io);
+        email_backend.log = true;
+    } else unreachable;
+
+    zx.email = email_backend.email();
+
+    const from = envVar(env, zx.Email.Env.EMAIL_FROM.key()) orelse return;
     zx.email.from = zx.Email.Address.parse(from) catch {
         std.log.scoped(.zx_email).warn("invalid sender address: {s}", .{from});
         return;
@@ -492,44 +516,30 @@ fn initEmail(alloc: std.mem.Allocator, inita: zx.Init) void {
 fn initBucket(alloc: std.mem.Allocator, inita: zx.Init, datadir: []const u8) !void {
     bucket_env = .init(alloc);
     const env = bucket_env.allocator();
-    const provider: zx.Bucket.Provider = comptime if (app_opts.bucket_provider) |p|
-        std.meta.stringToEnum(zx.Bucket.Provider, p).?
-    else if (platform.os == .wasi) .wasm else .fs;
 
-    zx.bucket = switch (provider) {
-        .s3 => blk: {
-            bucket_s3 = .{
-                .io = inita.io,
-                .allocator = alloc,
-                .access_key_id = firstEnvVar(env, &zx.Bucket.S3.env.access_key_id) orelse "",
-                .secret_access_key = firstEnvVar(env, &zx.Bucket.S3.env.secret_access_key) orelse "",
-                .session_token = firstEnvVar(env, &zx.Bucket.S3.env.session_token) orelse "",
-                .region = firstEnvVar(env, &zx.Bucket.S3.env.region) orelse app_opts.bucket_region orelse "",
-                .endpoint = firstEnvVar(env, &zx.Bucket.S3.env.endpoint) orelse app_opts.bucket_endpoint orelse "",
-                .bucket_name = firstEnvVar(env, &zx.Bucket.S3.env.bucket_name) orelse app_opts.bucket_name orelse "",
-            };
-            break :blk bucket_s3.bucket();
-        },
-        // A directory can't be reached from wasm, and a host binding not from native.
-        .wasm, .fs => if (platform.os == .wasi) blk: {
-            bucket_wasm = .{ .binding = app_opts.bucket_binding orelse "default" };
-            break :blk bucket_wasm.bucket();
-        } else blk: {
-            bucket_fs = .{ .io = inita.io, .root = try std.fs.path.join(env, &.{ datadir, "bucket" }) };
-            break :blk bucket_fs.bucket();
-        },
-    };
+    if (comptime BucketBackend == zx.Bucket.S3) {
+        bucket_backend = .{
+            .io = inita.io,
+            .allocator = alloc,
+            .access_key_id = firstEnvVar(env, &zx.Bucket.S3.env.access_key_id) orelse "",
+            .secret_access_key = firstEnvVar(env, &zx.Bucket.S3.env.secret_access_key) orelse "",
+            .session_token = firstEnvVar(env, &zx.Bucket.S3.env.session_token) orelse "",
+            .region = firstEnvVar(env, &zx.Bucket.S3.env.region) orelse "",
+            .endpoint = firstEnvVar(env, &zx.Bucket.S3.env.endpoint) orelse "",
+            .bucket_name = firstEnvVar(env, &zx.Bucket.S3.env.bucket_name) orelse "",
+        };
+    } else if (comptime BucketBackend == zx.Bucket.Wasm) {
+        bucket_backend = .{ .binding = envVar(env, zx.Bucket.Wasm.env.binding.key()) orelse "default" };
+    } else if (comptime BucketBackend == zx.Bucket.Fs) {
+        bucket_backend = .{ .io = inita.io, .root = try std.fs.path.join(env, &.{ datadir, "bucket" }) };
+    } else unreachable;
+
+    zx.bucket = bucket_backend.bucket();
 }
 
 fn firstEnvVar(alloc: std.mem.Allocator, names: []const []const u8) ?[]const u8 {
     for (names) |name| if (envVar(alloc, name)) |v| return v;
     return null;
-}
-
-fn initEmailMemory(alloc: std.mem.Allocator, inita: zx.Init) zx.Email {
-    email_memory = .init(alloc, inita.io);
-    email_memory.?.log = true;
-    return email_memory.?.email();
 }
 
 fn freeResolved(alloc: std.mem.Allocator) void {
@@ -571,6 +581,8 @@ fn freeResolved(alloc: std.mem.Allocator) void {
         zx.ai = .failing;
         if (resolved.ai_api_key) |s| alloc.free(s);
         if (resolved.ai_base_url) |s| alloc.free(s);
+        if (resolved.ai_model) |s| alloc.free(s);
+        if (resolved.ai_image_model) |s| alloc.free(s);
     }
 
     // Feature ==> zx.flag
@@ -582,8 +594,7 @@ fn freeResolved(alloc: std.mem.Allocator) void {
     // Feature ==> zx.email
     if (comptime app_opts.feat_email_server) {
         zx.email = .failing;
-        if (email_memory) |*m| m.deinit();
-        email_memory = null;
+        if (comptime EmailBackend == zx.Email.Memory) email_backend.deinit();
         email_env.deinit();
     }
 
@@ -600,6 +611,10 @@ fn freeResolved(alloc: std.mem.Allocator) void {
 
 fn envVar(alloc: std.mem.Allocator, name: []const u8) ?[]const u8 {
     return zx.secrets.get(alloc, name) catch null;
+}
+
+fn parsePort(text: ?[]const u8) ?u16 {
+    return std.fmt.parseInt(u16, text orelse return null, 10) catch null;
 }
 
 pub const Route = struct {

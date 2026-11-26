@@ -28,25 +28,12 @@ pub fn configure(b: *std.Build, zx_mod: *std.Build.Module, opts: Options) *std.B
     app_opts.addOption(bool, "feat_cache_server", false);
     app_opts.addOption(bool, "feat_ai_server", false);
     app_opts.addOption([]const u8, "ai_provider", "openai");
-    app_opts.addOption(?[]const u8, "ai_model", null);
-    app_opts.addOption(?[]const u8, "ai_image_model", null);
-    app_opts.addOption(?[]const u8, "ai_base_url", null);
     app_opts.addOption(bool, "feat_flag_server", false);
     app_opts.addOption([]const u8, "flag_provider", "ofrep");
-    app_opts.addOption(?[]const u8, "flag_base_url", null);
-    app_opts.addOption(?[]const u8, "flag_app_id", null);
-    app_opts.addOption(?[]const u8, "flag_binding", null);
     app_opts.addOption(bool, "feat_email_server", false);
     app_opts.addOption([]const u8, "email_provider", "resend");
-    app_opts.addOption(?[]const u8, "email_from", null);
-    app_opts.addOption(?[]const u8, "email_base_url", null);
-    app_opts.addOption(?[]const u8, "email_binding", null);
     app_opts.addOption(bool, "feat_bucket_server", false);
     app_opts.addOption(?[]const u8, "bucket_provider", null);
-    app_opts.addOption(?[]const u8, "bucket_binding", null);
-    app_opts.addOption(?[]const u8, "bucket_name", null);
-    app_opts.addOption(?[]const u8, "bucket_endpoint", null);
-    app_opts.addOption(?[]const u8, "bucket_region", null);
     zx_mod.addOptions("app_opts", app_opts);
 
     if (opts.enable_httpz) {

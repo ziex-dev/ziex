@@ -11,8 +11,22 @@ base_url: []const u8 = default_base_url,
 model: ?[]const u8 = null,
 
 pub const default_base_url = "https://api.anthropic.com/v1";
-pub const env_api_key = "ANTHROPIC_API_KEY";
-pub const env_base_url = "ANTHROPIC_BASE_URL";
+
+pub const Env = enum {
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_BASE_URL,
+    ANTHROPIC_MODEL,
+
+    pub fn key(self: Env) []const u8 {
+        return @tagName(self);
+    }
+};
+
+pub const env = struct {
+    pub const api_key = Env.ANTHROPIC_API_KEY;
+    pub const base_url = Env.ANTHROPIC_BASE_URL;
+    pub const model = Env.ANTHROPIC_MODEL;
+};
 
 const version = "2023-06-01";
 const default_max_tokens = 4096;

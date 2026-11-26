@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) !void {
         .kv = .enabled,
         .cache = .enabled,
         .flag = .{ .server = .{ .provider = .kv } },
-        .ai = .{ .server = .{ .provider = .openai, .model = "gpt-4o-mini", .image_model = "gpt-image-2.6-flare" } },
+        .ai = .{ .server = .{ .provider = .openai } },
     };
     const app_client: ziex.InitOptions.ClientOptions = .{
         .bindings = .{

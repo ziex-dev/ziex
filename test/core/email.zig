@@ -34,6 +34,7 @@ test "zx.email > defaults to failing" {
 
 test "provider > type by tag" {
     try std.testing.expect(Email.Provider.resend.Type() == Email.Resend);
+    try std.testing.expect(Email.Provider.smtp.Type() == Email.Smtp);
     try std.testing.expect(Email.Provider.wasm.Type() == Email.Wasm);
     try std.testing.expect(Email.Provider.memory.Type() == Email.Memory);
 }
@@ -236,4 +237,114 @@ test "resend > status codes map to errors" {
             try std.testing.expectError(error.Rejected, resend.email().send(gpa, m));
         }
     }.run);
+}
+
+// --- SMTP --- //
+
+test "smtp > parse tls tags" {
+    try std.testing.expect(Email.Smtp.parseTls("starttls") == .starttls);
+    try std.testing.expect(Email.Smtp.parseTls("tls") == .tls);
+    try std.testing.expect(Email.Smtp.parseTls("none") == .none);
+    try std.testing.expect(Email.Smtp.parseTls("nope") == null);
+}
+
+test "smtp > send through plaintext mock" {
+    const captured = try withSmtp(struct {
+        fn handle(stream: std.Io.net.Stream) ![]u8 {
+            var rbuf: [4096]u8 = undefined;
+            var wbuf: [512]u8 = undefined;
+            var r = stream.reader(io, &rbuf);
+            var w = stream.writer(io, &wbuf);
+            const ri = &r.interface;
+            const wi = &w.interface;
+
+            try reply(wi, "220 localhost ESMTP mock");
+            _ = try readLine(ri); // EHLO
+            try reply(wi, "250-localhost");
+            try reply(wi, "250-AUTH PLAIN");
+            try reply(wi, "250 OK");
+            _ = try readLine(ri); // AUTH PLAIN …
+            try reply(wi, "235 2.7.0 OK");
+            _ = try readLine(ri); // MAIL FROM
+            try reply(wi, "250 2.1.0 OK");
+            _ = try readLine(ri); // RCPT TO
+            try reply(wi, "250 2.1.5 OK");
+            _ = try readLine(ri); // DATA
+            try reply(wi, "354 End data with <CR><LF>.<CR><LF>");
+            const body = try readData(ri);
+            try reply(wi, "250 2.0.0 OK");
+            _ = try readLine(ri); // QUIT
+            try reply(wi, "221 2.0.0 Bye");
+            return body;
+        }
+    }.handle);
+
+    defer gpa.free(captured);
+    try std.testing.expect(std.mem.indexOf(u8, captured, "Subject: Hello") != null);
+    try std.testing.expect(std.mem.indexOf(u8, captured, "hi") != null);
+    try std.testing.expect(std.mem.indexOf(u8, captured, "From:") != null);
+}
+
+test "smtp > empty host is unavailable" {
+    var smtp: Email.Smtp = .{ .io = io, .host = "", .tls_mode = .none };
+    try std.testing.expectError(error.Unavailable, smtp.email().send(gpa, hello));
+}
+
+const SmtpHandler = *const fn (stream: std.Io.net.Stream) anyerror![]u8;
+
+fn withSmtp(comptime handle: SmtpHandler) ![]u8 {
+    const addr = try std.Io.net.IpAddress.parse("127.0.0.1", 0);
+    var server = try addr.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    const port = server.socket.address.getPort();
+
+    var result: ?anyerror![]u8 = null;
+    const thread = try std.Thread.spawn(.{}, struct {
+        fn run(s: *std.Io.net.Server, out: *?anyerror![]u8) void {
+            const stream = s.accept(io) catch |err| {
+                out.* = err;
+                return;
+            };
+            defer stream.close(io);
+            out.* = handle(stream);
+        }
+    }.run, .{ &server, &result });
+
+    var smtp: Email.Smtp = .{
+        .io = io,
+        .host = "127.0.0.1",
+        .port = port,
+        .username = "user",
+        .password = "pass",
+        .tls_mode = .none,
+    };
+    const sent = smtp.email().send(gpa, hello);
+    thread.join();
+    const body = try result.?;
+    errdefer gpa.free(body);
+    _ = try sent;
+    return body;
+}
+
+fn reply(w: *std.Io.Writer, line: []const u8) !void {
+    try w.print("{s}\r\n", .{line});
+    try w.flush();
+}
+
+fn readLine(r: *std.Io.Reader) ![]const u8 {
+    const line = try r.takeDelimiterInclusive('\n');
+    return std.mem.trimEnd(u8, line, "\r\n");
+}
+
+fn readData(r: *std.Io.Reader) ![]u8 {
+    var body: std.ArrayList(u8) = .empty;
+    errdefer body.deinit(gpa);
+    while (true) {
+        const line = try readLine(r);
+        if (std.mem.eql(u8, line, ".")) break;
+        const content = if (line.len > 0 and line[0] == '.') line[1..] else line;
+        if (body.items.len > 0) try body.appendSlice(gpa, "\r\n");
+        try body.appendSlice(gpa, content);
+    }
+    return try body.toOwnedSlice(gpa);
 }

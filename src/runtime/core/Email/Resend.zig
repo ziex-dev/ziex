@@ -10,8 +10,20 @@ api_key: ?[]const u8 = null,
 base_url: []const u8 = default_base_url,
 
 pub const default_base_url = "https://api.resend.com";
-pub const env_api_key = "RESEND_API_KEY";
-pub const env_base_url = "RESEND_BASE_URL";
+
+pub const Env = enum {
+    RESEND_API_KEY,
+    RESEND_BASE_URL,
+
+    pub fn key(self: Env) []const u8 {
+        return @tagName(self);
+    }
+};
+
+pub const env = struct {
+    pub const api_key = Env.RESEND_API_KEY;
+    pub const base_url = Env.RESEND_BASE_URL;
+};
 
 pub fn email(r: *Resend) Email {
     return .{ .userdata = r, .vtable = &.{ .send = &send } };

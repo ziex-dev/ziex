@@ -11,6 +11,18 @@ const host = @import("../../wasm/imports.zig");
 // and any other runtime can provide an object with the same `send`.
 binding: []const u8 = "default",
 
+pub const Env = enum {
+    EMAIL_BINDING,
+
+    pub fn key(self: Env) []const u8 {
+        return @tagName(self);
+    }
+};
+
+pub const env = struct {
+    pub const binding = Env.EMAIL_BINDING;
+};
+
 pub fn email(w: *Wasm) Email {
     return .{ .userdata = w, .vtable = &.{ .send = &send } };
 }

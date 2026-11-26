@@ -14,6 +14,18 @@ binding: []const u8 = "default",
 // R2, like S3, needs at least 5 MiB for every upload part but the last.
 part_size: usize = 5 * 1024 * 1024,
 
+pub const Env = enum {
+    BUCKET_BINDING,
+
+    pub fn key(self: Env) []const u8 {
+        return @tagName(self);
+    }
+};
+
+pub const env = struct {
+    pub const binding = Env.BUCKET_BINDING;
+};
+
 pub fn bucket(w: *Wasm) Bucket {
     return .{ .userdata = w, .vtable = &.{
         .head = &head,

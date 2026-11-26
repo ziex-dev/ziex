@@ -1,4 +1,4 @@
-// Sends email through a provider: Resend over HTTP, a host binding on edge
+// Sends email through a provider: Resend over HTTP, SMTP, a host binding on edge
 // runtimes (Cloudflare Email Service or your own), or in memory for tests and dev.
 const Email = @This();
 
@@ -11,17 +11,28 @@ vtable: *const VTable,
 from: ?Address = null,
 
 pub const Resend = @import("Email/Resend.zig");
+pub const Smtp = @import("Email/Smtp.zig");
 pub const Wasm = @import("Email/Wasm.zig");
 pub const Memory = @import("Email/Memory.zig");
 
+pub const Env = enum {
+    EMAIL_FROM,
+
+    pub fn key(self: Env) []const u8 {
+        return @tagName(self);
+    }
+};
+
 pub const Provider = enum {
     resend,
+    smtp,
     wasm,
     memory,
 
     pub fn Type(comptime provider: Provider) type {
         return switch (provider) {
             .resend => Resend,
+            .smtp => Smtp,
             .wasm => Wasm,
             .memory => Memory,
         };

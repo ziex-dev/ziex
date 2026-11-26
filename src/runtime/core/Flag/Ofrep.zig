@@ -10,8 +10,19 @@ io: std.Io,
 base_url: []const u8,
 api_key: ?[]const u8 = null,
 
-pub const env_url = "OFREP_URL";
-pub const env_api_key = "OFREP_API_KEY";
+pub const Env = enum {
+    OFREP_URL,
+    OFREP_API_KEY,
+
+    pub fn key(self: Env) []const u8 {
+        return @tagName(self);
+    }
+};
+
+pub const env = struct {
+    pub const url = Env.OFREP_URL;
+    pub const api_key = Env.OFREP_API_KEY;
+};
 
 pub fn flag(o: *Ofrep) Flag {
     return .{ .userdata = o, .vtable = &.{ .resolve = &resolve } };

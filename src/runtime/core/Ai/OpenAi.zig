@@ -12,8 +12,24 @@ model: ?[]const u8 = null,
 image_model: ?[]const u8 = null,
 
 pub const default_base_url = "https://api.openai.com/v1";
-pub const env_api_key = "OPENAI_API_KEY";
-pub const env_base_url = "OPENAI_BASE_URL";
+
+pub const Env = enum {
+    OPENAI_API_KEY,
+    OPENAI_BASE_URL,
+    OPENAI_MODEL,
+    OPENAI_IMAGE_MODEL,
+
+    pub fn key(self: Env) []const u8 {
+        return @tagName(self);
+    }
+};
+
+pub const env = struct {
+    pub const api_key = Env.OPENAI_API_KEY;
+    pub const base_url = Env.OPENAI_BASE_URL;
+    pub const model = Env.OPENAI_MODEL;
+    pub const image_model = Env.OPENAI_IMAGE_MODEL;
+};
 
 pub fn ai(p: *OpenAi) Ai {
     return .{ .gen = .{ .userdata = p, .vtable = &.{ .text = &text, .stream = &stream, .image = &image } } };

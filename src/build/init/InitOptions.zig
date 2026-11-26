@@ -148,80 +148,61 @@ pub const AppOptions = struct {
             server: ?CacheServerOptions = null,
         };
 
-        // `zx.ai`; key and base URL come from the provider's env, e.g. `OPENAI_API_KEY`, `OPENAI_BASE_URL`.
+        // `zx.ai`. Only the provider is a build option; key, base URL and models
+        // come from env (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`,
+        // `OPENAI_IMAGE_MODEL`, or the `ANTHROPIC_*` equivalents).
         pub const AiOptions = struct {
             pub const Provider = enum { openai, anthropic };
             pub const AiServerOptions = struct {
                 pub const enabled: AiServerOptions = .{};
 
                 provider: Provider = .openai,
-                model: ?[]const u8 = null,
-                image_model: ?[]const u8 = null,
-                // An AI gateway or any compatible API.
-                base_url: ?[]const u8 = null,
             };
             pub const enabled: AiOptions = .{ .server = .enabled };
 
             server: ?AiServerOptions = null,
         };
 
-        // `zx.flag`, OpenFeature-style feature flags. Credentials come from the provider's env,
-        // e.g. `OFREP_URL`, or `CLOUDFLARE_ACCOUNT_ID`, `FLAGSHIP_APP_ID` and `CLOUDFLARE_API_TOKEN`.
+        // `zx.flag`. Only the provider is a build option; credentials and endpoints
+        // come from env (`OFREP_URL`, `OFREP_API_KEY`, or `CLOUDFLARE_ACCOUNT_ID`,
+        // `FLAGSHIP_APP_ID`, `CLOUDFLARE_API_TOKEN`, `FLAGSHIP_BASE_URL`, `FLAGSHIP_BINDING`).
         pub const FlagOptions = struct {
             pub const Provider = enum { ofrep, flagship, kv };
             pub const FlagServerOptions = struct {
                 pub const enabled: FlagServerOptions = .{};
 
                 provider: Provider = .ofrep,
-                // The OFREP server, or the Cloudflare API for Flagship.
-                base_url: ?[]const u8 = null,
-                // Flagship only.
-                app_id: ?[]const u8 = null,
-                binding: ?[]const u8 = null,
             };
             pub const enabled: FlagOptions = .{ .server = .enabled };
 
             server: ?FlagServerOptions = null,
         };
 
-        // `zx.email`. Resend reads `RESEND_API_KEY`; `EMAIL_FROM` overrides `from`.
-        // `.wasm` sends through the edge host's email binding (e.g. `new Ziex({ email: "EMAIL" })`)
-        // and keeps messages in memory, logged, on native.
+        // `zx.email`. Only the provider is a build option; credentials and endpoints
+        // come from env (`RESEND_API_KEY`, `RESEND_BASE_URL`, `SMTP_*`, `EMAIL_FROM`,
+        // `EMAIL_BINDING`). `.wasm` uses the edge host binding (e.g. `new Ziex({ email: "EMAIL" })`)
+        // and keeps messages in memory, logged, on native. `.smtp` is native-only.
         pub const EmailOptions = struct {
-            pub const Provider = enum { resend, wasm, memory };
+            pub const Provider = enum { resend, smtp, wasm, memory };
             pub const EmailServerOptions = struct {
                 pub const enabled: EmailServerOptions = .{};
 
                 provider: Provider = .resend,
-                // Default sender, e.g. `Acme <hello@acme.com>`.
-                from: ?[]const u8 = null,
-                // Resend only.
-                base_url: ?[]const u8 = null,
-                // Wasm only: the host binding name.
-                binding: ?[]const u8 = null,
             };
             pub const enabled: EmailOptions = .{ .server = .enabled };
 
             server: ?EmailServerOptions = null,
         };
 
-        // `zx.bucket`, S3-compatible object storage. Without a provider, objects live under
-        // `<datadir>/bucket` natively and go through the edge host's bucket binding on wasm
-        // (e.g. Cloudflare R2 with `new Ziex({ bucket: "BUCKET" })`). `.s3` reads
-        // `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_SESSION_TOKEN`, `S3_REGION`,
-        // `S3_ENDPOINT` and `S3_BUCKET`, or the same `AWS_*` names.
+        // `zx.bucket`. Only the provider is a build option (null picks fs natively /
+        // wasm on the edge). Credentials and endpoints come from env (`S3_*` /
+        // `AWS_*`, `BUCKET_BINDING`).
         pub const BucketOptions = struct {
             pub const Provider = enum { fs, wasm, s3 };
             pub const BucketServerOptions = struct {
                 pub const enabled: BucketServerOptions = .{};
 
                 provider: ?Provider = null,
-                // Wasm only: the host binding name.
-                binding: ?[]const u8 = null,
-                // S3 only; the env overrides these.
-                bucket: ?[]const u8 = null,
-                endpoint: ?[]const u8 = null,
-                region: ?[]const u8 = null,
             };
             pub const enabled: BucketOptions = .{ .server = .enabled };
 
