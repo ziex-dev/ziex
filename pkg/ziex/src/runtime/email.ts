@@ -6,16 +6,21 @@ export type { WasmAllocRef };
 export type EmailAddress = string | { email: string; name: string };
 
 export type EmailAttachment = {
-    /** Base64. */
-    content: string;
+    /** The file's bytes. */
+    content: Uint8Array;
     filename: string;
     /** MIME type. */
     type: string;
     disposition: "attachment" | "inline";
+    /** Set when inline: the html references it as `cid:<contentId>`. */
     contentId?: string;
 };
 
-/** The message `zx.email` sends; the same shape as Cloudflare Email Service's `send()`. */
+/**
+ * The message `zx.email` sends; the same shape as Cloudflare Email Service's
+ * `send()`, so a `send_email` binding takes it as is. Attachment content is
+ * raw bytes: Cloudflare reads a string `content` as the file's literal text.
+ */
 export type EmailMessage = {
     from: EmailAddress;
     to?: EmailAddress[];
@@ -41,6 +46,30 @@ export interface EmailBinding {
 
 /** No such binding. */
 const missing = -2;
+
+/**
+ * A message as the guest writes it (`Email.Wasm`): JSON, so attachment
+ * content is base64. Only this module sees it; bindings get bytes.
+ */
+type WireMessage = Omit<EmailMessage, "attachments"> & {
+    attachments?: (Omit<EmailAttachment, "content"> & { content: string })[];
+};
+
+/** Turns the guest's JSON message into the one bindings take, decoding attachments. */
+export function decodeMessage(json: string): EmailMessage {
+    const wire = JSON.parse(json) as WireMessage;
+    if (!wire.attachments) return wire as EmailMessage;
+    return { ...wire, attachments: wire.attachments.map((a) => ({ ...a, content: base64ToBytes(a.content) })) };
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+    const native = (Uint8Array as unknown as { fromBase64?: (s: string) => Uint8Array }).fromBase64;
+    if (native) return native(b64);
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+}
 
 /** Host op `email_send`: sends a JSON message through the named binding. */
 export function createEmailHandlers(
@@ -70,7 +99,7 @@ export function createEmailHandlers(
             if (typeof binding?.send !== "function") return missing;
 
             try {
-                const result = binding.send(JSON.parse(readStr(msg_ptr, msg_len)) as EmailMessage);
+                const result = binding.send(decodeMessage(readStr(msg_ptr, msg_len)));
                 if (typeof (result as Promise<unknown> | undefined)?.then !== "function") return ok(out, result as { messageId?: string } | void);
                 return Promise.resolve(result).then((r) => ok(out, r), (err) => fail(out, err));
             } catch (err) {

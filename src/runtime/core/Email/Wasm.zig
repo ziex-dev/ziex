@@ -37,6 +37,8 @@ pub const Message = struct {
     attachments: ?[]const Attachment,
 
     const Attachment = struct {
+        // Base64 only to cross the host boundary as JSON: the host decodes it
+        // (`decodeMessage` in runtime/email.ts) and bindings get the bytes.
         content: wire.Base64,
         filename: []const u8,
         type: []const u8,
