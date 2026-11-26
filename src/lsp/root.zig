@@ -3,6 +3,7 @@ pub const hover = @import("features/hover.zig");
 pub const complete = @import("features/autocomplete.zig");
 pub const docs = @import("data/elements.zig");
 pub const text = @import("text.zig");
+pub const markup_tokens = @import("features/markup_tokens.zig");
 
 test {
     _ = hover;

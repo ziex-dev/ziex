@@ -613,3 +613,35 @@ test "text > incremental change rejects an inverted range" {
         .@"utf-16",
     ));
 }
+
+test "zlsView keeps template attributes from hiding the rest of a .zx file from ZLS" {
+    const a = std.testing.allocator;
+    const cases = [_][2][]const u8{
+        .{ "<p id=`i{i}` style=`{card}{if (d == i) \"x\" else \"\"}`>", "<p id=\"i{i}\" style=\"{card}{if (d == i)  x  else   }\">" },
+        .{ "const s = \"a`b`c\"; // `x`", "const s = \"a`b`c\"; // `x`" },
+        .{ "const c = '`'; <p>don't `{t}`</p>", "const c = '`'; <p>don't \"{t}\"</p>" },
+        .{ "<p a=`x\ny`>", "<p a=`x\ny`>" },
+    };
+    for (cases) |c| {
+        const got = try html.text.zlsView(a, c[0]);
+        defer a.free(got);
+        try std.testing.expectEqual(c[0].len, got.len);
+        try std.testing.expectEqualStrings(c[1], got);
+    }
+}
+
+test "markup tokens cover the Zig inside .zx markup" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const src =
+        \\pub fn A(allocator: zx.Allocator) zx.Component {
+        \\    return (<ul @allocator={allocator}>{for (items) |t| (<li id=`i{t}`>{t}</li>)}</ul>);
+        \\}
+    ;
+    const tokens = try html.markup_tokens.markupTokens(arena, src);
+    var seen: std.ArrayList([]const u8) = .empty;
+    for (tokens) |t| try seen.append(arena, try std.fmt.allocPrint(arena, "{s}:{t}", .{ src[t.start..t.end], t.kind }));
+    const joined = try std.mem.join(arena, " ", seen.items);
+    try testing.expectEqualStrings("allocator:variable for:keyword items:variable t:parameter t:variable t:variable", joined);
+}

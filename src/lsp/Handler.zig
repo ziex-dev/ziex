@@ -8,6 +8,7 @@ const zx_info = @import("zx_info");
 const html_hover = @import("features/hover.zig");
 const html_complete = @import("features/autocomplete.zig");
 const text = @import("text.zig");
+const markup_tokens = @import("features/markup_tokens.zig");
 pub const Zls = @import("Handler/Zls.zig");
 pub const Checker = @import("Handler/Checker.zig");
 
@@ -636,7 +637,7 @@ pub fn @"textDocument/didOpen"(
                 .uri = zig_uri,
                 .languageId = .{ .custom_value = "zig" },
                 .version = params.textDocument.version,
-                .text = params.textDocument.text,
+                .text = try text.zlsView(arena, params.textDocument.text),
             },
         });
         return;
@@ -692,7 +693,7 @@ pub fn @"textDocument/didChange"(
                 .uri = zig_uri,
                 .version = params.textDocument.version,
             },
-            .contentChanges = &.{.{ .text_document_content_change_whole_document = .{ .text = full_text } }},
+            .contentChanges = &.{.{ .text_document_content_change_whole_document = .{ .text = try text.zlsView(arena, full_text) } }},
         });
         return;
     }
@@ -904,7 +905,12 @@ pub fn @"textDocument/semanticTokens/full"(
     if (isZxUri(params.textDocument.uri)) {
         var new_params = params;
         new_params.textDocument = .{ .uri = handler.getZlsUri(params.textDocument.uri) };
-        return handler.sendRequestSync(arena, "textDocument/semanticTokens/full", new_params) catch null;
+        const from_zls = handler.sendRequestSync(arena, "textDocument/semanticTokens/full", new_params) catch null;
+        // ZLS skips markup; add the Zig inside it (`{for ... |c| (`, `onclick={...}`).
+        const state = handler.zx_files.get(params.textDocument.uri) orelse return from_zls;
+        const zls_data: []const u32 = if (from_zls) |t| t.data else &.{};
+        const data = markup_tokens.merge(arena, state.source, zls_data, handler.offset_encoding) catch return from_zls;
+        return .{ .resultId = if (from_zls) |t| t.resultId else null, .data = data };
     }
     return handler.sendRequestSync(arena, "textDocument/semanticTokens/full", params) catch null;
 }
