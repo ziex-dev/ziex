@@ -64,7 +64,7 @@ test.describe('Ziex Playground', () => {
 
   test('Add New File', async ({ page }) => {
     await page.goto('/playground');
-    // Static HTML includes the add-file button before editor.js attaches its handler.
+    // Static HTML includes the add-file button before the page wasm attaches its handler.
     // Wait until Run is enabled so the module init (and addFile listener) has finished.
     await expect(page.getByRole('button', { name: 'Run' })).toBeEnabled({ timeout: 60_000 });
     // Handler must be registered before click; prompt() blocks click until accept/dismiss.
@@ -132,7 +132,8 @@ test.describe('Ziex Playground', () => {
       return btn && !btn.disabled;
     });
     await runButton.click();
-    await expect(page.getByText(/error|invalid|failed/i)).toBeVisible({ timeout: 120_000 });
+    // The typed line itself says "invalid", so look in the output panel.
+    await expect(page.getByRole('log', { name: 'Output' })).toContainText(/error|invalid|failed/i, { timeout: 120_000 });
   });
 
   test('Keyboard Navigation', async ({ page }) => {

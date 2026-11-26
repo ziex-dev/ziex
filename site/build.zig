@@ -206,6 +206,16 @@ pub fn build(b: *std.Build) !void {
 
     app_exe.step.dependOn(pg_step);
 
+    // Asset names the playground worker fetches (see app/pages/playground/worker.zig).
+    // Added before `ziex.init` so the worker wasm gets it too.
+    app_exe.root_module.addImport("playground_assets", b.createModule(.{
+        .root_source_file = b.addWriteFiles().add("playground_assets.zig", b.fmt(
+            \\pub const zig_version = "{s}";
+            \\pub const zx_version = "{s}-{s}";
+            \\
+        , .{ playground_zig_version, ziex.info.version, id })),
+    }));
+
     const site_opts = b.addOptions();
     site_opts.addOption(bool, "use_dusty", server_backend == .dusty);
     app_exe.root_module.addOptions("site_opts", site_opts);
@@ -329,46 +339,25 @@ pub fn build(b: *std.Build) !void {
         }
     }
 
+    // The playground's editor island (CodeMirror); the rest of the playground is Zig.
     if (true) {
-        const playground_scripts = esbuild.addBuild(b, .{
-            .name = "playground_scripts",
+        const editor = esbuild.addBuild(b, .{
+            .name = "playground_editor",
             .config = .{
-                .entrypoints = &.{
-                    b.path("app/pages/playground/scripts/editor.ts"),
-                    b.path("app/pages/playground/scripts/workers/runner.ts"),
-                    b.path("app/pages/playground/scripts/workers/zig.ts"),
-                    b.path("app/pages/playground/scripts/workers/zx.ts"),
-                    b.path("app/pages/playground/scripts/workers/zls.ts"),
-                    b.path("app/pages/playground/scripts/shell.ts"),
-                },
-                // just-bash's browser build still imports node:zlib for gzip
-                .alias = &.{
-                    .{ .key = "node:zlib", .path = b.path("app/pages/playground/scripts/stubs/zlib.ts") },
-                },
+                .entrypoints = &.{b.path("app/pages/playground/editor/editor.ts")},
                 .format = .esm,
                 .splitting = false,
                 .platform = .browser,
                 .minify = optimize != .debug,
-                .define = &.{
-                    .{
-                        .key = "VERSION",
-                        .value = b.fmt("\"{s}-{s}\"", .{ ziex.info.version, id }),
-                    },
-                    .{
-                        .key = "ZIG_VERSION",
-                        .value = b.fmt("\"{s}\"", .{playground_zig_version}),
-                    },
-                },
             },
         });
-
-        const install_playground_scripts = b.addInstallDirectory(.{
-            .source_dir = playground_scripts.dir,
+        const install_editor = b.addInstallDirectory(.{
+            .source_dir = editor.dir,
             .install_dir = .prefix,
             .install_subdir = "static/assets/playground",
         });
-        install_playground_scripts.step.name = "install playground scripts";
-        b.default_step.dependOn(&install_playground_scripts.step);
+        install_editor.step.name = "install playground editor";
+        b.default_step.dependOn(&install_editor.step);
     }
 
     if (true) {

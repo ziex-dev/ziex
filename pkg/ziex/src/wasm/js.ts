@@ -45,19 +45,36 @@ const TYPE_CODE: Record<string, number> = {
 
 type CallbackExport = (id: number, n: number, a0: number, a1: number, a2: number) => unknown;
 let callbackExport: CallbackExport | undefined;
-const callbacks: (Function | undefined)[] = [];
+const callbacks = new Map<number, Function>();
+
+/** Set in a callback id when the function returns the Zig result (`Callback.returns_bit`). */
+const RETURNS = 0x8000_0000;
 
 /** Binds `__zx_js_cb` for the current instance. */
 export function bindCallbacks(fn: CallbackExport | undefined): void {
     callbackExport = fn;
-    callbacks.length = 0;
+    callbacks.clear();
 }
 
-/** The JS function for a Zig `Callback` id (0 = null). Cached, so identity is stable. */
+/** Takes ownership of a handle a returning callback handed back. */
+function take(h: unknown): unknown {
+    if (typeof h !== "number") return undefined;
+    const v = deref(h);
+    unref(h);
+    return v;
+}
+
+/**
+ * The JS function for a Zig `Callback` id (0 = null). Cached, so identity is stable.
+ * Returning callbacks give back the Zig result, as a Promise when the export is JSPI-wrapped.
+ */
 export function fn(id: number): Function | null {
     id >>>= 0;
     if (id === 0) return null;
-    return (callbacks[id] ??= (...a: unknown[]) => {
+    const returns = id >= RETURNS;
+    let f = callbacks.get(id);
+    if (f) return f;
+    f = (...a: unknown[]) => {
         const h0 = ref(a[0]), h1 = ref(a[1]), h2 = ref(a[2]);
         const done = () => { unref(h0); unref(h1); unref(h2); };
         let r: unknown;
@@ -68,9 +85,17 @@ export function fn(id: number): Function | null {
             throw e;
         }
         if (r && typeof (r as PromiseLike<unknown>).then === "function") {
-            (r as PromiseLike<unknown>).then(done, (e) => { done(); console.error(e); });
-        } else done();
-    });
+            const settled = (r as PromiseLike<unknown>).then(
+                (v) => { done(); return returns ? take(v) : undefined; },
+                (e) => { done(); if (returns) throw e; console.error(e); },
+            );
+            return returns ? settled : undefined;
+        }
+        done();
+        return returns ? take(r) : undefined;
+    };
+    callbacks.set(id, f);
+    return f;
 }
 
 /** Zig wrapper/callback values inside JSON args arrive as `{"$h":id}` / `{"$f":id}`. */
@@ -155,7 +180,11 @@ export function webHelpers(mem: MemoryIO, alloc: () => ((size: number) => number
 
 export type WebHelpers = ReturnType<typeof webHelpers>;
 
-export function createJsImports(mem: MemoryIO, alloc: () => ((size: number) => number) | null) {
+export function createJsImports(
+    mem: MemoryIO,
+    alloc: () => ((size: number) => number) | null,
+    exports: () => WebAssembly.Exports | null = () => null,
+) {
     const readRaw = rawReader(mem);
 
     const readArgs = (p: number, n: number): unknown[] => {
@@ -237,6 +266,25 @@ export function createJsImports(mem: MemoryIO, alloc: () => ((size: number) => n
             return ref(readRaw(v >>> 0));
         },
         release: unref,
+        /**
+         * `js.awaitValue`: settles a promise into `out` (1 = fulfilled, 0 = rejected). Returns a
+         * Promise for pending ones, so the import must be JSPI-suspending (see `ZxBridgeCore`).
+         */
+        awaitValue(h: number, out: number): number | Promise<number> {
+            const v = deref(h) as PromiseLike<unknown> | undefined;
+            if (!v || typeof v.then !== "function") {
+                writeRaw(out, v, M_HANDLE);
+                return 1;
+            }
+            return Promise.resolve(v).then(
+                (value) => { writeRaw(out, value, M_HANDLE); return 1; },
+                (reason) => { writeRaw(out, reason, M_HANDLE); return 0; },
+            );
+        },
+        /** This instance's exports, e.g. to hand `export fn`s to another module as imports. */
+        exports(): number {
+            return ref(exports() ?? undefined);
+        },
         bytes(h: number, ptr: number, len: number): number {
             const v = deref(h);
             const src = v instanceof ArrayBuffer

@@ -3,6 +3,7 @@ import { ZxBridgeCore, wrapPromisingExport } from "../wasm/core";
 import { createWorkerFsHandlers, WorkerFs } from "./fs_worker";
 import { hasJspi } from "./jspi";
 import { unsupported, type Handlers } from "./host";
+import { fn as jsFunction } from "../wasm/js";
 
 // `zx.worker(M)` calls: the page sends encoded arguments to a Worker running M's wasm
 // (`zx.Worker.serve`) and suspends until it replies. One Worker per wasm URL, started
@@ -49,22 +50,36 @@ class WorkerClient {
 export function createWorkerHandlers(getMemory: () => WebAssembly.Memory, allocRef: WasmAllocRef, scriptUrl: string | undefined): Handlers {
     const workers = new Map<string, WorkerClient>();
     const decoder = new TextDecoder();
+    const clientFor = (urlPtr: number, urlLen: number): WorkerClient | null => {
+        if (!scriptUrl) {
+            console.error("zx: zx.worker needs the bindings script URL (InitOptions.workerScript)");
+            return null;
+        }
+        const url = new URL(decoder.decode(new Uint8Array(getMemory().buffer, urlPtr >>> 0, urlLen >>> 0)), location.href).href;
+        let client = workers.get(url);
+        if (!client) {
+            client = new WorkerClient(scriptUrl, url);
+            workers.set(url, client);
+        }
+        return client;
+    };
     return {
         worker_call: (urlPtr, urlLen, fn, argsPtr, argsLen, out) => {
             if (!hasJspi || typeof Worker === "undefined") return unsupported;
-            if (!scriptUrl) {
-                console.error("zx: zx.worker needs the bindings script URL (InitOptions.workerScript)");
-                return unsupported;
-            }
-            const url = new URL(decoder.decode(new Uint8Array(getMemory().buffer, urlPtr >>> 0, urlLen >>> 0)), location.href).href;
-            let client = workers.get(url);
-            if (!client) {
-                client = new WorkerClient(scriptUrl, url);
-                workers.set(url, client);
-            }
+            const client = clientFor(urlPtr, urlLen);
+            if (!client) return unsupported;
             const args = new Uint8Array(getMemory().buffer, argsPtr >>> 0, argsLen >>> 0);
             return client.call(fn, args).then((reply) =>
                 typeof reply === "number" ? reply : writeBytesOut(getMemory, allocRef, out, reply));
+        },
+        // `zx.workerPost`: returns at once; the Zig callback gets the reply bytes (or an error code).
+        worker_post: (urlPtr, urlLen, fn, argsPtr, argsLen, callback) => {
+            if (typeof Worker === "undefined") return unsupported;
+            const client = clientFor(urlPtr, urlLen);
+            if (!client) return unsupported;
+            const args = new Uint8Array(getMemory().buffer, argsPtr >>> 0, argsLen >>> 0);
+            void client.call(fn, args).then((reply) => jsFunction(callback)?.(reply));
+            return 0;
         },
     };
 }

@@ -4,6 +4,7 @@
 // sent: the caller's allocator owns the decoded result, the worker's is per call.
 const std = @import("std");
 const host = @import("../wasm/imports.zig");
+const js = @import("../client/js.zig");
 
 pub const codec = @import("Worker/codec.zig");
 pub const name = @import("Worker/name.zig");
@@ -147,11 +148,11 @@ fn Handle(comptime M: type, comptime Field: fn (comptime [:0]const u8) type, com
 // Calls `M`'s functions directly (server, or inside the worker itself).
 pub fn direct(comptime M: type) Handle(M, struct {
     fn field(comptime n: [:0]const u8) type {
-        return @TypeOf(@field(M, n));
+        return if (optionsOf(M).calls == .post) PostFn(M, n) else @TypeOf(@field(M, n));
     }
 }.field, struct {
     fn value(comptime n: [:0]const u8) *const anyopaque {
-        return &@field(M, n);
+        return if (optionsOf(M).calls == .post) &postDirectFn(M, n) else &@field(M, n);
     }
 }.value) {
     return .{};
@@ -160,11 +161,11 @@ pub fn direct(comptime M: type) Handle(M, struct {
 // Calls `M`'s functions in the worker loaded from `url`.
 pub fn proxy(comptime M: type, comptime url: []const u8) Handle(M, struct {
     fn field(comptime n: [:0]const u8) type {
-        return ProxyFn(@TypeOf(@field(M, n)));
+        return if (optionsOf(M).calls == .post) PostFn(M, n) else ProxyFn(@TypeOf(@field(M, n)));
     }
 }.field, struct {
     fn value(comptime n: [:0]const u8) *const anyopaque {
-        return &proxyFn(M, url, n);
+        return if (optionsOf(M).calls == .post) &postFn(M, url, n) else &proxyFn(M, url, n);
     }
 }.value) {
     return .{};
@@ -175,9 +176,7 @@ fn proxyFn(comptime M: type, comptime url: []const u8, comptime n: [:0]const u8)
     const info = @typeInfo(F).@"fn";
     const Ret = info.return_type.?;
     const R = ErrorSet(Ret)!Payload(Ret);
-    const index = comptime for (functions(M), 0..) |f, i| {
-        if (std.mem.eql(u8, f, n)) break i;
-    } else unreachable;
+    const index = indexOf(M, n);
     return makeFn(paramTypes(F), R, struct {
         fn call(args: anytype) R {
             return invoke(url, index, takesAllocator(F), Payload(Ret), ErrorSet(Ret), args);
@@ -205,14 +204,24 @@ fn invoke(
     // The host allocates the reply with `__zx_alloc`.
     const reply = out[0..@intCast(n)];
     defer if (reply.len > 0) gpa.free(reply);
-    if (reply.len == 0) return error.WorkerFailed;
+    const allocator = if (with_allocator) args[0] else std.mem.Allocator.failing;
+    return decodeReply(url, T, E, with_allocator, reply, allocator);
+}
 
+fn decodeReply(
+    comptime url: []const u8,
+    comptime T: type,
+    comptime E: type,
+    comptime with_allocator: bool,
+    reply: []const u8,
+    allocator: std.mem.Allocator,
+) E!T {
+    if (reply.len == 0) return error.WorkerFailed;
     var r = std.Io.Reader.fixed(reply[1..]);
     switch (reply[0]) {
         status_ok => {
             if (comptime !with_allocator and !codec.isPlain(T) and T != void)
                 @compileError("worker: return pointers only from functions taking an Allocator first");
-            const allocator = if (with_allocator) args[0] else std.mem.Allocator.failing;
             return codec.decode(T, &r, allocator) catch |err| switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
                 else => error.WorkerFailed,
@@ -228,6 +237,122 @@ fn invoke(
         },
         else => return error.WorkerFailed,
     }
+}
+
+/// How the page calls a worker's functions. A worker file opts in with
+/// `pub const options: zx.Worker.Options = .{ .calls = .post };`.
+pub const Options = struct {
+    calls: Calls = .wait,
+
+    pub const Calls = enum {
+        /// `handle.f(args)` returns the result; the caller suspends (JSPI) until the
+        /// worker replies. Simple, but suspended calls resume in reverse order, so a
+        /// long call holds up the replies of calls made after it.
+        wait,
+        /// `handle.f(args, &done)` returns at once and `done(result)` runs when the
+        /// worker replies. Needs no JSPI and calls never hold each other up; use it
+        /// for long jobs (builds) or chatty ones (a language server).
+        post,
+    };
+};
+
+fn optionsOf(comptime M: type) Options {
+    if (@hasDecl(M, "options") and @TypeOf(M.options) == Options) return M.options;
+    return .{};
+}
+
+/// What a `.post` worker's `done` receives for `M.n`: the result, widened with `Error`.
+/// Slices in it are allocated with the wasm allocator (`zx.allocator`) and owned by `done`.
+pub fn Result(comptime M: type, comptime n: [:0]const u8) type {
+    const Ret = @typeInfo(@TypeOf(@field(M, n))).@"fn".return_type.?;
+    return ErrorSet(Ret)!Payload(Ret);
+}
+
+/// The callback a `.post` worker's `M.n` takes last.
+pub fn Done(comptime M: type, comptime n: [:0]const u8) type {
+    return *const fn (Result(M, n)) void;
+}
+
+// `M.n`'s parameters as a `.post` call takes them: no leading allocator, then `done`.
+fn postParams(comptime M: type, comptime n: [:0]const u8) []const type {
+    const F = @TypeOf(@field(M, n));
+    const params = paramTypes(F);
+    const sent = if (takesAllocator(F)) params[1..] else params;
+    return sent ++ &[_]type{Done(M, n)};
+}
+
+fn PostFn(comptime M: type, comptime n: [:0]const u8) type {
+    return @TypeOf(makeFn(postParams(M, n), void, struct {}));
+}
+
+fn indexOf(comptime M: type, comptime n: [:0]const u8) u32 {
+    return comptime blk: {
+        @setEvalBranchQuota(10_000);
+        for (functions(M), 0..) |f, i| {
+            if (std.mem.eql(u8, f, n)) break :blk i;
+        } else unreachable;
+    };
+}
+
+fn postFn(comptime M: type, comptime url: []const u8, comptime n: [:0]const u8) PostFn(M, n) {
+    return makeFn(postParams(M, n), void, struct {
+        fn call(args: anytype) void {
+            post(M, url, n, args);
+        }
+    });
+}
+
+// Sends `args` (all but the trailing `done`) and returns; the reply runs `done`.
+fn post(comptime M: type, comptime url: []const u8, comptime n: [:0]const u8, args: anytype) void {
+    const F = @TypeOf(@field(M, n));
+    const Ret = @typeInfo(F).@"fn".return_type.?;
+    const done: Done(M, n) = args[args.len - 1];
+
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    inline for (0..args.len - 1) |i| codec.encode(&aw.writer, args[i]) catch return done(error.OutOfMemory);
+
+    const Reply = struct {
+        fn onReply(ctx: ?*anyopaque, vals: []const js.Value) void {
+            const d: Done(M, n) = @ptrFromInt(@intFromPtr(ctx));
+            const v = if (vals.len > 0) vals[0] else js.Value.undefined;
+            if (v.typeOf() == .number) return d(error.WorkerFailed);
+            const reply = v.bytesAlloc(gpa) catch return d(error.OutOfMemory);
+            defer gpa.free(reply);
+            d(decodeReply(url, Payload(Ret), ErrorSet(Ret), takesAllocator(F), reply, gpa));
+        }
+    };
+    const cb = js.Callback.init(@ptrFromInt(@intFromPtr(done)), Reply.onReply, .{ .once = true });
+    const rc = host.call(.worker_post, .{ url, indexOf(M, n), aw.written(), cb.id });
+    if (rc < 0) {
+        cb.release();
+        done(if (rc == host.unsupported) error.WorkerUnavailable else error.WorkerFailed);
+    }
+}
+
+// `.post` on the server and inside workers: runs `M.n` now, then `done`.
+fn postDirectFn(comptime M: type, comptime n: [:0]const u8) PostFn(M, n) {
+    return makeFn(postParams(M, n), void, struct {
+        fn call(args: anytype) void {
+            const f = @field(M, n);
+            const F = @TypeOf(f);
+            const done: Done(M, n) = args[args.len - 1];
+            var call_args: std.meta.ArgsTuple(F) = undefined;
+            const skip = if (comptime takesAllocator(F)) 1 else 0;
+            if (skip == 1) call_args[0] = gpa;
+            inline for (0..args.len - 1) |i| call_args[i + skip] = args[i];
+            const result = @call(.auto, f, call_args);
+            if (@typeInfo(@TypeOf(result)) != .error_union) return done(result);
+            const E = @typeInfo(Result(M, n)).error_union.error_set;
+            if (result) |v| done(v) else |err| {
+                // As from a worker reply: errors outside `E` (inferred sets) become `WorkerFailed`.
+                inline for (@typeInfo(E).error_set.error_names.?) |e| {
+                    if (std.mem.eql(u8, e, @errorName(err))) return done(@field(E, e));
+                }
+                done(error.WorkerFailed);
+            }
+        }
+    });
 }
 
 // Exports the worker side of `M` (see `Server`).

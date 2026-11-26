@@ -208,6 +208,23 @@ pub fn shouldGenerateDebugFiles() bool {
     return env_flags.sm_debug;
 }
 
+/// Wall time of `func(args...)` in nanoseconds: the fastest of `perf_runs` calls.
+/// Noise on shared CI runners (parallel build steps, descheduling) only ever adds
+/// time, so the minimum tracks the code's own cost, where a single sample made
+/// fixed budgets flaky on macOS.
+pub fn bestNs(comptime func: anytype, args: anytype) !u64 {
+    var best: u64 = std.math.maxInt(u64);
+    for (0..perf_runs) |_| {
+        const start = std.Io.Clock.awake.now(testing.io).nanoseconds;
+        try @call(.auto, func, args);
+        const elapsed: u64 = @intCast(std.Io.Clock.awake.now(testing.io).nanoseconds - start);
+        best = @min(best, elapsed);
+    }
+    return best;
+}
+
+pub const perf_runs = 5;
+
 /// Prints a perf line prefixed with ⏲, dimming ` > ` and ` | ` separators like the test runner.
 pub fn perf(comptime format: []const u8, args: anytype) void {
     var buf: [1024]u8 = undefined;

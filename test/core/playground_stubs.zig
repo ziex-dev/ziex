@@ -15,7 +15,7 @@ test "playground app_opts stub matches build options" {
         }
     }
     if (missing.len != 0) {
-        std.debug.print("site/app/pages/playground/scripts/template/stubs/app_opts.zig is out of date:{s}\n", .{missing});
+        std.debug.print("site/app/playground/template/stubs/app_opts.zig is out of date:{s}\n", .{missing});
         return error.PlaygroundStubOutOfDate;
     }
 }

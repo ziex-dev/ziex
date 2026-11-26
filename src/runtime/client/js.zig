@@ -41,7 +41,16 @@ const ext = if (is_client) struct {
     extern "__zx_js" fn toRef(v: *const Raw) u32;
     extern "__zx_js" fn release(h: u32) void;
     extern "__zx_js" fn bytes(h: u32, ptr: [*]u8, len: usize) usize;
+    extern "__zx_js" fn exports() u32;
+    extern "__zx_js" fn @"await"(h: u32, out: *Raw) bool;
 } else struct {
+    fn @"await"(_: u32, out: *Raw) bool {
+        out.* = Raw.undef;
+        return false;
+    }
+    fn exports() u32 {
+        return 0;
+    }
     fn bytes(_: u32, _: [*]u8, _: usize) usize {
         return 0;
     }
@@ -282,6 +291,28 @@ pub const Object = struct {
 /// `globalThis`.
 pub const global: Object = .{ .value = .global };
 
+/// Waits for a JS promise, suspending the caller through JSPI (any page event handler,
+/// callback or `zx.worker` function can), and returns what it resolved to; a plain value
+/// comes back as is. Rejections are `error.JsException`. Start several promises before
+/// awaiting the first to have them run concurrently. Release the result with `deinit`.
+pub fn awaitValue(v: Value) Error!Value {
+    var out: Raw = undefined;
+    const ok = ext.@"await"(@backingInt(v), &out);
+    const result = fromHandleRaw(out);
+    if (!ok) {
+        result.deinit();
+        return Error.JsException;
+    }
+    return result;
+}
+
+/// This wasm instance's exports. An `export fn` taken from here is a real wasm
+/// function, so it can be another module's import (e.g. a WASI host written in Zig).
+/// Release with `deinit`.
+pub fn exports() Object {
+    return .{ .value = @fromBackingInt(ext.exports()) };
+}
+
 /// Converts a tuple of args to `Raw` slots. Call `freeTemps` after the JS call.
 pub fn argsRaw(args: anytype) [@typeInfo(@TypeOf(args)).@"struct".field_types.len]Raw {
     const info = @typeInfo(@TypeOf(args)).@"struct";
@@ -347,12 +378,20 @@ pub fn freeTemps() void {
 }
 
 /// A Zig function callable from JS. Args are handles valid for the duration of the call.
+/// Made with `returning`/`bindReturning`, the JS function returns the Zig result: a plain
+/// value, or a Promise of it when the call goes through JSPI (any page callback), so the
+/// Zig side may suspend (e.g. on a `zx.worker` call) before answering.
 pub const Callback = struct {
     id: u32,
 
     pub const Fn = *const fn (ctx: ?*anyopaque, args: []const Value) void;
+    /// The returned value is handed to JS, which releases it.
+    pub const ReturnFn = *const fn (ctx: ?*anyopaque, args: []const Value) Value;
 
-    const Slot = struct { func: ?Fn, ctx: ?*anyopaque, once: bool };
+    /// Set in `id` when the JS function returns the Zig result (see `js.ts`).
+    pub const returns_bit: u32 = 1 << 31;
+
+    const Slot = struct { func: ?Fn = null, ret: ?ReturnFn = null, ctx: ?*anyopaque, once: bool };
     var slots: std.ArrayListUnmanaged(Slot) = .empty;
     var free_ids: std.ArrayListUnmanaged(u32) = .empty;
 
@@ -361,16 +400,23 @@ pub const Callback = struct {
         once: bool = false,
     };
 
-    /// Registers `func(ctx, args)`; id 0 is never used, so JS sees it as null.
-    pub fn init(ctx: ?*anyopaque, func: Fn, opts: Options) Callback {
-        const gpa = gpa_;
-        const slot: Slot = .{ .func = func, .ctx = ctx, .once = opts.once };
+    fn register(slot: Slot) u32 {
         if (free_ids.pop()) |id| {
             slots.items[id - 1] = slot;
-            return .{ .id = id };
+            return id;
         }
-        slots.append(gpa, slot) catch @panic("OOM");
-        return .{ .id = @intCast(slots.items.len) };
+        slots.append(gpa_, slot) catch @panic("OOM");
+        return @intCast(slots.items.len);
+    }
+
+    /// Registers `func(ctx, args)`; id 0 is never used, so JS sees it as null.
+    pub fn init(ctx: ?*anyopaque, func: Fn, opts: Options) Callback {
+        return .{ .id = register(.{ .func = func, .ctx = ctx, .once = opts.once }) };
+    }
+
+    /// Registers `func(ctx, args)`, whose result the JS function returns.
+    pub fn initReturning(ctx: ?*anyopaque, func: ReturnFn, opts: Options) Callback {
+        return .{ .id = register(.{ .ret = func, .ctx = ctx, .once = opts.once }) | returns_bit };
     }
 
     /// Registers a context-free function.
@@ -381,6 +427,17 @@ pub const Callback = struct {
             }
         };
         return init(null, S.call, opts);
+    }
+
+    /// Registers a context-free function whose result JS receives, e.g. a source of
+    /// completions a JS library awaits.
+    pub fn returning(comptime f: fn ([]const Value) Value, opts: Options) Callback {
+        const S = struct {
+            fn call(_: ?*anyopaque, args: []const Value) Value {
+                return f(args);
+            }
+        };
+        return initReturning(null, S.call, opts);
     }
 
     /// Registers `f(ctx, args)` with a typed context pointer.
@@ -394,26 +451,43 @@ pub const Callback = struct {
         return init(@ptrCast(@constCast(ctx)), S.call, opts);
     }
 
+    /// `bind`, returning `f`'s result to JS.
+    pub fn bindReturning(ctx: anytype, comptime f: fn (@TypeOf(ctx), []const Value) Value, opts: Options) Callback {
+        if (@typeInfo(@TypeOf(ctx)) != .pointer) @compileError("Callback.bindReturning expects a pointer context");
+        const S = struct {
+            fn call(c: ?*anyopaque, args: []const Value) Value {
+                return f(@ptrCast(@alignCast(c)), args);
+            }
+        };
+        return initReturning(@ptrCast(@constCast(ctx)), S.call, opts);
+    }
+
     /// In JSON args (dictionaries), `{"$f":id}`, which JS swaps for the function.
     pub fn jsonStringify(self: Callback, jw: anytype) !void {
         try jw.write(.{ .@"$f" = self.id });
     }
 
     pub fn release(self: Callback) void {
-        if (self.id == 0 or self.id > slots.items.len) return;
-        const slot = &slots.items[self.id - 1];
-        if (slot.func == null) return;
+        const id = self.id & ~returns_bit;
+        if (id == 0 or id > slots.items.len) return;
+        const slot = &slots.items[id - 1];
+        if (slot.func == null and slot.ret == null) return;
         slot.func = null;
-        free_ids.append(gpa_, self.id) catch {};
+        slot.ret = null;
+        free_ids.append(gpa_, id) catch {};
     }
 
-    fn dispatch(id: u32, n: u32, a0: u32, a1: u32, a2: u32) callconv(.c) void {
-        if (id == 0 or id > slots.items.len) return;
+    /// Returns a handle JS takes ownership of (0 = undefined) for returning callbacks.
+    fn dispatch(raw_id: u32, n: u32, a0: u32, a1: u32, a2: u32) callconv(.c) u32 {
+        const id = raw_id & ~returns_bit;
+        if (id == 0 or id > slots.items.len) return 0;
         const slot = slots.items[id - 1];
-        const func = slot.func orelse return;
         if (slot.once) (Callback{ .id = id }).release();
         const all = [3]Value{ @fromBackingInt(a0), @fromBackingInt(a1), @fromBackingInt(a2) };
-        func(slot.ctx, all[0..@min(n, 3)]);
+        const args = all[0..@min(n, 3)];
+        if (slot.ret) |ret| return @backingInt(ret(slot.ctx, args));
+        if (slot.func) |func| func(slot.ctx, args);
+        return 0;
     }
 
     comptime {

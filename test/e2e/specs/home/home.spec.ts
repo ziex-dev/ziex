@@ -4,7 +4,7 @@ import {
   isPlaygroundOpenable,
   decodeFilesFromQuery,
   type SnippetEntry,
-} from '../../../../site/app/scripts/playground_share';
+} from '../../helpers/playground_share';
 
 // The home page's behaviour is Zig (site/app/pages/home/*.zig via zx.client.web);
 // it ships no page JavaScript of its own.

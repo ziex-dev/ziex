@@ -64,6 +64,7 @@ pub const Op = enum(u32) {
     bucket_upload_part,
     bucket_upload_finish,
     bucket_upload_abort,
+    worker_post,
 };
 
 // Returned by hosts that don't implement an op.

@@ -100,6 +100,7 @@ pub const Worker = @import("runtime/core/Worker.zig");
 const worker_proxy = plfm.platform.role == .client and !@hasDecl(@import("root"), "zx_worker");
 
 // Runs `M`'s `pub fn`s (e.g. `@import("worker.zig")`) in its own browser Worker.
+// `pub const options: zx.Worker.Options` in `M` picks waiting or callback calls.
 pub fn worker(comptime M: type) @TypeOf(if (worker_proxy) Worker.proxy(M, workerUrl(M)) else Worker.direct(M)) {
     return if (worker_proxy) Worker.proxy(M, workerUrl(M)) else Worker.direct(M);
 }

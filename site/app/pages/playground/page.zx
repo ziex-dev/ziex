@@ -1,258 +1,1232 @@
-pub fn Page(ctx: zx.PageContext) !zx.Component {
-    if(builtin.optimize == .debug) _ = try main.main();
+// The playground: an editor, an output panel and a preview iframe. All the heavy
+// lifting (zx transpile, zig build, running the result, the language server) happens
+// in Zig in a Web Worker (`worker.zig`). This component keeps the UI state; the editor
+// itself is CodeMirror (`editor/editor.ts`), mounted from here and fed by Zig hooks.
+
+pub fn Page(ctx: zx.PageContext) zx.Component {
     return (
         <div @allocator={ctx.arena} class="pg-ide" id="playground-ide">
             <style @escaping={.none}>
                 {@embedFile("../../assets/playground.css")}
             </style>
-
-            <TopNavigation />
-            <div class="pg-feature-notice is-hidden" id="pg-feature-notice" role="status" aria-live="polite">
-                <span class="pg-feature-notice-icon" aria-hidden="true">i</span>
-                <p class="pg-feature-notice-text" id="pg-feature-notice-text">Toggle App for client-side rendering. Not all framework features are supported in the playground yet.</p>
-                <button class="pg-feature-notice-close" id="pg-feature-notice-close" type="button" aria-label="Dismiss notice" title="Dismiss">Dismiss</button>
-            </div>
-            <div class="pg-ide-body" id="pg-ide-body">
-                <EditorPane />
-                <div class="pg-splitter" id="pg-splitter"></div>
-                <PreviewPane />
-            </div>
-            // <StatusBar />
-            <script @escaping={.none}>
-                {@embedFile("scripts/split.js")}
-            </script>
-            <script type="module" src=`/assets/playground/editor.js?v={util.buildId(ctx.io, ctx.arena)}`/>
+            <Ide @client />
+            <script type="module" src={"/assets/playground/editor.js?v=" ++ assets.zx_version}></script>
         </div>
     );
 }
 
-// ── Top Navigation Component ──
-pub fn TopNavigation(ctx: *zx.ComponentCtx(struct {})) zx.Component {
+pub fn Ide(ctx: *zx.ComponentContext) zx.Component {
+    if (zx.platform.role == .client) startOnce();
+    // Until the client knows which files to show (persisted, shared or default), render
+    // only what every visit has, so the page doesn't flash the default template.
+    const files: []const File = if (model.loaded) model.list() else &.{};
+    const active: File = if (files.len > 0) files[@min(model.active, files.len - 1)] else .{ .name = "", .content = "" };
+
     return (
-        <nav @allocator={ctx.allocator}  class="pg-nav">
-            <div class="pg-nav-left">
-                <a href="/" class="pg-nav-logo">Ziex</a>
-                <div class="pg-nav-links">
-                    <a href="/learn" class="pg-nav-link">Docs</a>
-                    // <a href="/examples" class="pg-nav-link">Examples</a>
+        <div @allocator={ctx.allocator} class="pg-ide-root">
+            <nav class="pg-nav">
+                <div class="pg-nav-left">
+                    <a href="/" class="pg-nav-logo">Ziex</a>
+                    <div class="pg-nav-links">
+                        <a href="/learn" class="pg-nav-link">Docs</a>
+                    </div>
                 </div>
-            </div>
-            <ActionButtons @client />
-            <div class="pg-nav-actions">
-                // <a href="/learn" class="pg-nav-btn">Docs</a>
-                <button class="pg-nav-btn pg-nav-btn--primary" id="pg-run-btn" disabled="true" title="Run code (F5)" aria-label="Run code">
-                    Run
-                    // <span class="pg-run-shortcut">F5</span>
-                </button>
-                <button class="pg-nav-btn" id="pg-share-btn" title="Share playground" aria-label="Share" disabled="true">
-                    <span style="font-family:monospace;font-size:1em;">{"</> "}</span> 
-                    <span>
-                        <CheckIcon />
-                    </span> 
-                    Share
-                </button>
-            </div>
-        </nav>
-    );
-}
-
-// ── Editor Pane Component ──
-pub fn EditorPane(ctx: *zx.ComponentCtx(struct {})) zx.Component {
-    return (
-        <div @allocator={ctx.allocator}  class="pg-editor" id="pg-editor" style="flex: 1 1 55%;">
-            <div class="pg-tabs" id="pg-tabs">
-                // <button class="pg-tab pg-tab--active" data-file="Playground.zx" id="pg-tab-0">
-                //     <span class="pg-tab-icon type-zx"><AllFileIcons /></span>
-                //     Playground.zx
-                //     <span class="pg-tab-close" aria-label="Close tab" style="opacity: 0.3; pointer-events: none;">×</span>
-                // </button>
-                // <button class="pg-tab" data-file="style.css" id="pg-tab-2">
-                //     <span class="pg-tab-icon type-css"><AllFileIcons /></span>
-                //     style.css
-                //     <span class="pg-tab-close" aria-label="Close tab">×</span>
-                // </button>
-                // <button class="pg-tab-add" id="pg-add-file" aria-label="Add new file" title="New file">+</button>
-            </div>
-            <template id="pg-icons-template">
-                <AllFileIcons />
-            </template>
-            <div class="pg-code" id="pg-code-area">
-            </div>
-            <EditorStatusBar />
-        </div>
-    );
-}
-
-pub fn EditorStatusBar(ctx: *zx.ComponentCtx(struct {})) zx.Component {
-    return (
-        <div @allocator={ctx.allocator} class="pg-editor-status" id="pg-editor-status">
-            <div class="pg-editor-status-left">
-                <span class="pg-editor-status-item" id="pg-cursor-pos">Ln 1, Col 1</span>
-                <select id="pg-template-select" class="pg-template-select" aria-label="Select template"></select>
-            </div>
-            <div class="pg-editor-status-right">
-                <button
-                    type="button"
-                    class="pg-app-toggle"
-                    id="pg-app-toggle"
-                    aria-pressed="false"
-                    title="Toggle App mode (full mini-app with SSR + client hydrate)"
-                    aria-label="App mode"
-                >
-                    App
-                </button>
-                <button
-                    class="pg-editor-status-btn"
-                    id="pg-format-btn"
-                    type="button"
-                    disabled="true"
-                    title="Format file (Shift+Alt+F)"
-                    aria-label="Format file"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-                        <path d="M3 4.75A.75.75 0 0 1 3.75 4h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 4.75ZM3 9.75A.75.75 0 0 1 3.75 9h8.5a.75.75 0 0 1 0 1.5h-8.5A.75.75 0 0 1 3 9.75ZM3 14.75a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1-.75-.75Z"/>
-                        <path d="M15.28 9.22a.75.75 0 0 1 1.06 0l2.22 2.22a.75.75 0 1 1-1.06 1.06l-.94-.94V16.5a.75.75 0 0 1-1.5 0v-4.94l-.94.94a.75.75 0 1 1-1.06-1.06l2.22-2.22Z"/>
-                    </svg>
-                </button>
-                <div class="pg-settings" id="pg-settings">
+                <div class="pg-nav-actions">
                     <button
                         type="button"
-                        class="pg-editor-status-btn"
-                        id="pg-settings-btn"
-                        title="Playground settings"
-                        aria-label="Playground settings"
-                        aria-expanded="false"
-                        aria-haspopup="true"
-                        aria-controls="pg-settings-popover"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-                            <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.993 6.993 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
-                        </svg>
+                        class={if (model.running) "pg-nav-btn pg-nav-btn--primary is-busy" else "pg-nav-btn pg-nav-btn--primary"}
+                        id="pg-run-btn"
+                        disabled={!model.ready or model.running}
+                        title="Run (Ctrl+Enter)"
+                        aria-label="Run"
+                        onclick={ctx.bind(onRun)}
+                    >Run</button>
+                    <button type="button" class="pg-nav-btn" id="pg-share-btn" disabled={!model.ready} title="Copy a link to this code" aria-label="Share" onclick={ctx.bind(onShare)}>
+                        <span class="pg-mono" aria-hidden="true">{"</>"}</span>
+                        Share
                     </button>
-                    <div class="pg-settings-popover is-hidden" id="pg-settings-popover" role="menu">
-                        <label class="pg-settings-row" role="menuitemcheckbox" id="pg-persist-files-row">
-                            <span>Persist file changes</span>
-                            <input type="checkbox" id="pg-persist-files" />
-                        </label>
-                        <button type="button" class="pg-settings-action" id="pg-reset-template" role="menuitem">Reset template</button>
-                        <button type="button" class="pg-settings-action pg-settings-action--danger" id="pg-clear-cache" role="menuitem">Clear cache</button>
+                </div>
+            </nav>
+
+            <div class="pg-ide-body" id="pg-ide-body">
+                <div class="pg-editor" id="pg-editor">
+                    <div class="pg-tabs" id="pg-tabs" onwheel={ctx.bind(onTabsWheel)}>
+                        {for (files, 0..) |f, i| (
+                            <button
+                                type="button"
+                                class={tabClass(i, f)}
+                                value={i}
+                                title={if (f.readonly) "Read-only library source" else "Double-click to rename"}
+                                onclick={ctx.bind(onTab)}
+                                ondblclick={ctx.bind(onRenameTab)}
+                            >
+                                <span class={fileClass(f.name)} aria-hidden="true">{fileIcon(ctx.allocator, f.name)}</span>
+                                {f.name}
+                                <span class="pg-tab-close" data-close="true" aria-label="Close tab">×</span>
+                            </button>
+                        )}
+                        <button type="button" class="pg-tab-add" aria-label="Add new file" title="New file" onclick={ctx.bind(onAddFile)}>+</button>
+                    </div>
+                    <div class="pg-code" id="pg-code-area">
+                        // Server-rendered code, until the editor mounts in its place.
+                        {if (model.loaded and !model.editor_mounted) (<pre class="pg-code-fallback">{active.content}</pre>)}
+                    </div>
+                    <div class="pg-editor-status">
+                        <div class="pg-editor-status-left">
+                            <span class="pg-editor-status-item" id="pg-cursor-pos">Ln 1, Col 1</span>
+                            <div class="pg-template-menu" data-menu="templates">
+                                <button
+                                    type="button"
+                                    id="pg-template-select"
+                                    class="pg-template-select"
+                                    aria-label="Select template"
+                                    aria-haspopup="listbox"
+                                    aria-expanded={if (model.menu == .templates) "true" else "false"}
+                                    onclick={ctx.bind(onTemplateMenu)}
+                                >{if (model.loaded) templateLabel() else ""}</button>
+                                {if (model.menu == .templates) (
+                                    <div class="pg-template-list" role="listbox" aria-label="Templates">
+                                        {for (templatesFor(model.mode)) |t| (
+                                            <button
+                                                type="button"
+                                                role="option"
+                                                class="pg-template-option"
+                                                aria-selected={if (std.mem.eql(u8, t.id, model.template)) "true" else "false"}
+                                                value={t.id}
+                                                onclick={ctx.bind(onTemplate)}
+                                            >{t.label}</button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <span class="pg-editor-status-msg" role="status">{model.message}</span>
+                        </div>
+                        <div class="pg-editor-status-right">
+                            <button
+                                type="button"
+                                class="pg-app-toggle"
+                                aria-pressed={if (model.mode == .app) "true" else "false"}
+                                title="App mode: a full app with server rendering and client hydration"
+                                aria-label="App mode"
+                                onclick={ctx.bind(onToggleApp)}
+                            >App</button>
+                            <button
+                                type="button"
+                                class="pg-editor-status-btn"
+                                id="pg-format-btn"
+                                disabled={!model.ready or model.formatting}
+                                title="Format file (Shift+Alt+F)"
+                                aria-label="Format file"
+                                onclick={ctx.bind(onFormat)}
+                            >
+                                <FormatIcon />
+                            </button>
+                            <div class="pg-settings" data-menu="settings">
+                                <button
+                                    type="button"
+                                    class="pg-editor-status-btn"
+                                    title="Playground settings"
+                                    aria-label="Playground settings"
+                                    aria-expanded={if (model.menu == .settings) "true" else "false"}
+                                    onclick={ctx.bind(onSettings)}
+                                >
+                                    <GearIcon />
+                                </button>
+                                {if (model.menu == .settings) (
+                                    <div class="pg-settings-popover" role="menu">
+                                        <label class="pg-settings-row">
+                                            <span>Persist file changes</span>
+                                            <input type="checkbox" checked={model.persist} onchange={ctx.bind(onPersist)} />
+                                        </label>
+                                        <button type="button" class="pg-settings-action" role="menuitem" onclick={ctx.bind(onResetTemplate)}>Reset template</button>
+                                        <button type="button" class="pg-settings-action pg-settings-action--danger" role="menuitem" onclick={ctx.bind(onClearCache)}>Clear cache</button>
+                                    </div>
+                                )}
+                            </div>
+                            <span class="pg-editor-status-item">{languageLabel(active.name)}</span>
+                        </div>
                     </div>
                 </div>
-                <span class="pg-editor-status-item" id="pg-file-lang">ZX</span>
-            </div>
-        </div>
-    );
-}
 
-// ── Preview Pane Component ──
-pub fn PreviewPane(ctx: *zx.ComponentCtx(struct {})) zx.Component {
-    return (
-        <div  @allocator={ctx.allocator} class="pg-preview terminal-collapsed" id="pg-preview" style="flex: 1 1 45%;">
-            <div class="pg-browser" id="pg-browser">
-                <BrowserToolbar />
-                <div class="pg-browser-viewport" id="pg-browser-viewport">
-                    <div class="pg-browser-placeholder">
-                        <div class="pg-browser-placeholder-icon"></div>
-                        Press Run to see preview
+                <div class="pg-splitter" id="pg-splitter" onpointerdown={ctx.bind(onSplitStart)} onpointermove={ctx.bind(onSplitMove)} onpointerup={ctx.bind(onSplitEnd)}></div>
+
+                <div class="pg-preview" id="pg-preview">
+                    <div class="pg-browser">
+                        {if (model.mode == .app) (
+                            <div class="pg-browser-toolbar">
+                                <div class="pg-browser-nav">
+                                    <button class="pg-browser-nav-btn" type="button" aria-label="Back" disabled={model.history_at == 0 or model.running} onclick={ctx.bind(onBack)}>◀</button>
+                                    <button class="pg-browser-nav-btn" type="button" aria-label="Forward" disabled={model.history_at + 1 >= model.history.items.len or model.running} onclick={ctx.bind(onForward)}>▶</button>
+                                </div>
+                                <form class="pg-browser-url" onsubmit={ctx.bind(onUrlSubmit)}>
+                                    <span class="pg-browser-url-lock" aria-hidden="true"></span>
+                                    <input
+                                        class="pg-browser-url-text"
+                                        type="text"
+                                        id="pg-url"
+                                        value={currentPath()}
+                                        spellcheck="false"
+                                        autocomplete="off"
+                                        aria-label="Preview URL"
+                                    />
+                                </form>
+                                <button class="pg-browser-refresh-btn" type="button" aria-label="Refresh" disabled={!model.ready or model.running} onclick={ctx.bind(onRefresh)}>⟳</button>
+                            </div>
+                        )}
+                        <div class="pg-browser-viewport">
+                            {switch (model.preview.kind) {
+                                .html => (<iframe key={model.run_id} class="pg-frame" title="Preview" sandbox="allow-scripts allow-same-origin allow-forms" srcdoc={model.preview.body} onload={ctx.bind(onFrameLoad)}></iframe>),
+                                .text => (
+                                    <div class="pg-browser-response">
+                                        <div class="pg-browser-response-head">{responseHead(ctx.allocator)}</div>
+                                        <pre class="pg-browser-response-body">{model.preview.body}</pre>
+                                    </div>
+                                ),
+                                .none => (
+                                    <div class="pg-browser-placeholder">
+                                        {if (model.running) "Building…" else "Press Run to see preview"}
+                                    </div>
+                                ),
+                            }}
+                        </div>
+                    </div>
+
+                    {if (model.panel_open) (
+                        <div class="pg-hsplitter" aria-hidden="true" onpointerdown={ctx.bind(onPanelResizeStart)} onpointermove={ctx.bind(onPanelResize)} onpointerup={ctx.bind(onPanelResizeEnd)}></div>
+                    )}
+                    <div class={if (model.panel_open) "pg-terminal" else "pg-terminal collapsed"} id="pg-terminal" style={panelStyle(ctx.allocator)}>
+                        <div class="pg-terminal-header" title="Show/Hide output" onclick={ctx.bind(onTogglePanel)}>
+                            <div class="pg-terminal-title" role="tablist" aria-label="Panel">
+                                <span class={if (model.failed) "pg-terminal-title-dot is-error" else "pg-terminal-title-dot"}></span>
+                                <span class="pg-panel-tab pg-panel-tab--active" role="tab" aria-selected="true">Output</span>
+                            </div>
+                            <div class="pg-terminal-actions">
+                                <button type="button" class="pg-terminal-action-btn" aria-label="Toggle panel" title="Show/Hide">{if (model.panel_open) "▼" else "▲"}</button>
+                                <button type="button" class="pg-terminal-action-btn" aria-label="Clear" title="Clear" onclick={ctx.bind(onClearLog)}>⌫</button>
+                            </div>
+                        </div>
+                        {if (model.panel_open) (
+                            <pre role="log" aria-label="Output" class={if (model.failed) "pg-terminal-body is-error" else "pg-terminal-body"}>{if (model.log.len > 0) model.log else "Build progress and program output appear here."}</pre>
+                        )}
                     </div>
                 </div>
             </div>
-            <div class="pg-hsplitter" id="pg-hsplitter"></div>
-            <div class="pg-terminal collapsed" id="pg-terminal">
-                <div class="pg-terminal-header" id="pg-terminal-header">
-                    <div class="pg-terminal-title" role="tablist" aria-label="Panel">
-                        <span class="pg-terminal-title-dot"></span>
-                        <button type="button" class="pg-panel-tab pg-panel-tab--active" data-panel="output" role="tab" aria-selected="true" id="pg-panel-tab-output">Output</button>
-                        <button type="button" class="pg-panel-tab" data-panel="terminal" role="tab" aria-selected="false" id="pg-panel-tab-terminal">Terminal</button>
-                    </div>
-                    <div class="pg-terminal-actions">
-                        <button class="pg-terminal-action-btn" aria-label="Toggle panel" id="pg-terminal-toggle" title="Show/Hide">▲</button>
-                        <button class="pg-terminal-action-btn" aria-label="Clear" id="pg-terminal-clear" title="Clear">⌫</button>
-                    </div>
-                </div>
-                <div class="pg-terminal-body" id="pg-terminal-body" role="tabpanel" aria-labelledby="pg-panel-tab-output">
-                    <div class="pg-terminal-empty" id="pg-terminal-empty">
-                        Build progress & program output will appear here
-                    </div>
-                </div>
-                <div class="pg-shell is-hidden" id="pg-shell" role="tabpanel" aria-labelledby="pg-panel-tab-terminal"></div>
-            </div>
         </div>
     );
 }
 
-// ── Legacy full-IDE status bar (unused; editor has its own status bar) ──
-pub fn StatusBar(ctx: *zx.ComponentCtx(struct {})) zx.Component {
+fn FormatIcon(allocator: zx.Allocator) zx.Component {
     return (
-        <div @allocator={ctx.allocator}  class="pg-status">
-            <div class="pg-status-left">
-                <span class="pg-status-item">Ziex Playground</span>
-                <span class="pg-status-item">Ln 1, Col 1</span>
-            </div>
-            <div class="pg-status-right">
-                <span class="pg-status-item">UTF-8</span>
-                <span class="pg-status-item">Zig</span>
-            </div>
-        </div>
+        <svg @allocator={allocator} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+            <path d="M3 4.75A.75.75 0 0 1 3.75 4h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 4.75ZM3 9.75A.75.75 0 0 1 3.75 9h8.5a.75.75 0 0 1 0 1.5h-8.5A.75.75 0 0 1 3 9.75ZM3 14.75a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1-.75-.75Z"/>
+            <path d="M15.28 9.22a.75.75 0 0 1 1.06 0l2.22 2.22a.75.75 0 1 1-1.06 1.06l-.94-.94V16.5a.75.75 0 0 1-1.5 0v-4.94l-.94.94a.75.75 0 1 1-1.06-1.06l2.22-2.22Z"/>
+        </svg>
     );
 }
 
-pub fn BrowserToolbar(ctx: *zx.ComponentCtx(struct {})) zx.Component {
+fn GearIcon(allocator: zx.Allocator) zx.Component {
     return (
-        <div @allocator={ctx.allocator} class="pg-browser-toolbar is-hidden" id="pg-browser-toolbar">
-            <div class="pg-browser-nav">
-                <button class="pg-browser-nav-btn" type="button" aria-label="Back" id="pg-browser-back" disabled="true">◀</button>
-                <button class="pg-browser-nav-btn" type="button" aria-label="Forward" id="pg-browser-forward" disabled="true">▶</button>
-            </div>
-            <form class="pg-browser-url" id="pg-browser-url-form">
-                <span class="pg-browser-url-lock" aria-hidden="true"></span>
-                <input
-                    class="pg-browser-url-text"
-                    type="text"
-                    value="playground.local/"
-                    id="pg-browser-url-input"
-                    spellcheck="false"
-                    autocomplete="off"
-                    aria-label="Preview URL"
-                />
-            </form>
-            <button class="pg-browser-refresh-btn" type="button" aria-label="Refresh" id="pg-browser-refresh">⟳</button>
-        </div>
+        <svg @allocator={allocator} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+            <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.993 6.993 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
+        </svg>
     );
 }
 
-pub fn ActionButtons(ctx: *zx.ComponentCtx(struct {})) zx.Component {
-    return (
-        <div @allocator={ctx.allocator} class="pg-nav-actions" style="display: none;">
-            <a href="/learn" class="pg-nav-btn">Docs</a>
-            <button onclick={handleRunClick} class="pg-nav-btn pg-nav-btn--primary" id="pg-run-zx-btn">▶ Run</button>
-        </div>
-    );
+// --- Model ---
+
+const Engine = @import("worker.zig");
+const Tools = @import("tools/worker.zig");
+const engine = zx.worker(Engine);
+const tools = zx.worker(Tools);
+const tpl = @import("templates.zig");
+const File = tpl.File;
+const Mode = tpl.Mode;
+const Template = tpl.Template;
+const Preview = @import("worker.zig").Preview;
+
+const gpa = zx.allocator;
+
+/// UI state. Lives in the page's wasm; the server only ever renders the defaults.
+const Model = struct {
+    files: std.ArrayList(File) = .empty,
+    active: usize = 0,
+    mode: Mode = .playground,
+    template: []const u8 = "playground",
+    templates: []const Template = &.{},
+    ready: bool = false,
+    running: bool = false,
+    formatting: bool = false,
+    failed: bool = false,
+    panel_open: bool = false,
+    /// The open popover, if any (closed by clicking elsewhere).
+    menu: enum { none, templates, settings } = .none,
+    panel_height: u32 = 200,
+    persist: bool = false,
+    preview_owned: bool = false,
+    pending_path: []const u8 = "",
+    formatting_name: []const u8 = "",
+    editor_mounted: bool = false,
+    /// Set once the files to show are known (persisted, shared or the default).
+    loaded: bool = false,
+    message: []const u8 = "",
+    log: []const u8 = "",
+    preview: Preview = .{ .ok = true, .log = "" },
+    run_id: u32 = 0,
+    history: std.ArrayList([]const u8) = .empty,
+    history_at: usize = 0,
+
+    fn list(m: *const Model) []const File {
+        return if (m.files.items.len == 0) &tpl.default_files else m.files.items;
+    }
+};
+
+var model: Model = .{};
+
+/// Until the worker sends the list, the select shows the default template.
+const fallback_templates = [_]Template{.{ .id = "playground", .label = "Playground", .mode = .playground, .files = &tpl.default_files }};
+
+var mode_templates: [64]Template = undefined;
+
+fn templatesFor(mode: Mode) []const Template {
+    if (model.templates.len == 0) return &fallback_templates;
+    var n: usize = 0;
+    for (model.templates) |t| if (t.mode == mode and n < mode_templates.len) {
+        mode_templates[n] = t;
+        n += 1;
+    };
+    return mode_templates[0..n];
 }
 
-fn handleRunClick(ctx: zx.client.Event) void {
-    _ = ctx;
-
-    if (zx.platform.role != .client) return;
-
-    const document = zx.client.Document.init(zx.allocator);
-
-    const editor_container = document.querySelector(".cm-content") catch unreachable;
-
-    const c = zx.client.Console.init();
-    c.log(.{editor_container.ref});
-    
-    const inner_text: []const u8 = editor_container.ref.getAlloc(zx.client.js.String, zx.allocator, "innerText") catch "NA";
-    std.log.info("Run clicked {s}", .{inner_text});
+fn refresh() void {
+    zx.client.rerender();
 }
 
-const builtin = @import("builtin");
+fn setFiles(files: []const File, mode: Mode, template: []const u8) void {
+    for (model.files.items) |f| {
+        gpa.free(f.name);
+        gpa.free(f.content);
+    }
+    model.files.clearRetainingCapacity();
+    for (files) |f| {
+        if (std.mem.eql(u8, f.name, tpl.sharedMain(mode).name)) continue;
+        model.files.append(gpa, .{
+            .name = gpa.dupe(u8, f.name) catch continue,
+            .content = gpa.dupe(u8, f.content) catch continue,
+        }) catch {};
+    }
+    if (model.files.items.len == 0) model.files.append(gpa, .{ .name = gpa.dupe(u8, "Playground.zx") catch "", .content = gpa.dupe(u8, "") catch "" }) catch {};
+    model.mode = mode;
+    model.template = template;
+    model.active = firstEditable(model.files.items);
+    model.preview = .{ .ok = true, .log = "" };
+    resetHistory();
+    saveFiles();
+    refresh();
+    showActive();
+}
+
+/// The first `.zx` page, so the editor opens on something worth editing.
+fn firstEditable(files: []const File) usize {
+    for (files, 0..) |f, i| if (std.mem.endsWith(u8, f.name, "page.zx")) return i;
+    for (files, 0..) |f, i| if (std.mem.endsWith(u8, f.name, ".zx")) return i;
+    return 0;
+}
+
+fn ensureFiles() void {
+    if (model.files.items.len == 0) setFiles(&tpl.default_files, .playground, "playground");
+}
+
+fn setMessage(msg: []const u8) void {
+    model.message = msg;
+}
+
+// --- Startup ---
+
+var started = false;
+
+fn startOnce() void {
+    if (started) return;
+    started = true;
+    _ = zx.client.setTimeout(start, .zero);
+}
+
+fn start() void {
+    const storage = web.window().localStorage();
+    defer storage.deinit();
+    model.persist = if (storage.getItem(gpa, persist_key) catch null) |v| std.mem.eql(u8, v, "1") else false;
+
+    if (sharedFromHash()) |data| {
+        clearHash();
+        engine.openShare(data, &onOpenShare);
+    } else {
+        if (model.persist) loadFiles();
+        showFiles();
+    }
+    engine.templates(&onTemplates);
+}
+
+/// The first render only has what every visit shares; files appear once known.
+fn showFiles() void {
+    ensureFiles();
+    model.loaded = true;
+    refresh();
+    showActive();
+}
+
+fn onOpenShare(result: zx.Worker.Result(Engine, "openShare")) void {
+    if (result) |files| {
+        setFiles(files, modeOf(files), "");
+    } else |_| setMessage("Couldn't open the shared link");
+    showFiles();
+}
+
+fn onTemplates(result: zx.Worker.Result(Engine, "templates")) void {
+    model.templates = result catch |err| {
+        model.log = std.fmt.allocPrint(gpa, "The playground worker failed to start ({t}).", .{err}) catch "";
+        model.failed = true;
+        model.panel_open = true;
+        refresh();
+        return;
+    };
+    model.ready = true;
+    refresh();
+    mountEditor();
+    const doc = web.document();
+    defer doc.deinit();
+    doc.addEventListener("click", .fromFn(onDocumentClick, .{}), .{ .capture = true });
+    // Fetch the compilers in the background so the first Run is quicker.
+    tools.warm(&onToolsWarm);
+}
+
+fn ignoreDone(_: zx.Worker.Result(Engine, "warm")) void {}
+
+/// The language server's files first (the editor needs them now), then the compiler,
+/// which reuses those downloads from the cache.
+fn onToolsWarm(_: zx.Worker.Result(Tools, "warm")) void {
+    engine.warm(&ignoreDone);
+}
+
+fn modeOf(files: []const File) Mode {
+    for (files) |f| if (std.mem.startsWith(u8, f.name, "app/")) return .app;
+    return .playground;
+}
+
+fn sharedFromHash() ?[]const u8 {
+    const loc = web.window().location();
+    defer loc.deinit();
+    const hash = loc.hash(gpa) catch return null;
+    const prefix = "#data=";
+    if (!std.mem.startsWith(u8, hash, prefix) or hash.len == prefix.len) return null;
+    return hash[prefix.len..];
+}
+
+fn clearHash() void {
+    const history = web.window().history();
+    defer history.deinit();
+    history.replaceState(null, "", "/playground");
+}
+
+// --- Persistence (localStorage, opt-in) ---
+
+const persist_key = "playground_persist_files_v1";
+const files_key = "playground_files_v2";
+
+/// `mode \0 template \0 (name \0 content \0)*`, no JSON needed.
+fn saveFiles() void {
+    if (!model.persist or zx.platform.role != .client) return;
+    var out: std.Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    const w = &out.writer;
+    w.print("{t}\x00{s}\x00", .{ model.mode, model.template }) catch return;
+    for (model.files.items) |f| if (!f.readonly) w.print("{s}\x00{s}\x00", .{ f.name, f.content }) catch return;
+    const storage = web.window().localStorage();
+    defer storage.deinit();
+    storage.setItem(files_key, out.written());
+}
+
+fn loadFiles() void {
+    const storage = web.window().localStorage();
+    defer storage.deinit();
+    const saved = (storage.getItem(gpa, files_key) catch null) orelse return;
+    var it = std.mem.splitScalar(u8, saved, 0);
+    const mode = std.meta.stringToEnum(Mode, it.next() orelse return) orelse return;
+    const template = it.next() orelse return;
+    var files: std.ArrayList(File) = .empty;
+    while (it.next()) |name| {
+        if (name.len == 0) break;
+        files.append(gpa, .{ .name = name, .content = it.next() orelse break }) catch return;
+    }
+    if (files.items.len > 0) setFiles(files.items, mode, template);
+}
+
+// --- Editor (CodeMirror island, see editor/editor.ts) ---
+
+/// The mounted editor (`{ open, setText, close, focus }`), once editor.js has loaded.
+var editor_api: ?js.Object = null;
+
+fn mountEditor() void {
+    const pe = js.global.get(?js.Object, "PlaygroundEditor") catch null;
+    if (pe == null) {
+        // editor.js is a module script; it announces itself when it runs.
+        const win = web.window();
+        defer win.deinit();
+        win.addEventListener("pg-editor-ready", .fromFn(onEditorReady, .{ .once = true }), null);
+        return;
+    }
+    defer pe.?.deinit();
+    const doc = web.document();
+    defer doc.deinit();
+    const host = doc.getElementById("pg-code-area") orelse return;
+    defer host.deinit();
+
+    const Object = js.global.get(js.Object, "Object") catch return;
+    defer Object.deinit();
+    const hooks = Object.new(.{}) catch return;
+    defer hooks.deinit();
+    hooks.set("change", js.Callback.fromFn(onEditorChange, .{})) catch return;
+    hooks.set("cursor", js.Callback.fromFn(onEditorCursor, .{})) catch return;
+    hooks.set("run", js.Callback.fromFn(onEditorRun, .{})) catch return;
+    hooks.set("format", js.Callback.fromFn(onEditorFormat, .{})) catch return;
+    // Answers come back to CodeMirror as a Promise: Zig suspends on the worker meanwhile.
+    hooks.set("lsp", js.Callback.returning(onLspMessage, .{})) catch return;
+    hooks.set("openFile", js.Callback.fromFn(onOpenFile, .{})) catch return;
+
+    editor_api = pe.?.call(js.Object, "mount", .{ host, hooks }) catch return;
+    model.editor_mounted = true;
+    refresh();
+    showActive();
+}
+
+fn onEditorReady(_: []const js.Value) void {
+    mountEditor();
+}
+
+/// Opens the active file in the editor.
+fn showActive() void {
+    const api = editor_api orelse return;
+    const f = model.list()[model.active];
+    api.call(void, "open", .{ f.name, f.content, f.readonly }) catch {};
+    revealActiveTab();
+}
+
+/// A vertical mouse wheel scrolls the tab bar sideways, like editor tab strips do;
+/// horizontal wheels and trackpads already scroll it natively.
+fn onTabsWheel(e: *zx.client.Event.Stateful) void {
+    const ev = e.native(web.WheelEvent);
+    const dy = ev.deltaY();
+    if (dy == 0 or @abs(ev.deltaX()) > @abs(dy)) return;
+    // deltaMode 1 counts lines, 2 pages; 0 is already pixels.
+    const step: f64 = switch (ev.deltaMode()) {
+        1 => 32,
+        2 => 400,
+        else => 1,
+    };
+    const doc = web.document();
+    defer doc.deinit();
+    const tabs = doc.getElementById("pg-tabs") orelse return;
+    defer tabs.deinit();
+    tabs.setScrollLeft(tabs.scrollLeft() + dy * step);
+}
+
+/// Scrolls the tab bar so the active tab is visible.
+fn revealActiveTab() void {
+    const doc = web.document();
+    defer doc.deinit();
+    const tab = doc.querySelector(".pg-tab--active") orelse return;
+    defer tab.deinit();
+    const scrolled = tab.scrollIntoView(.{ .block = "nearest", .@"inline" = "nearest" });
+    scrolled.deinit();
+}
+
+/// A hover link (`file:///zx/src/x.zig#L12C5`): jumps to a project file, or opens the
+/// library source read-only. `line`/`col` are 0-based.
+fn onOpenFile(args: []const js.Value) void {
+    if (args.len < 3) return;
+    const raw = args[0].string(gpa) catch return;
+    defer gpa.free(raw);
+    const path = std.mem.trimStart(u8, raw, "/");
+    pending_goto = .{
+        .line = @intFromFloat(args[1].float() catch 0),
+        .col = @intFromFloat(args[2].float() catch 0),
+    };
+    ensureFiles();
+    for (model.files.items, 0..) |f, i| if (std.mem.eql(u8, f.name, path)) {
+        model.active = i;
+        refresh();
+        showActive();
+        return gotoPending();
+    };
+    tools.readFile(path, &onReadFile);
+}
+
+var pending_goto: ?struct { line: u32, col: u32 } = null;
+
+fn gotoPending() void {
+    const at = pending_goto orelse return;
+    pending_goto = null;
+    const api = editor_api orelse return;
+    api.call(void, "goto", .{ at.line, at.col }) catch {};
+}
+
+fn onReadFile(result: zx.Worker.Result(Tools, "readFile")) void {
+    const file = result catch {
+        pending_goto = null;
+        return setMessage("That file isn't available here");
+    };
+    model.files.append(gpa, .{ .name = file.name, .content = file.content, .readonly = true }) catch return;
+    model.active = model.files.items.len - 1;
+    refresh();
+    showActive();
+    gotoPending();
+}
+
+fn onEditorChange(args: []const js.Value) void {
+    if (args.len < 2) return;
+    ensureFiles();
+    const name = args[0].string(gpa) catch return;
+    defer gpa.free(name);
+    const text = args[1].string(gpa) catch return;
+    for (model.files.items) |*f| if (std.mem.eql(u8, f.name, name)) {
+        gpa.free(f.content);
+        f.content = text;
+        saveFiles();
+        return;
+    };
+    gpa.free(text);
+}
+
+fn onEditorCursor(args: []const js.Value) void {
+    if (args.len < 2) return;
+    const line = args[0].float() catch return;
+    const col = args[1].float() catch return;
+    var buf: [48]u8 = undefined;
+    const doc = web.document();
+    defer doc.deinit();
+    const el = doc.getElementById("pg-cursor-pos") orelse return;
+    defer el.deinit();
+    el.setTextContent(std.fmt.bufPrint(&buf, "Ln {d}, Col {d}", .{ line, col }) catch return);
+}
+
+fn onEditorRun(_: []const js.Value) void {
+    run(null);
+}
+
+fn onEditorFormat(_: []const js.Value) void {
+    format();
+}
+
+/// One JSON-RPC message from CodeMirror's LSP client. Returns a Promise of the server's
+/// replies at once; the tools worker answers in order, so replies settle the oldest one.
+fn onLspMessage(args: []const js.Value) js.Value {
+    if (args.len == 0) return .undefined;
+    const message = args[0].string(gpa) catch return .undefined;
+    defer gpa.free(message);
+
+    const Promise = js.global.get(js.Object, "Promise") catch return .undefined;
+    defer Promise.deinit();
+    const pending = Promise.call(js.Object, "withResolvers", .{}) catch return .undefined;
+    defer pending.deinit();
+    const resolve = pending.get(js.Value, "resolve") catch return .undefined;
+    lsp_waiting.append(gpa, resolve) catch {
+        resolve.deinit();
+        return .undefined;
+    };
+    tools.lsp(message, &onLspReply);
+    return pending.get(js.Value, "promise") catch .undefined;
+}
+
+var lsp_waiting: std.ArrayList(js.Value) = .empty;
+
+fn onLspReply(result: zx.Worker.Result(Tools, "lsp")) void {
+    if (lsp_waiting.items.len == 0) return;
+    const resolve = lsp_waiting.orderedRemove(0);
+    defer resolve.deinit();
+    const replies = result catch &.{};
+    defer {
+        for (replies) |r| gpa.free(r);
+        if (replies.len > 0) gpa.free(replies);
+    }
+    const Array = js.global.get(js.Object, "Array") catch return;
+    defer Array.deinit();
+    const out = Array.new(.{}) catch return;
+    defer out.deinit();
+    for (replies) |r| _ = out.call(f64, "push", .{js.string(r)}) catch {};
+    var call_args = [_]js.Value{out.value};
+    const r = resolve.apply(.undefined, &call_args) catch return;
+    r.deinit();
+}
+
+// --- Tabs ---
+
+fn onTab(e: *zx.client.Event.Stateful) void {
+    const i = std.fmt.parseInt(usize, e.value() orelse return, 10) catch return;
+    const ev = e.native(web.Event);
+    const closing = if (ev.target()) |t| blk: {
+        defer t.deinit();
+        const attr = t.as(web.Element).getAttribute(gpa, "data-close") catch null;
+        break :blk attr != null;
+    } else false;
+
+    ensureFiles();
+    if (i >= model.files.items.len) return;
+    if (closing) {
+        if (model.files.items.len <= 1) return;
+        const removed = model.files.orderedRemove(i);
+        if (editor_api) |api| api.call(void, "close", .{removed.name}) catch {};
+        gpa.free(removed.name);
+        gpa.free(removed.content);
+        if (model.active >= model.files.items.len or model.active > i) model.active -|= 1;
+        saveFiles();
+    } else model.active = i;
+    refresh();
+    showActive();
+}
+
+fn onAddFile(_: *zx.client.Event.Stateful) void {
+    const name_raw = (web.window().prompt(gpa, "New file name", if (model.mode == .app) "app/pages/about/page.zx" else "Component.zx") catch null) orelse return;
+    const name = std.mem.trim(u8, name_raw, &std.ascii.whitespace);
+    if (!validName(name)) return;
+    for (model.files.items, 0..) |f, i| if (std.mem.eql(u8, f.name, name)) {
+        model.active = i;
+        refresh();
+        showActive();
+        return;
+    };
+    const content = starterFor(name);
+    model.files.append(gpa, .{ .name = gpa.dupe(u8, name) catch return, .content = gpa.dupe(u8, content) catch return }) catch return;
+    model.active = model.files.items.len - 1;
+    saveFiles();
+    refresh();
+    showActive();
+}
+
+/// What a new file starts with, by its name (`page.zx` is a page, `route.zig` a handler...).
+fn starterFor(name: []const u8) []const u8 {
+    const base = if (std.mem.lastIndexOfScalar(u8, name, '/')) |i| name[i + 1 ..] else name;
+    if (std.mem.eql(u8, base, "page.zx")) return starter_page;
+    if (std.mem.eql(u8, base, "layout.zx")) return starter_layout;
+    if (std.mem.eql(u8, base, "route.zig")) return starter_route;
+    if (std.mem.endsWith(u8, base, ".zx")) return starter_component;
+    if (std.mem.endsWith(u8, base, ".zig")) return "const std = @import(\"std\");\n";
+    return "";
+}
+
+const starter_page =
+    \\pub fn Page(ctx: zx.PageContext) zx.Component {
+    \\    return (
+    \\        <main @allocator={ctx.arena}>
+    \\            <h1>New page</h1>
+    \\        </main>
+    \\    );
+    \\}
+    \\
+    \\const zx = @import("zx");
+    \\
+;
+
+const starter_layout =
+    \\pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
+    \\    return (
+    \\        <section @allocator={ctx.arena}>
+    \\            {children}
+    \\        </section>
+    \\    );
+    \\}
+    \\
+    \\const zx = @import("zx");
+    \\
+;
+
+const starter_route =
+    \\pub fn GET(ctx: zx.RouteContext) !void {
+    \\    try ctx.response.json(.{ .status = "ok" }, .{});
+    \\}
+    \\
+    \\const zx = @import("zx");
+    \\
+;
+
+const starter_component =
+    \\pub fn Component(allocator: zx.Allocator) zx.Component {
+    \\    return (<p @allocator={allocator}>Hello</p>);
+    \\}
+    \\
+    \\const zx = @import("zx");
+    \\
+;
+
+fn tabClass(i: usize, f: File) []const u8 {
+    if (i == model.active) return if (f.readonly) "pg-tab pg-tab--active pg-tab--readonly" else "pg-tab pg-tab--active";
+    return if (f.readonly) "pg-tab pg-tab--readonly" else "pg-tab";
+}
+
+fn onRenameTab(e: *zx.client.Event.Stateful) void {
+    const i = std.fmt.parseInt(usize, e.value() orelse return, 10) catch return;
+    if (i >= model.files.items.len or model.files.items[i].readonly) return;
+    const f = &model.files.items[i];
+    const raw = (web.window().prompt(gpa, "Rename file", f.name) catch null) orelse return;
+    defer gpa.free(raw);
+    const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (!validName(name) or std.mem.eql(u8, name, f.name)) return;
+    for (model.files.items) |other| if (std.mem.eql(u8, other.name, name)) {
+        return setMessage("A file with that name already exists");
+    };
+    if (editor_api) |api| api.call(void, "close", .{f.name}) catch {};
+    gpa.free(f.name);
+    f.name = gpa.dupe(u8, name) catch return;
+    model.active = i;
+    saveFiles();
+    refresh();
+    showActive();
+}
+
+fn validName(name: []const u8) bool {
+    return name.len > 0 and name[0] != '/' and std.mem.indexOf(u8, name, "..") == null;
+}
+
+/// The files that make up the project: what runs, gets shared and is saved.
+fn projectFiles() []const File {
+    const all = model.list();
+    project_buf.clearRetainingCapacity();
+    for (all) |f| if (!f.readonly) project_buf.append(gpa, f) catch return all;
+    return project_buf.items;
+}
+
+var project_buf: std.ArrayList(File) = .empty;
+
+// --- Templates and modes ---
+
+fn findTemplate(id: []const u8) ?Template {
+    for (model.templates) |t| if (std.mem.eql(u8, t.id, id)) return t;
+    return null;
+}
+
+fn loadTemplate(id: []const u8) void {
+    const t = findTemplate(id) orelse return;
+    setFiles(t.files, t.mode, t.id);
+}
+
+fn onTemplate(e: *zx.client.Event.Stateful) void {
+    const id = e.value() orelse return;
+    model.menu = .none;
+    if (std.mem.eql(u8, id, model.template)) return refresh();
+    loadTemplate(id);
+}
+
+fn onTemplateMenu(_: *zx.client.Event.Stateful) void {
+    model.menu = if (model.menu == .templates) .none else .templates;
+    refresh();
+}
+
+fn templateLabel() []const u8 {
+    for (templatesFor(model.mode)) |t| if (std.mem.eql(u8, t.id, model.template)) return t.label;
+    return if (model.mode == .app) "Custom app" else "Custom";
+}
+
+/// Clicking outside an open popover closes it.
+fn onDocumentClick(args: []const js.Value) void {
+    if (model.menu == .none or args.len == 0) return;
+    const ev: web.Event = .{ .h = args[0] };
+    const target = ev.target() orelse return;
+    defer target.deinit();
+    const selector = switch (model.menu) {
+        .templates => "[data-menu=templates]",
+        .settings => "[data-menu=settings]",
+        .none => return,
+    };
+    if (target.as(web.Element).closest(selector)) |inside| {
+        inside.deinit();
+        return;
+    }
+    model.menu = .none;
+    refresh();
+}
+
+fn onToggleApp(_: *zx.client.Event.Stateful) void {
+    if (!model.ready) return;
+    const next: Mode = if (model.mode == .app) .playground else .app;
+    for (model.templates) |t| if (t.mode == next) {
+        loadTemplate(t.id);
+        return;
+    };
+}
+
+fn onResetTemplate(_: *zx.client.Event.Stateful) void {
+    model.menu = .none;
+    loadTemplate(model.template);
+    refresh();
+}
+
+fn onSettings(_: *zx.client.Event.Stateful) void {
+    model.menu = if (model.menu == .settings) .none else .settings;
+    refresh();
+}
+
+fn onPersist(_: *zx.client.Event.Stateful) void {
+    model.persist = !model.persist;
+    const storage = web.window().localStorage();
+    defer storage.deinit();
+    if (model.persist) {
+        storage.setItem(persist_key, "1");
+        saveFiles();
+    } else {
+        storage.removeItem(persist_key);
+        storage.removeItem(files_key);
+    }
+    refresh();
+}
+
+fn onClearCache(_: *zx.client.Event.Stateful) void {
+    model.menu = .none;
+    const storage = web.window().localStorage();
+    defer storage.deinit();
+    storage.removeItem(files_key);
+    engine.clearCache(&ignoreDone);
+    setMessage("Cache cleared");
+    refresh();
+}
+
+// --- Run ---
+
+fn onRun(_: *zx.client.Event.Stateful) void {
+    run(null);
+}
+
+fn onRefresh(_: *zx.client.Event.Stateful) void {
+    run(currentPath());
+}
+
+/// Builds and renders `path` (or the URL bar's path in app mode).
+fn run(path: ?[]const u8) void {
+    if (!model.ready or model.running) return;
+    const target = gpa.dupe(u8, path orelse urlBarPath()) catch return;
+    model.running = true;
+    model.failed = false;
+    model.message = "";
+    model.log = "Building…";
+    model.pending_path = target;
+    refresh();
+    // Doesn't suspend: the editor and its language server keep answering meanwhile.
+    engine.run(model.mode, projectFiles(), target, &onRunDone);
+}
+
+fn onRunDone(result: zx.Worker.Result(Engine, "run")) void {
+    model.running = false;
+    const target = model.pending_path;
+    defer gpa.free(target);
+    model.pending_path = "";
+    if (result) |p| {
+        model.log = p.log;
+        model.failed = !p.ok;
+        if (p.ok) {
+            freePreview();
+            model.preview = p;
+            model.preview_owned = true;
+            model.run_id +%= 1;
+            if (model.mode == .app) visit(target);
+        } else {
+            model.panel_open = true;
+        }
+    } else |err| {
+        model.log = std.fmt.allocPrint(gpa, "The playground worker stopped ({t}).", .{err}) catch "";
+        model.failed = true;
+        model.panel_open = true;
+    }
+    refresh();
+}
+
+/// Previews come from the worker reply; each field is its own allocation.
+fn freePreview() void {
+    if (!model.preview_owned) return;
+    gpa.free(model.preview.content_type);
+    gpa.free(model.preview.body);
+    model.preview_owned = false;
+}
+
+fn onFormat(_: *zx.client.Event.Stateful) void {
+    format();
+}
+
+fn format() void {
+    if (!model.ready or model.formatting) return;
+    ensureFiles();
+    const f = model.files.items[model.active];
+    model.formatting = true;
+    model.message = "";
+    model.formatting_name = gpa.dupe(u8, f.name) catch return;
+    refresh();
+    tools.format(f.name, f.content, &onFormatDone);
+}
+
+fn onFormatDone(result: zx.Worker.Result(Tools, "format")) void {
+    model.formatting = false;
+    const name = model.formatting_name;
+    defer gpa.free(name);
+    model.formatting_name = "";
+    defer refresh();
+    const formatted = result catch |err| {
+        model.message = std.fmt.allocPrint(gpa, "Format unavailable ({t})", .{err}) catch "";
+        return;
+    };
+    if (!formatted.ok) {
+        model.log = formatted.text;
+        model.failed = true;
+        model.panel_open = true;
+        return;
+    }
+    for (model.files.items) |*cur| if (std.mem.eql(u8, cur.name, name)) {
+        if (!std.mem.eql(u8, cur.content, formatted.text)) {
+            gpa.free(cur.content);
+            cur.content = formatted.text;
+            if (editor_api) |api| api.call(void, "setText", .{ cur.name, cur.content }) catch {};
+            saveFiles();
+        }
+        model.message = std.fmt.allocPrint(gpa, "Formatted {s}", .{cur.name}) catch "";
+        return;
+    };
+}
+
+fn onShare(_: *zx.client.Event.Stateful) void {
+    engine.shareData(projectFiles(), &onShareData);
+}
+
+fn onShareData(result: zx.Worker.Result(Engine, "shareData")) void {
+    defer refresh();
+    const data = result catch return setMessage("Couldn't create a link");
+    defer gpa.free(data);
+    const loc = web.window().location();
+    defer loc.deinit();
+    const origin = loc.origin(gpa) catch return;
+    defer gpa.free(origin);
+    const url = std.fmt.allocPrint(gpa, "{s}/playground#data={s}", .{ origin, data }) catch return;
+    defer gpa.free(url);
+    const nav = web.window().navigator();
+    defer nav.deinit();
+    const clipboard = nav.clipboard();
+    defer clipboard.deinit();
+    const copied = clipboard.writeText(url);
+    copied.deinit();
+    setMessage("Link copied");
+}
+
+// --- Output panel ---
+
+fn onTogglePanel(_: *zx.client.Event.Stateful) void {
+    model.panel_open = !model.panel_open;
+    refresh();
+}
+
+fn onClearLog(e: *zx.client.Event.Stateful) void {
+    // The header toggles the panel; clearing shouldn't.
+    e.stopPropagation();
+    model.log = "";
+    model.failed = false;
+    refresh();
+}
+
+fn responseHead(a: std.mem.Allocator) []const u8 {
+    const p = model.preview;
+    if (p.content_type.len == 0) return std.fmt.allocPrint(a, "HTTP {d}", .{p.status}) catch "";
+    return std.fmt.allocPrint(a, "HTTP {d} • {s}", .{ p.status, p.content_type }) catch "";
+}
+
+// --- Preview navigation (app mode) ---
+
+fn currentPath() []const u8 {
+    if (model.history.items.len == 0) return "/";
+    return model.history.items[model.history_at];
+}
+
+fn urlBarPath() []const u8 {
+    if (model.mode != .app) return "/";
+    const doc = web.document();
+    defer doc.deinit();
+    const el = doc.getElementById("pg-url") orelse return currentPath();
+    defer el.deinit();
+    const raw = el.as(web.HTMLInputElement).value(gpa) catch return currentPath();
+    return normalizePath(raw);
+}
+
+/// `playground.local/about`, `https://x/about?q`, `about` -> `/about?q`.
+fn normalizePath(raw: []const u8) []const u8 {
+    var p = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (std.mem.indexOf(u8, p, "://")) |i| p = p[i + 3 ..];
+    if (p.len > 0 and p[0] != '/') {
+        if (std.mem.indexOfScalar(u8, p, '/')) |slash| {
+            if (std.mem.indexOfScalar(u8, p[0..slash], '.') != null) p = p[slash..];
+        } else if (std.mem.indexOfScalar(u8, p, '.') != null) p = "/";
+    }
+    if (p.len == 0) return "/";
+    if (p[0] != '/') return std.mem.concat(gpa, u8, &.{ "/", p }) catch "/";
+    return p;
+}
+
+fn resetHistory() void {
+    model.history.clearRetainingCapacity();
+    model.history.append(gpa, "/") catch {};
+    model.history_at = 0;
+}
+
+fn visit(path: []const u8) void {
+    if (model.history.items.len == 0) resetHistory();
+    if (std.mem.eql(u8, currentPath(), path)) return;
+    model.history.shrinkRetainingCapacity(model.history_at + 1);
+    model.history.append(gpa, gpa.dupe(u8, path) catch return) catch return;
+    model.history_at = model.history.items.len - 1;
+}
+
+fn onUrlSubmit(e: *zx.client.Event.Stateful) void {
+    e.preventDefault();
+    run(urlBarPath());
+}
+
+fn onBack(_: *zx.client.Event.Stateful) void {
+    if (model.history_at == 0) return;
+    model.history_at -= 1;
+    run(currentPath());
+}
+
+fn onForward(_: *zx.client.Event.Stateful) void {
+    if (model.history_at + 1 >= model.history.items.len) return;
+    model.history_at += 1;
+    run(currentPath());
+}
+
+/// Links inside the preview go to the playground's router, not the real site.
+fn onFrameLoad(e: *zx.client.Event.Stateful) void {
+    if (model.mode != .app) return;
+    const ev = e.native(web.Event);
+    const target = ev.target() orelse return;
+    defer target.deinit();
+    const doc = target.as(web.HTMLIFrameElement).contentDocument() orelse return;
+    defer doc.deinit();
+    doc.addEventListener("click", .fromFn(onFrameClick, .{}), .{ .capture = true });
+}
+
+fn onFrameClick(args: []const js.Value) void {
+    if (args.len == 0 or model.running) return;
+    const ev: web.MouseEvent = .{ .h = args[0] };
+    if (ev.ctrlKey() or ev.metaKey() or ev.shiftKey() or ev.altKey()) return;
+    const target = ev.target() orelse return;
+    defer target.deinit();
+    const link = target.as(web.Element).closest("a[href]") orelse return;
+    defer link.deinit();
+    const href = (link.getAttribute(gpa, "href") catch null) orelse return;
+    if (href.len == 0 or href[0] != '/' or std.mem.startsWith(u8, href, "//")) return;
+    ev.preventDefault();
+    run(href);
+}
+
+// --- Splitter ---
+
+var dragging = false;
+
+fn onSplitStart(e: *zx.client.Event.Stateful) void {
+    const ev = e.native(web.PointerEvent);
+    const target = ev.target() orelse return;
+    defer target.deinit();
+    target.as(web.Element).setPointerCapture(ev.pointerId());
+    dragging = true;
+}
+
+fn onSplitMove(e: *zx.client.Event.Stateful) void {
+    if (!dragging) return;
+    const ev = e.native(web.PointerEvent);
+    const doc = web.document();
+    defer doc.deinit();
+    const body = doc.getElementById("pg-ide-body") orelse return;
+    defer body.deinit();
+    const rect = body.getBoundingClientRect();
+    defer rect.deinit();
+    const width = rect.width();
+    if (width <= 0) return;
+    const ratio = std.math.clamp((ev.clientX() - rect.left()) / width, 0.2, 0.8);
+    var buf: [48]u8 = undefined;
+    setFlex(doc, "pg-editor", std.fmt.bufPrint(&buf, "1 1 {d:.1}%", .{ratio * 100}) catch return);
+    setFlex(doc, "pg-preview", std.fmt.bufPrint(&buf, "1 1 {d:.1}%", .{(1 - ratio) * 100}) catch return);
+}
+
+fn setFlex(doc: web.Document, id: []const u8, value: []const u8) void {
+    const el = doc.getElementById(id) orelse return;
+    defer el.deinit();
+    const style = el.as(web.HTMLElement).style();
+    defer style.deinit();
+    style.setProperty("flex", value, null);
+}
+
+fn onSplitEnd(_: *zx.client.Event.Stateful) void {
+    dragging = false;
+}
+
+// --- Output panel resize ---
+
+var panel_dragging = false;
+
+fn panelStyle(a: std.mem.Allocator) []const u8 {
+    return std.fmt.allocPrint(a, "height: {d}px", .{model.panel_height}) catch "";
+}
+
+fn onPanelResizeStart(e: *zx.client.Event.Stateful) void {
+    const ev = e.native(web.PointerEvent);
+    const target = ev.target() orelse return;
+    defer target.deinit();
+    target.as(web.Element).setPointerCapture(ev.pointerId());
+    panel_dragging = true;
+}
+
+fn onPanelResize(e: *zx.client.Event.Stateful) void {
+    if (!panel_dragging) return;
+    const ev = e.native(web.PointerEvent);
+    const doc = web.document();
+    defer doc.deinit();
+    const pane = doc.getElementById("pg-preview") orelse return;
+    defer pane.deinit();
+    const rect = pane.getBoundingClientRect();
+    defer rect.deinit();
+    const max = @max(rect.height() - 80, 60);
+    const height = std.math.clamp(rect.bottom() - ev.clientY(), 60, max);
+    model.panel_height = @intFromFloat(height);
+    const panel = doc.getElementById("pg-terminal") orelse return;
+    defer panel.deinit();
+    const style = panel.as(web.HTMLElement).style();
+    defer style.deinit();
+    var buf: [32]u8 = undefined;
+    style.setProperty("height", std.fmt.bufPrint(&buf, "{d}px", .{model.panel_height}) catch return, null);
+}
+
+fn onPanelResizeEnd(_: *zx.client.Event.Stateful) void {
+    panel_dragging = false;
+}
+
+// --- Labels ---
+
+fn languageLabel(name: []const u8) []const u8 {
+    if (std.mem.endsWith(u8, name, ".zx")) return "ZX";
+    if (std.mem.endsWith(u8, name, ".zig")) return "Zig";
+    if (std.mem.endsWith(u8, name, ".zon")) return "ZON";
+    if (std.mem.endsWith(u8, name, ".css")) return "CSS";
+    if (std.mem.endsWith(u8, name, ".html")) return "HTML";
+    return "Text";
+}
+
+fn fileClass(name: []const u8) []const u8 {
+    if (std.mem.endsWith(u8, name, ".zx")) return "pg-tab-icon type-zx";
+    if (std.mem.endsWith(u8, name, ".zig") or std.mem.endsWith(u8, name, ".zon")) return "pg-tab-icon type-zig";
+    if (std.mem.endsWith(u8, name, ".css")) return "pg-tab-icon type-css";
+    return "pg-tab-icon";
+}
+
+fn fileIcon(allocator: zx.Allocator, name: []const u8) zx.Component {
+    if (std.mem.endsWith(u8, name, ".zx")) return icons.ZxFileIcon(allocator);
+    if (std.mem.endsWith(u8, name, ".zig") or std.mem.endsWith(u8, name, ".zon")) return icons.ZigFileIcon(allocator);
+    if (std.mem.endsWith(u8, name, ".css")) return icons.CssFileIcon(allocator);
+    return icons.GenericFileIcon(allocator);
+}
+
 const std = @import("std");
 const zx = @import("zx");
-const AllFileIcons = @import("../components/icons.zx").AllFileIcons;
-const CheckIcon = @import("../components/icons.zx").CheckIcon;
-const util = @import("../reference/util.zig");
+const web = zx.client.web;
+const js = zx.client.js;
+const icons = @import("../components/icons.zx");
 
-// Importing to have syntax AST Checked
-const main = @import("scripts/template/main.zig");
-const Playground = @import("scripts/template/Playground.zx");
+const assets = @import("playground_assets");

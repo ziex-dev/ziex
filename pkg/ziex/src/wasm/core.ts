@@ -21,9 +21,14 @@ export { textDecoder, textEncoder } from "./mem";
 export type { CallbackHandler } from "./base";
 
 /** The single client wasm instance (browser). */
-export const wasm: { memory: WebAssembly.Memory | null; alloc: ((size: number) => number) | null } = {
+export const wasm: {
+    memory: WebAssembly.Memory | null;
+    alloc: ((size: number) => number) | null;
+    exports: WebAssembly.Exports | null;
+} = {
     memory: null,
     alloc: null,
+    exports: null,
 };
 
 export const mem = memoryIO(() => wasm.memory);
@@ -37,6 +42,16 @@ let gate: SuspendGate | null = null;
 export function resetSuspendGate(): SuspendGate | null {
     gate = createSuspendGate();
     return gate;
+}
+
+/** An import that may return a Promise: suspends the wasm caller (JSPI) until it settles. */
+function suspendingImport<F extends (...args: any[]) => any>(fn: F): F {
+    if (gate) return gate.suspending(fn);
+    return ((...args: Parameters<F>) => {
+        const result = fn(...args);
+        if (result instanceof Promise) throw new Error("zx: awaiting a promise requires WebAssembly JSPI");
+        return result;
+    }) as F;
 }
 
 /** Lets `fn` suspend (JSPI), ordered by the instance's `SuspendGate`. */
@@ -63,6 +78,7 @@ export class ZxBridgeCore extends BaseBridge {
     constructor(exports: WebAssembly.Exports) {
         if (exports.memory) wasm.memory = exports.memory as WebAssembly.Memory;
         wasm.alloc = exports.__zx_alloc as (size: number) => number;
+        wasm.exports = exports;
         super(mem, wasm.alloc, wrapPromisingExport(exports.__zx_cb as CallbackHandler | undefined));
     }
 
@@ -80,12 +96,12 @@ export class ZxBridgeCore extends BaseBridge {
 
     /** `__zx` (log, fetch, timers, host ops) plus `__zx_js` (dynamic JS interop). */
     static createImportObject(bridgeRef: [ZxBridgeCore | null], handlers: Handlers = {}) {
+        // Host imports first: they start this instance's suspend gate.
+        const host = ZxBridgeCore.createHostImports(handlers);
+        const js = createJsImports(mem, () => wasm.alloc, () => wasm.exports);
         return {
-            __zx: {
-                ...ZxBridgeCore.createHostImports(handlers),
-                ...baseImports(bridgeRef),
-            } as Record<string, unknown>,
-            __zx_js: createJsImports(mem, () => wasm.alloc),
+            __zx: { ...host, ...baseImports(bridgeRef) } as Record<string, unknown>,
+            __zx_js: { ...js, await: suspendingImport(js.awaitValue) },
         };
     }
 }

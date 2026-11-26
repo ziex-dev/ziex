@@ -375,6 +375,8 @@ function makeDelegatedListener(bridge: ZxBridge, eventTypeId: number, targetOnly
             const zxRef = (target as any).__zx_ref;
             if (typeof zxRef === "number" && bridge.hasEventHandler(zxRef, eventTypeId)) {
                 if (eventRef === undefined) eventRef = ref(event);
+                // `currentTarget` is the delegation root; handlers mean the element they're on.
+                (event as { __zx_currentTarget?: Element }).__zx_currentTarget = target;
                 const result = bridge.eventbridge(zxRef, eventTypeId, eventRef);
                 if (result && typeof (result as Promise<unknown>).then === "function") {
                     pending.push(result as Promise<unknown>);

@@ -4,7 +4,7 @@ import {
   isPlaygroundOpenable,
   decodeFilesFromQuery,
   type SnippetEntry,
-} from '../../../../site/app/scripts/playground_share';
+} from '../../helpers/playground_share';
 
 // Docs behaviour formerly in scripts/docs.ts, now server-rendered or Zig.
 test.describe('Docs pages', () => {

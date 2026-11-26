@@ -57,14 +57,23 @@ pub fn native(self: Event, comptime T: type) T {
 /// Get the input/button value for the element that owns the handler.
 pub fn value(self: Event) ?[]const u8 {
     if (platform_role != .client) return null;
-    const event = self.getEvent();
-    if (event.ref.get(js.Object, "currentTarget") catch null) |current| {
-        defer current.deinit();
-        if (current.getAlloc(js.String, zx.allocator, "value") catch null) |v| return v;
+    if (self.currentTarget()) |owner| {
+        defer owner.deinit();
+        if (owner.getAlloc(js.String, zx.allocator, "value") catch null) |v| return v;
     }
-    const target = event.ref.get(js.Object, "target") catch return null;
+    // A handler on a container reads the input the event came from.
+    const target = self.getEvent().ref.get(js.Object, "target") catch return null;
     defer target.deinit();
     return target.getAlloc(js.String, zx.allocator, "value") catch null;
+}
+
+/// The element whose handler is running (the DOM's `currentTarget` is the delegation
+/// root), e.g. the button when the click landed on an icon inside it. Release with `deinit`.
+pub fn currentTarget(self: Event) ?js.Object {
+    if (platform_role != .client) return null;
+    const event = self.getEvent();
+    if (event.ref.get(?js.Object, "__zx_currentTarget") catch null) |owner| return owner;
+    return event.ref.get(?js.Object, "target") catch null;
 }
 
 /// Get the key from keyboard event
@@ -191,6 +200,10 @@ pub const Stateful = struct {
 
     pub fn value(self: Stateful) ?[]const u8 {
         return self.inner.value();
+    }
+
+    pub fn currentTarget(self: Stateful) ?js.Object {
+        return self.inner.currentTarget();
     }
 
     pub fn native(self: Stateful, comptime T: type) T {

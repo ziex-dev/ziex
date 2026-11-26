@@ -1,5 +1,5 @@
 //! Playground share links for home page code examples, computed while
-//! rendering (port of the snippet packing in scripts/playground_share.ts).
+//! rendering; the playground uses `encodePairs`/`decode` for its own links.
 //! A link is `/playground#data=<base64url(zlib(json files map))>`.
 const std = @import("std");
 
@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 
 pub const Entry = struct { code: []const u8, filename: []const u8 };
 
-const Files = std.StringArrayHashMapUnmanaged([]const u8);
+pub const Files = std.StringArrayHashMapUnmanaged([]const u8);
 
 const zx_import = "const zx = @import(\"zx\");";
 const std_import = "const std = @import(\"std\");";
@@ -50,10 +50,15 @@ pub fn url(gpa: Allocator, entries: []const Entry) !?[]const u8 {
 // --- Encoding ---
 
 fn encode(a: Allocator, files: Files) ![]const u8 {
+    return encodePairs(a, files.keys(), files.values());
+}
+
+/// The `#data=` payload for a files map (also used by the playground's Share button).
+pub fn encodePairs(a: Allocator, names: []const []const u8, contents: []const []const u8) ![]const u8 {
     var json: std.Io.Writer.Allocating = .init(a);
     var jw: std.json.Stringify = .{ .writer = &json.writer };
     try jw.beginObject();
-    for (files.keys(), files.values()) |k, v| {
+    for (names, contents) |k, v| {
         try jw.objectField(k);
         try jw.write(v);
     }
@@ -69,6 +74,29 @@ fn encode(a: Allocator, files: Files) ![]const u8 {
     const b64 = std.base64.url_safe_no_pad.Encoder;
     const out = try a.alloc(u8, b64.calcSize(z.written().len));
     return b64.encode(out, z.written());
+}
+
+/// Inverse of `encodePairs`: the files map in a `#data=` payload, in order.
+pub fn decode(a: Allocator, data: []const u8) !Files {
+    const trimmed = std.mem.trimEnd(u8, data, "=");
+    const b64 = std.base64.url_safe_no_pad.Decoder;
+    const z = try a.alloc(u8, try b64.calcSizeForSlice(trimmed));
+    try b64.decode(z, trimmed);
+
+    var in: std.Io.Reader = .fixed(z);
+    const window = try a.alloc(u8, std.compress.flate.max_window_len);
+    var d: std.compress.flate.Decompress = .init(&in, .zlib, window);
+    const json = try d.reader.allocRemaining(a, .limited(16 << 20));
+
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, a, json, .{});
+    if (parsed != .object) return error.InvalidData;
+    var files: Files = .empty;
+    var it = parsed.object.iterator();
+    while (it.next()) |e| {
+        if (e.value_ptr.* != .string) continue;
+        try files.put(a, e.key_ptr.*, e.value_ptr.string);
+    }
+    return files;
 }
 
 // --- Text matching (stand-ins for the original regexes) ---
@@ -610,4 +638,14 @@ test "share url round trips through zlib + base64url" {
     const link = (try url(gpa, &.{.{ .code = "pub fn Hello(allocator: zx.Allocator) zx.Component { return (<p @allocator={allocator}>Hi</p>); }", .filename = "hello.zx" }})).?;
     defer gpa.free(link);
     try std.testing.expect(std.mem.startsWith(u8, link, "/playground#data="));
+}
+
+test "share payload decodes back to the same files" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const data = try encodePairs(a, &.{ "Playground.zx", "style.css" }, &.{ "<p>hi</p>", "body{}" });
+    const files = try decode(a, data);
+    try std.testing.expectEqual(@as(usize, 2), files.count());
+    try std.testing.expectEqualStrings("body{}", files.get("style.css").?);
 }

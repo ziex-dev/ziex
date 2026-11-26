@@ -8,7 +8,6 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
     const path = ctx.request.pathname;
     const page_title = ctx.data.get("title") orelse title;
     const page_description = ctx.data.get("description") orelse description;
-    const templates_preload = std.mem.eql(u8, path, "/playground") or std.mem.startsWith(u8, path, "/playground/");
 
     if (std.mem.eql(u8, path, "/overview") or
         std.mem.eql(u8, path, "/time") or
@@ -50,8 +49,6 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
 
                 <link rel="canonical" href={site_url} />
                 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-
-                {if (templates_preload) (<link rel="preload" href="/playground/templates.json" as="fetch" crossorigin="anonymous" />)}
 
                 <meta property="og:type" content="website" />
                 <meta property="og:title" content={page_title} />

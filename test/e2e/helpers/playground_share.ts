@@ -1,3 +1,6 @@
+// Reference implementation of playground share links (the site renders them in
+// Zig, see site/app/pages/home/share.zig); the specs check the two agree.
+
 export type PlaygroundFilesMap = Record<string, string>;
 
 export type SnippetEntry = {
