@@ -8,7 +8,7 @@ pub const rendering = [_]SidebarProps.Section{
     .{ .title = "Hydration", .href = "/examples/hydration", .tags = &.{ "zx.State", "typed props" } },
     .{ .title = "Async APIs", .href = "/examples/async", .tags = &.{ "zx.client.setTimeout", "zx.http.Client", "zx.State" } },
     // .{ .title = "Progress", .href = "/examples/progress" },
-    .{ .title = "Streaming SSR", .href = "/examples/streaming", .tags = &.{ "@async={.stream}", "@fallback" } },
+    .{ .title = "Streaming", .href = "/examples/streaming", .tags = &.{ "@async={.stream}", "@fallback" } },
     // .{ .title = "React Integration", .href = "/examples/react" },
     .{ .title = "Typed Events", .href = "/examples/event", .tags = &.{ "zx.client.Event.as", "zx.client.events" } },
     .{ .title = "Browser APIs", .href = "/examples/web", .tags = &.{ "zx.client.web", "canvas", "drag and drop" } },
@@ -18,13 +18,18 @@ pub const rendering = [_]SidebarProps.Section{
 };
 
 pub const data_and_apis = [_]SidebarProps.Section{
-    .{ .title = "Database", .href = "/examples/db", .tags = &.{ "zx.db", "zx.db.row" } },
-    .{ .title = "Key-Value", .href = "/examples/kv", .tags = &.{ "zx.kv", "zx.State" } },
+    // .{ .title = "Database", .href = "/examples/db", .tags = &.{ "zx.db", "zx.db.row" } },
+    .{ .title = "DB (client)", .href = "/examples/sqlite", .tags = &.{ "zx.Db.Sqlite", "zx.worker" } },
+    .{ .title = "DB (server)", .href = "/examples/d1", .tags = &.{ "zx.Db.Wasm", "D1", "zx.server.Action" } },
+    // .{ .title = "Db.Postgres", .href = "/examples/postgres", .tags = &.{ "zx.Db.Postgres", "zx.server.Action" } },
+    // .{ .title = "Db.Mysql", .href = "/examples/mysql", .tags = &.{ "zx.Db.Mysql", "zx.server.Action" } },
+
+    .{ .title = "KV", .href = "/examples/kv", .tags = &.{ "zx.kv", "zx.State" } },
     .{ .title = "AI", .href = "/examples/ai", .tags = &.{ "zx.ai.gen.text", "zx.ai.gen.image" } },
-    .{ .title = "Feature Flags", .href = "/examples/flag", .tags = &.{ "zx.flag", "OpenFeature" } },
-    .{ .title = "CRUD", .href = "/examples/crud", .tags = &.{ "zx.db", "zx.server.Event", experimental.label } },
+    .{ .title = "Flags", .href = "/examples/flag", .tags = &.{ "zx.flag", "OpenFeature" } },
     // .{ .title = "API Routes", .href = "/examples/api-route" },
-    .{ .title = "Realtime WebSockets", .href = "/examples/realtime", .tags = &.{ "zx.websocket", "cookies" } },
+    .{ .title = "CRUD", .href = "/examples/crud", .tags = &.{ "zx.db", "zx.server.Event", experimental.label } },
+    .{ .title = "Realtime", .href = "/examples/realtime", .tags = &.{ "zx.websocket", "cookies" } },
 };
 
 pub const forms_and_actions = [_]SidebarProps.Section{

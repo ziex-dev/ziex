@@ -1,0 +1,199 @@
+//! Shared SQL studio UI for server-backed examples (`Server(Backend)`).
+
+const studio_lib = @import("studio_lib.zig");
+pub const Result = studio_lib.Result;
+
+/// Backend contract:
+/// - `input_id`: []const u8
+/// - `selectTable(gpa, name) ![]u8`
+/// - `bootstrap(gpa, arena, io) ![]const []const u8`
+/// - `exec(gpa, io, sql) Result`
+/// - `listTables(gpa, arena, io) ![]const []const u8`
+pub fn Server(comptime Backend: type) type {
+    return struct {
+        var filter: *zx.State([]const u8) = undefined;
+        var lines: *zx.State(usize) = undefined;
+        var cursor: *zx.State([2]usize) = undefined;
+
+        pub fn Studio(ctx: *zx.ComponentCtx(struct { tables: []const []const u8 })) zx.Component {
+            const tables = ctx.state([]const []const u8, ctx.props.tables);
+            const result = ctx.state(?Result, null);
+            filter = ctx.state([]const u8, "");
+            lines = ctx.state(usize, 1);
+            cursor = ctx.state([2]usize, .{ 1, 1 });
+
+            return (
+                <div @allocator={ctx.allocator} class="studio">
+                    <aside class="studio-sidebar">
+                        <input class="studio-search" type="search" placeholder="Search..." oninput={onFilter} />
+                        <div class="studio-sidebar-bar">
+                            <span>Tables</span>
+                            <button class="studio-icon-button" title="Refresh" aria-label="Refresh" onclick={ctx.bind(onRefresh)}>↻</button>
+                        </div>
+                        <ul class="studio-tables">
+                            {for (tables.get()) |name| (
+                                <TableRow name={name} filter={filter.get()} />
+                            )}
+                        </ul>
+                    </aside>
+
+                    <section class="studio-main">
+                        <div class="studio-tabs">
+                            <span class="studio-tab">Query</span>
+                        </div>
+                        <form class="studio-query" action={ctx.bind(onRun)}>
+                            <div class="studio-editor">
+                                <div class="studio-gutter" aria-hidden="true">
+                                    {for (0..lines.get()) |i| (<div>{i + 1}</div>)}
+                                </div>
+                                <textarea
+                                    id={Backend.input_id}
+                                    name="sql"
+                                    spellcheck="false"
+                                    placeholder="SELECT * FROM users;"
+                                    onkeydown={onKeyDown}
+                                    oninput={onCursor}
+                                    onkeyup={onCursor}
+                                    onclick={onCursor}
+                                ></textarea>
+                            </div>
+                            <div class="studio-toolbar">
+                                <span>Ln {cursor.get()[0]} Col {cursor.get()[1]}</span>
+                                <button class="studio-run" type="submit">▶ Run</button>
+                            </div>
+                        </form>
+                        <ResultView result={result.get()} />
+                    </section>
+                </div>
+            );
+        }
+
+        fn TableRow(ctx: *zx.ComponentCtx(struct { name: []const u8, filter: []const u8 })) zx.Component {
+            const name = ctx.props.name;
+            const hidden = ctx.props.filter.len > 0 and !studio_lib.containsIgnoreCase(name, ctx.props.filter);
+            const value = name;
+            return (
+                <li @allocator={ctx.allocator} {hidden}>
+                    <button class="studio-table" type="button" {value} onclick={onOpenTable}>
+                        <span class="studio-table-icon">▦</span>{name}
+                    </button>
+                </li>
+            );
+        }
+
+        const RunInput = struct { sql: []const u8 };
+
+        pub fn onRun(a: *zx.server.Action.Stateful) void {
+            var tables = a.state([]const []const u8);
+            var result = a.state(?Result);
+            _ = a.state([]const u8);
+            _ = a.state(usize);
+            _ = a.state([2]usize);
+
+            const data = a.data(RunInput);
+            const sql = std.mem.trim(u8, data.sql, " \t\r\n;");
+            if (sql.len == 0) return;
+
+            result.set(Backend.exec(a.inner.allocator, a.inner.io, sql));
+            if (Backend.listTables(a.inner.allocator, a.inner.arena, a.inner.io)) |names| {
+                tables.set(names);
+            } else |_| {}
+        }
+
+        pub fn onRefresh(e: *zx.server.Event.Stateful) void {
+            var tables = e.state([]const []const u8);
+            _ = e.state(?Result);
+            _ = e.state([]const u8);
+            _ = e.state(usize);
+            _ = e.state([2]usize);
+
+            if (Backend.listTables(e.inner.allocator, e.inner.arena, e.inner.io)) |names| {
+                tables.set(names);
+            } else |err| {
+                zx.log.err("{s} tables: {t}", .{ Backend.input_id, err });
+            }
+        }
+
+        fn onFilter(e: zx.client.Event) void {
+            filter.set(zx.allocator.dupe(u8, e.value() orelse "") catch return);
+        }
+
+        fn onOpenTable(e: zx.client.Event) void {
+            const name = e.value() orelse return;
+            const sql = Backend.selectTable(zx.allocator, name) catch return;
+            const input = editor() orelse return;
+            input.ref.set("value", js.string(sql)) catch return;
+            updateCursor();
+            submitForm();
+        }
+
+        fn onKeyDown(e: zx.client.Event) void {
+            const k = e.as(zx.client.events.KeyboardEvent, zx.allocator);
+            if (!std.mem.eql(u8, k.key, "Enter") or !(k.ctrl_key or k.meta_key)) return;
+            e.preventDefault();
+            submitForm();
+        }
+
+        fn onCursor(_: zx.client.Event) void {
+            updateCursor();
+        }
+
+        fn submitForm() void {
+            const input = editor() orelse return;
+            const form = input.ref.get(js.Object, "form") catch return;
+            defer form.deinit();
+            form.call(void, "requestSubmit", .{}) catch {};
+        }
+
+        fn updateCursor() void {
+            const input = editor() orelse return;
+            const text = input.ref.getAlloc(js.String, zx.allocator, "value") catch return;
+            const pos: usize = @intFromFloat(input.ref.get(f64, "selectionStart") catch 0);
+            const before = text[0..@min(pos, text.len)];
+            const line_start = if (std.mem.lastIndexOfScalar(u8, before, '\n')) |i| i + 1 else 0;
+            lines.set(std.mem.count(u8, text, "\n") + 1);
+            cursor.set(.{ std.mem.count(u8, before, "\n") + 1, before.len - line_start + 1 });
+        }
+
+        fn editor() ?zx.client.Document.HTMLElement {
+            if (!zx.platform.isClient()) return null;
+            const document = zx.client.Document.init(zx.allocator);
+            return document.getElementById(Backend.input_id) catch null;
+        }
+    };
+}
+
+pub fn ResultView(ctx: *zx.ComponentCtx(struct { result: ?Result })) zx.Component {
+    const r = ctx.props.result orelse return (<div @allocator={ctx.allocator} class="studio-results studio-results-empty"></div>);
+    if (r.err) |err| return (
+        <div @allocator={ctx.allocator} class="studio-results">
+            <p class="studio-status studio-error">Error: {err}</p>
+        </div>
+    );
+    if (r.columns.len == 0) return (
+        <div @allocator={ctx.allocator} class="studio-results">
+            <p class="studio-status">Query OK, {r.changes} row(s) changed</p>
+        </div>
+    );
+    return (
+        <div @allocator={ctx.allocator} class="studio-results">
+            <div class="studio-grid">
+                <table>
+                    <thead>
+                        <tr>{for (r.columns) |col| (<th>{col}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                        {for (r.rows) |row| (
+                            <tr>{for (row) |cell| (<td>{cell}</td>)}</tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <p class="studio-status">{r.rows.len} row(s)</p>
+        </div>
+    );
+}
+
+const js = zx.client.js;
+const zx = @import("zx");
+const std = @import("std");

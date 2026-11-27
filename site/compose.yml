@@ -1,6 +1,41 @@
 name: "ziex"
 services:
   site:
-    build: 
+    build:
       context: ..
       dockerfile: site/Dockerfile
+    environment:
+      POSTGRES_URL: postgres://ziex:ziex@postgres:5432/ziex?sslmode=disable
+      MYSQL_URL: mysql://ziex:ziex@mysql:3306/ziex?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ziex
+      POSTGRES_PASSWORD: ziex
+      POSTGRES_DB: ziex
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ziex -d ziex"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    # Internal only — reachable by `site` on the compose network.
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_USER: ziex
+      MYSQL_PASSWORD: ziex
+      MYSQL_DATABASE: ziex
+      MYSQL_ROOT_PASSWORD: ziex
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pziex"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    # Internal only — reachable by `site` on the compose network.

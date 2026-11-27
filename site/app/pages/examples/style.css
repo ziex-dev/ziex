@@ -521,8 +521,12 @@
     }
 }
 
-.sqlite-page {
+.studio-page {
     max-width: 1100px;
+}
+
+.studio-query {
+    display: contents;
 }
 
 .studio {

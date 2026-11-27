@@ -1,6 +1,6 @@
 pub fn Page(ctx: zx.PageContext) zx.Component {
     return (
-        <main @allocator={ctx.arena} class="example-page sqlite-page">
+        <main @allocator={ctx.arena} class="example-page studio-page">
             <header class="example-header">
                 <h1>SQLite Studio</h1>
                 <p>zx.Db.Sqlite running in a Web Worker, persisted to OPFS. Press Ctrl/⌘+Enter to run.</p>
@@ -12,6 +12,8 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
 
 const Worker = @import("worker.zig");
 const repl = zx.worker(Worker);
+const studio_ui = @import("../studio.zx");
+const studio = @import("../studio_lib.zig");
 
 var tables: *zx.State([]const []const u8) = undefined;
 var filter: *zx.State([]const u8) = undefined;
@@ -69,7 +71,7 @@ pub fn Studio(ctx: *zx.ComponentContext) zx.Component {
                     <span>Ln {cursor.get()[0]} Col {cursor.get()[1]}</span>
                     <button class="studio-run" onclick={onRun}>▶ Run</button>
                 </div>
-                <ResultView result={result.get()} />
+                <studio_ui.ResultView result={result.get()} />
             </section>
         </div>
     );
@@ -77,7 +79,7 @@ pub fn Studio(ctx: *zx.ComponentContext) zx.Component {
 
 fn TableItem(ctx: *zx.ComponentCtx(struct { name: []const u8, filter: []const u8 })) zx.Component {
     const name = ctx.props.name;
-    const hidden = ctx.props.filter.len > 0 and !containsIgnoreCase(name, ctx.props.filter);
+    const hidden = ctx.props.filter.len > 0 and !studio.containsIgnoreCase(name, ctx.props.filter);
     const value = name;
     return (
         <li @allocator={ctx.allocator} {hidden}>
@@ -85,45 +87,6 @@ fn TableItem(ctx: *zx.ComponentCtx(struct { name: []const u8, filter: []const u8
                 <span class="studio-table-icon">▦</span>{name}
             </button>
         </li>
-    );
-}
-
-fn containsIgnoreCase(haystack: []const u8, needle: []const u8) bool {
-    if (needle.len > haystack.len) return false;
-    for (0..haystack.len - needle.len + 1) |i| {
-        if (std.ascii.eqlIgnoreCase(haystack[i..][0..needle.len], needle)) return true;
-    }
-    return false;
-}
-
-fn ResultView(ctx: *zx.ComponentCtx(struct { result: ?Worker.Result })) zx.Component {
-    const r = ctx.props.result orelse return (<div @allocator={ctx.allocator} class="studio-results studio-results-empty"></div>);
-    if (r.err) |err| return (
-        <div @allocator={ctx.allocator} class="studio-results">
-            <p class="studio-status studio-error">Error: {err}</p>
-        </div>
-    );
-    if (r.columns.len == 0) return (
-        <div @allocator={ctx.allocator} class="studio-results">
-            <p class="studio-status">Query OK, {r.changes} row(s) changed</p>
-        </div>
-    );
-    return (
-        <div @allocator={ctx.allocator} class="studio-results">
-            <div class="studio-grid">
-                <table>
-                    <thead>
-                        <tr>{for (r.columns) |col| (<th>{col}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                        {for (r.rows) |row| (
-                            <tr>{for (row) |cell| (<td>{cell}</td>)}</tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-            <p class="studio-status">{r.rows.len} row(s)</p>
-        </div>
     );
 }
 
@@ -176,7 +139,6 @@ fn run(raw: []const u8) void {
     loadTables();
 }
 
-// Line count for the gutter, and the caret's line/column for the status bar.
 fn updateCursor() void {
     const input = editor() orelse return;
     const text = input.ref.getAlloc(js.String, zx.allocator, "value") catch return;

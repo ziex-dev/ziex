@@ -374,18 +374,15 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
         resolved.cache_subdir = cache_subdir;
     }
 
-    // Feature ==> zx.db (sqlite backend)
+    // Feature ==> zx.db  / sqlite/postgres/mysql
     if (comptime app_opts.feat_sqlite_server) {
         const db_dir = try std.fs.path.join(alloc, &.{ datadir, "db", "default.db" });
         defer alloc.free(db_dir);
         const db_url = try alloc.print("file:{s}", .{db_dir});
         zx.db = try zx.Db.Sqlite.open(alloc, inita.io, db_url, .{});
         resolved.db_url = db_url;
-    }
-
-    // Feature ==> zx.db (postgres backend)
-    if (comptime app_opts.feat_pg_server) {
-        if (comptime app_opts.feat_sqlite_server) @compileError("zx.db: enable either the sqlite or the postgres feature, not both");
+    } else if (comptime app_opts.feat_pg_server) {
+        if (comptime app_opts.feat_mysql_server) @compileError("zx.db: enable either the postgres or the mysql feature as the default backend, not both");
         const db_url = envVar(alloc, "DATABASE_URL") orelse {
             std.log.err("postgres is enabled but DATABASE_URL is not set", .{});
             return error.MissingDatabaseUrl;
@@ -393,12 +390,7 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
         errdefer alloc.free(db_url);
         zx.db = try zx.Db.Postgres.open(alloc, inita.io, db_url, .{});
         resolved.db_url = db_url;
-    }
-
-    // Feature ==> zx.db (mysql backend)
-    if (comptime app_opts.feat_mysql_server) {
-        if (comptime app_opts.feat_sqlite_server) @compileError("zx.db: enable either the sqlite or the mysql feature, not both");
-        if (comptime app_opts.feat_pg_server) @compileError("zx.db: enable either the postgres or the mysql feature, not both");
+    } else if (comptime app_opts.feat_mysql_server) {
         const db_url = envVar(alloc, "DATABASE_URL") orelse {
             std.log.err("mysql is enabled but DATABASE_URL is not set", .{});
             return error.MissingDatabaseUrl;

@@ -1,0 +1,25 @@
+const db = @import("db.zig");
+const P = @import("../studio.zx").Server(db);
+
+pub const Studio = P.Studio;
+pub const onRun = P.onRun;
+pub const onRefresh = P.onRefresh;
+
+pub fn Page(ctx: zx.PageContext) !zx.Component {
+    const initial = db.bootstrap(ctx.allocator, ctx.arena, ctx.io) catch &.{};
+    return (
+        <main @allocator={ctx.arena} class="example-page studio-page">
+            <header class="example-header">
+                <h1>{db.title}</h1>
+                <p>{db.subtitle}</p>
+            </header>
+            <Studio tables={initial} @client />
+        </main>
+    );
+}
+
+pub const options: zx.PageOptions = .{
+    .methods = &.{ .GET, .POST },
+};
+
+const zx = @import("zx");

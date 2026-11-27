@@ -22,7 +22,8 @@ pub fn build(b: *std.Build) !void {
 
     const app_features: ziex.InitOptions.AppOptions.FeatureOptions = .{
         .sqlite = .{ .server = .enabled, .worker = .enabled },
-        // .postgres = .enabled,
+        .postgres = .enabled,
+        .mysql = .enabled,
         .kv = .enabled,
         .cache = .enabled,
         .flag = .{ .server = .{ .provider = .kv } },

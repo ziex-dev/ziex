@@ -1,4 +1,4 @@
-FROM alpine:3.22.2 AS build
+FROM alpine:3.24.4 AS build
 
 # Install Zig
 ARG ZIG_VER=0.17.0
@@ -23,11 +23,11 @@ RUN zig build zx -- version
 
 # App
 COPY app/ ./app/
-RUN zig build -Doptimize=ReleaseSafe
+RUN zig build zx -- build --release=safe
 RUN zig build zx -- bundle
 
 # Run App
-FROM alpine:3.22.2
+FROM alpine:3.24.4
 WORKDIR /app
 COPY --from=build /build/bundle/ /app/
 ENTRYPOINT ["/app/$BIN_NAME"]
