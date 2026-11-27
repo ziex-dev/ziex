@@ -4,7 +4,7 @@ pub const Event = @import("client/Event.zig");
 pub const Action = @import("client/Action.zig");
 pub const events = @import("client/events/generated.zig");
 pub const jsx = @import("client/jsx.zig");
-/// Typed browser APIs generated from WebIDL (`zig build webgen`).
+/// Typed browser APIs generated from WebIDL (`zig build gen -- web`).
 pub const web = @import("client/web/generated.zig");
 pub const Callback = web.Callback;
 

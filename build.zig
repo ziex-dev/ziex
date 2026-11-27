@@ -121,7 +121,7 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(exe);
 
     // --- Steps: Run --- //
-    {
+    if (b.isRoot()) {
         const run_step = b.step("run", "Run the app");
         const run_cmd = b.addRunArtifact(exe);
         run_step.dependOn(&run_cmd.step);
@@ -130,7 +130,7 @@ pub fn build(b: *std.Build) !void {
     }
 
     // --- Steps: Test --- //
-    {
+    if (b.isRoot()) {
         const mode_test = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
         if (b.lazyDependency("db_sqlite", .{})) |ad| mode_test.addImport("sqlite", ad.module("sqlite"));
         if (b.lazyDependency("db_postgres", .{})) |ad| mode_test.addImport("db_postgres", ad.module("postgres"));
@@ -199,25 +199,10 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
         }) });
         test_step.dependOn(&b.addRunArtifact(mysql_unit).step);
-
-        const transpile_only = b.addExecutable(.{
-            .name = "transpile-only",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("test/transpile_only.zig"),
-                .target = target,
-                .optimize = optimize,
-                .imports = &.{
-                    .{ .name = "zx", .module = mod },
-                },
-            }),
-        });
-        const run_transpile_only = b.addRunArtifact(transpile_only);
-        const transpile_only_step = b.step("transpile-only", "Update snapshots without running full tests");
-        transpile_only_step.dependOn(&run_transpile_only.step);
     }
 
-    // --- Steps: Dev (Runs e2e step for site/) --- //
-    {
+    // --- Steps: e2e (Runs e2e step for site/) --- //
+    if (b.isRoot()) {
         const e2e_step = b.step("e2e", "Run the site in development mode");
         const e2e_cmd = b.addSystemCommand(&.{ "npx", "playwright", "test" });
         e2e_cmd.setCwd(b.path("test/e2e"));
@@ -226,7 +211,7 @@ pub fn build(b: *std.Build) !void {
     }
 
     // --- Steps: Dev (Runs dev step for site/) --- //
-    {
+    if (b.isRoot()) {
         const dev_step = b.step("dev", "Run the site in development mode");
         const dev_cmd = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "dev" });
         dev_cmd.setCwd(b.path("site"));
@@ -235,7 +220,7 @@ pub fn build(b: *std.Build) !void {
     }
 
     // --- Steps: Site (Runs build step for site/) --- //
-    {
+    if (b.isRoot()) {
         const site_step = b.step("site", "Build the site");
         const site_cmd = b.addSystemCommand(&.{ b.graph.zig_exe, "build" });
         site_cmd.setCwd(b.path("site"));
@@ -243,144 +228,13 @@ pub fn build(b: *std.Build) !void {
         site_cmd.addPassthruArgs();
     }
 
-    // --- Steps: CSS Generator --- //
-    {
-        const css_gen_step = b.step("cssgen", "Generate CSS types from webref");
-
-        const css_gen_exe = b.addExecutable(.{
-            .name = "cssgen",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("tools/codegen/css.zig"),
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-        const css_gen_run = b.addRunArtifact(css_gen_exe);
-
-        if (b.root.root_dir.handle.access(b.graph.io, "vendor/webref", .{})) |_| {} else |_| {
-            const sync_cmd = b.addSystemCommand(&.{ "./tools/syncvendor", "webref" });
-            css_gen_run.step.dependOn(&sync_cmd.step);
-        }
-
-        css_gen_step.dependOn(&css_gen_run.step);
-    }
-
-    // --- Steps: Events Generator --- //
-    {
-        const events_gen_step = b.step("eventsgen", "Generate DOM event types from webref");
-
-        const events_gen_exe = b.addExecutable(.{
-            .name = "eventsgen",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("tools/codegen/events.zig"),
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-        const events_gen_run = b.addRunArtifact(events_gen_exe);
-
-        if (b.root.root_dir.handle.access(b.graph.io, "vendor/webref", .{})) |_| {} else |_| {
-            const sync_cmd = b.addSystemCommand(&.{ "./tools/syncvendor", "webref" });
-            events_gen_run.step.dependOn(&sync_cmd.step);
-        }
-
-        events_gen_step.dependOn(&events_gen_run.step);
-    }
-
-    // --- Steps: Web bindings Generator --- //
-    {
-        const web_gen_step = b.step("webgen", "Generate typed browser bindings from webref");
-        const web_gen_exe = b.addExecutable(.{
-            .name = "webgen",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("tools/codegen/web.zig"),
-                .target = b.graph.host,
-                .optimize = .ReleaseFast,
-            }),
-        });
-        const web_gen_run = b.addRunArtifact(web_gen_exe);
-        web_gen_run.has_side_effects = true;
-        if (b.root.root_dir.handle.access(b.graph.io, "vendor/webref", .{})) |_| {} else |_| {
-            const sync_cmd = b.addSystemCommand(&.{ "./tools/syncvendor", "webref" });
-            web_gen_run.step.dependOn(&sync_cmd.step);
-        }
-        web_gen_step.dependOn(&web_gen_run.step);
-    }
-
-    // --- Steps: Tags / delegated events TS Generator (pkg/ziex) --- //
-    {
-        const tags_gen_step = b.step("tagsgen", "Regenerate pkg/ziex TAG_NAMES + DELEGATED_EVENTS");
-        const tags_cmd = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "tagsgen" });
-        tags_cmd.setCwd(b.path("pkg/ziex"));
-        tags_gen_step.dependOn(&tags_cmd.step);
-        const events_cmd = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "delegatedeventsgen" });
-        events_cmd.setCwd(b.path("pkg/ziex"));
-        tags_gen_step.dependOn(&events_cmd.step);
-    }
-
-    // --- Steps: MCP Generator (src/runtime/core/mcp/gen) --- //
-    {
-        const mcp_gen_step = b.step("mcpgen", "Regenerate src/runtime/core/mcp/gen from the MCP spec (requires -Dmcp-spec)");
-        // Lazy so consumers never fetch the spec; the output is committed.
-        if (b.option(bool, "mcp-spec", "Fetch the MCP spec for `zig build mcpgen`") orelse false) {
-            if (b.lazyDependency("mcp_spec", .{})) |spec| {
-                // Newest first; a dual-era server speaks all of them.
-                const spec_versions = .{ "2026-07-28", "2025-11-25" };
-                const mcp_gen_exe = b.addExecutable(.{
-                    .name = "mcpgen",
-                    .root_module = b.createModule(.{
-                        .root_source_file = b.path("tools/codegen/mcp.zig"),
-                        .target = b.graph.host,
-                    }),
-                });
-                const update = b.addUpdateSourceFiles();
-                inline for (.{ "version", "methods", "error_codes", "defs_index" }) |kind| {
-                    const run = b.addRunArtifact(mcp_gen_exe);
-                    run.addArg(kind);
-                    inline for (spec_versions) |v| {
-                        run.addArg(v);
-                        run.addFileArg(spec.path("schema/" ++ v ++ "/schema.json"));
-                    }
-                    update.addCopyFileToSource(run.captureStdOut(.{}), "src/runtime/core/mcp/gen/" ++ kind ++ ".zig");
-                }
-                mcp_gen_step.dependOn(&update.step);
-            }
-        } else {
-            mcp_gen_step.dependOn(&b.addFail("`zig build mcpgen` requires -Dmcp-spec").step);
-        }
-    }
-
-    // --- Steps: HTML Docs Generator --- //
-    {
-        const html_docs_gen_step = b.step("htmldocsgen", "Generate HTML element/attribute docs from VS Code browsers.html-data.json");
-
-        const html_docs_gen_exe = b.addExecutable(.{
-            .name = "htmldocsgen",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("tools/codegen/html_docs.zig"),
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-        const html_docs_gen_run = b.addRunArtifact(html_docs_gen_exe);
-        html_docs_gen_step.dependOn(&html_docs_gen_run.step);
-    }
-
-    // --- Steps: Sync Benchmark --- //
-    {
-        const syncbench_step = b.step("syncbench", "Run synchronization benchmark from GH actions");
-
-        const syncbench_exe = b.addExecutable(.{
-            .name = "syncbench",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("site/app/pages/bench.zig"),
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-        const syncbench_run = b.addRunArtifact(syncbench_exe);
-        syncbench_step.dependOn(&syncbench_run.step);
-        syncbench_run.addPassthruArgs();
+    // --- Steps: Gen (Runs steps of tools/codegen) --- //
+    if (b.isRoot()) {
+        const gen_step = b.step("gen", "Run generators/dev tasks: zig build gen -- <css|events|web|html|tags|mcp|all|transpile-only|syncbench>...");
+        const gen_cmd = b.addSystemCommand(&.{ b.graph.zig_exe, "build" });
+        gen_cmd.setCwd(b.path("tools/codegen"));
+        gen_cmd.addPassthruArgs();
+        gen_step.dependOn(&gen_cmd.step);
     }
 }
 

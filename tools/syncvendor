@@ -53,14 +53,12 @@ main() {
     echo ""
     
     [[ -z "$filter" || "$filter" == "cachez" ]] && update_vendor "cachez" "git@github.com:nurulhudaapon/cachez.git" "master" && ((updated++))
-    [[ -z "$filter" || "$filter" == "cliz" ]] && update_vendor "cliz" "git@github.com:nurulhudaapon/cliz.git" "main" && ((updated++))
     [[ -z "$filter" || "$filter" == "zig-tree-sitter" ]] && update_vendor "zig-tree-sitter" "git@github.com:nurulhudaapon/zig-tree-sitter.git" "master" && ((updated++))
-    [[ -z "$filter" || "$filter" == "webref" ]] && update_vendor "webref" "https://github.com/w3c/webref.git" "curated" && ((updated++))
     
     echo ""
     if [[ $updated -eq 0 ]]; then
         echo "Unknown: $filter"
-        echo "Available: cachez, cliz, zig-tree-sitter, webref"
+        echo "Available: cachez, zig-tree-sitter"
         exit 1
     fi
     echo "Done. Run: git diff vendor/"

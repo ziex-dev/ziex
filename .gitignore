@@ -15,6 +15,4 @@ bench/result.csv
 # macOS
 .DS_Store
 
-# vendor
-vendor/webref
 .tool-versions

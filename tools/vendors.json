@@ -1,20 +1,8 @@
 {
-  "cliz": {
-    "repo": "git@github.com:nurulhudaapon/cliz.git",
-    "https": "https://github.com/nurulhudaapon/cliz",
-    "branch": "main",
-    "commit": "aff3b54879e7514afaf8c87f1abe22121b8992d4"
-  },
   "zig-tree-sitter": {
     "repo": "git@github.com:nurulhudaapon/zig-tree-sitter.git",
     "https": "https://github.com/nurulhudaapon/zig-tree-sitter",
     "branch": "master",
     "commit": "b22ced81dc72bf6f0238196830e0a8e597e1ad2a"
-  },
-  "webref": {
-    "repo": "git@github.com:w3c/webref.git",
-    "https": "https://github.com/w3c/webref",
-    "branch": "curated",
-    "commit": "910a40b6538d261cc93b5f32e19ef0f5b08a245d"
   }
 }

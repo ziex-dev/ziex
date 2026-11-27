@@ -1,5 +1,5 @@
 // Model Context Protocol: a tools server, the OAuth around it, and a client.
-// `mcp/gen` is generated from the spec by `zig build mcpgen -Dmcp-spec`.
+// `mcp/gen` is generated from the spec by `zig build gen -- mcp`.
 //
 // One catch-all route serves everything, e.g. `app/routes/mcp/[..]/route.zig`:
 //

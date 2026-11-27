@@ -20,13 +20,18 @@ const PropMeta = struct {
     prose: []const u8 = "",
 };
 
+// css <webref_dir>
 pub fn main(init: std.process.Init) !void {
-    try writeFile(init.io, init.gpa, "src/style/generated.zig");
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
+    if (args.len != 2) return error.Usage;
+    var webref = try std.Io.Dir.cwd().openDir(init.io, args[1], .{});
+    defer webref.close(init.io);
+    try writeFile(init.io, init.gpa, webref, "src/style/generated.zig");
     std.debug.print("Successfully generated src/style/generated.zig using AST-Driven engine.\n", .{});
 }
 
-pub fn writeFile(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !void {
-    const source = generate(io, allocator) catch |err| {
+pub fn writeFile(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir, path: []const u8) !void {
+    const source = generate(io, allocator, webref) catch |err| {
         if (err == error.InvalidGeneratedSource) {
             // We can't easily get the raw buffer from File here without changes,
             // but we can try to catch it in generate() or just look at what's happening.
@@ -40,12 +45,12 @@ pub fn writeFile(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !vo
     try file.writeStreamingAll(io, source);
 }
 
-pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
+pub fn generate(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir) ![]const u8 {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
 
-    const main_content = try std.Io.Dir.cwd().readFileAlloc(io, "vendor/webref/ed/css.json", a, .unlimited);
+    const main_content = try webref.readFileAlloc(io, "ed/css.json", a, .unlimited);
     const main_parsed = try std.json.parseFromSlice(std.json.Value, a, main_content, .{});
     defer main_parsed.deinit();
 
@@ -66,7 +71,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
     defer prose_map.deinit();
     var kw_prose_map = std.StringHashMap(std.StringHashMap([]const u8)).init(a);
     defer kw_prose_map.deinit();
-    var dir = try std.Io.Dir.cwd().openDir(io, "vendor/webref/ed/css/", .{ .iterate = true });
+    var dir = try webref.openDir(io, "ed/css/", .{ .iterate = true });
     defer dir.close(io);
     var dir_it = dir.iterate();
     while (try dir_it.next(io)) |entry| {

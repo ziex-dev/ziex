@@ -1,0 +1,28 @@
+.{
+    .name = .ziex_codegen,
+    .version = "0.0.0",
+    .fingerprint = 0xb22c7b87e163d3f9,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .ziex = .{ .path = "../.." },
+        .mcp_spec = .{
+            .url = "git+https://github.com/modelcontextprotocol/modelcontextprotocol?ref=2026-07-28#5f5440bb26a62e2cf3440b92da5a667efa03b267",
+            .hash = "N-V-__8AACfanwK1l2qJCox_t7b7Sz55K3btMW19mNl2BBFD",
+        },
+        .webref = .{
+            .url = "git+https://github.com/w3c/webref?ref=curated#910a40b6538d261cc93b5f32e19ef0f5b08a245d",
+            .hash = "N-V-__8AAE5VIgwQymjAmtbpP-A9v_U9DrPQEOFVcg2JqIL1",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "astgen.zig",
+        "css.zig",
+        "events.zig",
+        "helper.zig",
+        "html_docs.zig",
+        "mcp.zig",
+        "web.zig",
+    },
+}
