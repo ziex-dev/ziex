@@ -24,7 +24,7 @@ COPY pkg ./pkg
 COPY templates ./templates
 
 COPY site/build.zig site/build.zig.zon ./site/
-RUN cd site && zig build zx -- version
+RUN cd site && zig build --fetch
 
 # App
 COPY site/app ./site/app

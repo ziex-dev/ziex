@@ -9,16 +9,7 @@
         .tailwindcss = .{ .path = "../pkg/plugin-tailwindcss" },
         .ui = .{ .path = "../pkg/ui" },
         .ziex_js = .{ .path = "../pkg/ziex" },
-        .dusty = .{
-            .url = "git+https://github.com/lalinsky/dusty#6f7544f99ec2540e93b0e864d618f8b9f771a414",
-            .hash = "dusty-0.3.1-Qdw7RkH1IQBOa3m2yEhRHPW8J-q--UWYwobluQpxqM8q",
-            .lazy = true,
-        },
-        .zio = .{
-            .url = "git+https://github.com/lalinsky/zio?ref=main#e7180c7ef4e15e8f7b80a808ecbb2a9c7b342cac",
-            .hash = "zio-0.20.1-xHbVVO4XMAAQvF7lyz8sHZEcxO8pCNE7pww-qKHNFUOX",
-            .lazy = true,
-        },
+
         .branding = .{
             .url = "git+https://github.com/ziex-dev/branding.git#351a992d01f38303c5ccb479250241481b43e627",
             .hash = "N-V-__8AAHMUmwDsRB5yB9XEGz4Z4kxOtPsLjV46IIlLgpck",
@@ -26,7 +17,6 @@
         .lunasvg = .{
             .url = "git+https://github.com/ziex-dev/lunasvg.git#bc202a699db5eb4c52490eee61a95971ff2240d4",
             .hash = "lunasvg-0.0.0-9mEwLi0SFgB6wluo8kf-7y_xnF0OsgKckKkDQZlbFwcO",
-            .lazy = true,
         },
         .geist_font = .{
             .url = "https://github.com/vercel/geist-font/releases/download/v1.7.2/geist-font-v1.7.2.zip",
@@ -45,6 +35,16 @@
         .zigc_lib = .{
             .url = "https://registry.npmjs.org/@zigc/lib/-/lib-0.17.0.tgz",
             .hash = "N-V-__8AAC0wLwsc69gvTRq_9HRPPPrTrNegJ2Ow5ODcQvBE",
+            .lazy = true,
+        },
+        .dusty = .{
+            .url = "git+https://github.com/lalinsky/dusty#6f7544f99ec2540e93b0e864d618f8b9f771a414",
+            .hash = "dusty-0.3.1-Qdw7RkH1IQBOa3m2yEhRHPW8J-q--UWYwobluQpxqM8q",
+            .lazy = true,
+        },
+        .zio = .{
+            .url = "git+https://github.com/lalinsky/zio?ref=main#e7180c7ef4e15e8f7b80a808ecbb2a9c7b342cac",
+            .hash = "zio-0.20.1-xHbVVO4XMAAQvF7lyz8sHZEcxO8pCNE7pww-qKHNFUOX",
             .lazy = true,
         },
     },
