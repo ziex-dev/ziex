@@ -95,7 +95,7 @@ const Message = struct { username: []const u8, text: []const u8, is_system: bool
 const MessageList = std.ArrayList(Message);
 
 var messages: ?*zx.State(MessageList) = null;
-var ws: ?zx.WebSocket = null;
+var ws: ?zx.websocket.Client = null;
 var current_username: []const u8 = "";
 
 fn joinChat(username: []const u8) void {
@@ -103,14 +103,14 @@ fn joinChat(username: []const u8) void {
 
     std.log.info("joinChat: {s}", .{username});
     current_username = zx.allocator.dupe(u8, username) catch return;
-    ws = zx.WebSocket.init(zx.allocator, "/examples/realtime/ws", .{}) catch return;
+    ws = .{ .io = zx.Io.default(), .allocator = zx.allocator };
 
     if (ws) |*w| {
         w.onopen = &onWsOpen;
         w.onmessage = &onWsMessage;
         w.onclose = &onWsClose;
         w.onerror = &onWsError;
-        w.connect() catch {};
+        w.connect(.{ .url = "/examples/realtime/ws" }) catch {};
     }
 
     if (messages) |msgs_state| {
@@ -137,9 +137,9 @@ fn sendMessage(e: zx.client.Event) void {
     }
 }
 
-fn onWsOpen(_: *zx.WebSocket) void {}
+fn onWsOpen(_: *zx.websocket.Client) void {}
 
-fn onWsMessage(_: *zx.WebSocket, event: zx.WebSocket.MessageEvent) void {
+fn onWsMessage(_: *zx.websocket.Client, event: zx.websocket.MessageEvent) void {
     if (zx.platform.role != .client) return;
 
     const data = event.text() orelse return;
@@ -166,7 +166,7 @@ fn onWsMessage(_: *zx.WebSocket, event: zx.WebSocket.MessageEvent) void {
     }
 }
 
-fn onWsClose(_: *zx.WebSocket, _: zx.WebSocket.CloseEvent) void {
+fn onWsClose(_: *zx.websocket.Client, _: zx.websocket.CloseEvent) void {
     if (zx.platform.role != .client) return;
 
     if (messages) |msgs_state| {
@@ -180,7 +180,7 @@ fn onWsClose(_: *zx.WebSocket, _: zx.WebSocket.CloseEvent) void {
     }
 }
 
-fn onWsError(_: *zx.WebSocket, _: zx.WebSocket.ErrorEvent) void {
+fn onWsError(_: *zx.websocket.Client, _: zx.websocket.ErrorEvent) void {
     if (zx.platform.role != .client) return;
 
     if (messages) |msgs_state| {

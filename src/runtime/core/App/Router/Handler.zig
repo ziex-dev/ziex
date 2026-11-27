@@ -182,7 +182,7 @@ pub fn handleApi(
     io: std.Io,
     app_ctx: ?*anyopaque,
     proxy_state_ptr: ?*const anyopaque,
-    socket: zx.Socket,
+    socket: zx.websocket.Socket,
 ) ApiResult {
     const handlers = route.route orelse return .not_found;
 

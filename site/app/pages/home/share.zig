@@ -490,7 +490,7 @@ fn detectUnsupported(a: Allocator, files: Files) !Unsupported {
             containsAfter(code, "PageOptions", "caching") or containsAfter(code, "LayoutOptions", "caching"),
         .websocket = hasPubFn(code, "Socket") or hasPubFn(code, "SocketOpen") or
             hasWord(code, "zx.SocketContext") or hasWord(code, "zx.SocketOpenContext") or
-            hasWord(code, ".socket.upgrade") or hasWord(code, "zx.WebSocket"),
+            hasWord(code, ".socket.upgrade") or hasWord(code, "zx.websocket"),
         .non_get = non_get.items,
     };
 }

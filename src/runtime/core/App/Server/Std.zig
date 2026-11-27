@@ -436,7 +436,10 @@ pub fn Backend(comptime H: type) type {
                 }
 
                 while (true) {
-                    const msg = ws.readSmallMessage() catch break;
+                    const msg = ws.readSmallMessage() catch |err| {
+                        if (err == error.ConnectionClose) conn.writeRaw(&.{ 0x03, 0xe8 }, .connection_close) catch {};
+                        break;
+                    };
                     switch (msg.opcode) {
                         .ping => {
                             conn.writeRaw(msg.data, .pong) catch break;
@@ -445,7 +448,7 @@ pub fn Backend(comptime H: type) type {
                         else => {},
                     }
                     if (handlers.socket) |socket_fn| {
-                        const message: zx.WebSocket.Message = if (msg.opcode == .binary) .{ .binary = msg.data } else .{ .text = msg.data };
+                        const message: zx.websocket.Message = if (msg.opcode == .binary) .{ .binary = msg.data } else .{ .text = msg.data };
                         socket_fn(sock, message, upgrade_data, ctx.server.allocator, ctx.arena, ctx.server.io) catch {};
                     }
                 }
@@ -498,7 +501,7 @@ const Ws = struct {
         return @ptrCast(@alignCast(userdata.?));
     }
 
-    fn send(userdata: ?*anyopaque, message: zx.WebSocket.Message) anyerror!void {
+    fn send(userdata: ?*anyopaque, message: zx.websocket.Message) anyerror!void {
         switch (message) {
             .text => |data| try of(userdata).writeRaw(data, .text),
             .binary => |data| try of(userdata).writeRaw(data, .binary),

@@ -10,7 +10,7 @@ const Request = @import("Request.zig");
 const Response = @import("Response.zig");
 const CookieOptions = @import("../http.zig").CookieOptions;
 const MultiFormData = @import("MultiFormData.zig");
-const WebSocket = @import("../WebSocket.zig");
+const websocket = @import("../websocket.zig");
 const wasm_ext = @import("../../server/wasm/extern.zig");
 
 const is_wasm = builtin.cpu.arch == .wasm32 or builtin.cpu.arch == .wasm64;
@@ -311,12 +311,12 @@ fn wsUpgrade(userdata: ?*anyopaque, data: ?[]const u8) anyerror!void {
     }
 }
 
-fn wsSend(_: ?*anyopaque, message: WebSocket.Message) anyerror!void {
+fn wsSend(_: ?*anyopaque, message: websocket.Message) anyerror!void {
     if (comptime !is_wasm) return error.WebSocketNotConnected;
     wasm_ext.ws.write(message.bytes(), message == .binary);
 }
 
-fn wsRead(_: ?*anyopaque) ?WebSocket.Message {
+fn wsRead(_: ?*anyopaque) ?websocket.Message {
     return null;
 }
 

@@ -37,7 +37,7 @@ pub const token = "ziex/httpz";
 
 const Allocator = std.mem.Allocator;
 const Component = zx.Component;
-const Socket = routing.Socket;
+const Socket = zx.websocket.Socket;
 const ServerApp = server_meta.ServerApp;
 const server_app = server_meta.server_app;
 const log = std.log.scoped(.app);
@@ -607,216 +607,6 @@ fn setServerAddress(config: *httpz.Config, address: []const u8, port: u16) void 
         .{ .ip = std.Io.net.IpAddress.parse(address, port) catch .{ .ip4 = .{ .bytes = .{ 127, 0, 0, 1 }, .port = port } } };
 }
 
-// --- Client WebSocket (outbound `ws://`/`wss://` connections) --- //
-
-pub const websocket = struct {
-    const WebSocket = @import("../../WebSocket.zig");
-    const ws = httpz.websocket;
-
-    const CloseOptions = WebSocket.CloseOptions;
-
-    /// Backend context stored in WebSocket.userdata
-    const BackendContext = struct {
-        client: ws.Client,
-        read_thread: ?std.Thread,
-        ws_ptr: *WebSocket,
-
-        fn init(allocator: Allocator, host: []const u8, port: u16, tls: bool) !*BackendContext {
-            const ctx = try allocator.create(BackendContext);
-            errdefer allocator.destroy(ctx);
-
-            ctx.* = .{
-                .client = try ws.Client.init(allocator, .{
-                    .host = host,
-                    .port = port,
-                    .tls = tls,
-                }),
-                .read_thread = null,
-                .ws_ptr = undefined,
-            };
-
-            return ctx;
-        }
-
-        fn deinit(self: *BackendContext, allocator: Allocator) void {
-            // Wait for read thread to finish
-            if (self.read_thread) |thread| {
-                thread.join();
-            }
-            self.client.deinit();
-            allocator.destroy(self);
-        }
-    };
-
-    /// Handler for the websocket read loop
-    const ReadHandler = struct {
-        ws: *WebSocket,
-
-        pub fn serverMessage(self: *ReadHandler, data: []const u8, msg_type: ws.MessageType) !void {
-            const w = self.ws;
-            if (w.onmessage) |handler| {
-                if (msg_type == .binary) {
-                    handler(w, .{ .data = .{ .binary = data } });
-                } else {
-                    handler(w, .{ .data = .{ .text = data } });
-                }
-            }
-        }
-
-        pub fn serverClose(self: *ReadHandler, data: []const u8) !void {
-            const w = self.ws;
-            w.ready_state = .closed;
-
-            // Parse close code from data if available
-            const code: u16 = if (data.len >= 2)
-                std.mem.readInt(u16, data[0..2], .big)
-            else
-                1000;
-
-            const reason = if (data.len > 2) data[2..] else "";
-
-            if (w.onclose) |handler| {
-                handler(w, .{
-                    .code = code,
-                    .reason = reason,
-                    .was_clean = true,
-                });
-            }
-        }
-
-        pub fn close(self: *ReadHandler) void {
-            const w = self.ws;
-            if (w.ready_state != .closed) {
-                w.ready_state = .closed;
-            }
-        }
-    };
-
-    /// Parse a WebSocket URL into components
-    fn parseWsUrl(url: []const u8) !struct { host: []const u8, port: u16, path: []const u8, tls: bool } {
-        var tls = false;
-        var rest: []const u8 = url;
-
-        if (std.mem.startsWith(u8, url, "wss://")) {
-            tls = true;
-            rest = url[6..];
-        } else if (std.mem.startsWith(u8, url, "ws://")) {
-            rest = url[5..];
-        } else {
-            return error.InvalidUrl;
-        }
-
-        // Find path separator
-        const path_start = std.mem.indexOf(u8, rest, "/") orelse rest.len;
-        const host_port = rest[0..path_start];
-        const path = if (path_start < rest.len) rest[path_start..] else "/";
-
-        // Parse host:port
-        if (std.mem.indexOf(u8, host_port, ":")) |colon| {
-            const host = host_port[0..colon];
-            const port = std.fmt.parseInt(u16, host_port[colon + 1 ..], 10) catch return error.InvalidUrl;
-            return .{ .host = host, .port = port, .path = path, .tls = tls };
-        } else {
-            const default_port: u16 = if (tls) 443 else 80;
-            return .{ .host = host_port, .port = default_port, .path = path, .tls = tls };
-        }
-    }
-
-    /// Establish a WebSocket connection
-    pub fn connect(w: *WebSocket) WebSocket.Error!void {
-        const allocator = w._allocator;
-
-        // Parse URL
-        const url_parts = parseWsUrl(w.url) catch return error.InvalidUrl;
-
-        // Create backend context
-        const ctx = BackendContext.init(allocator, url_parts.host, url_parts.port, url_parts.tls) catch
-            return error.ConnectionFailed;
-        errdefer ctx.deinit(allocator);
-
-        ctx.ws_ptr = w;
-        w._internal.userdata = ctx;
-
-        // Perform handshake
-        ctx.client.handshake(url_parts.path, .{}) catch {
-            return error.ConnectionFailed;
-        };
-
-        w.ready_state = .open;
-
-        // Notify open handler
-        w._handleOpen();
-
-        // Start read loop in background thread
-        ctx.read_thread = std.Thread.spawn(.{}, struct {
-            fn run(context: *BackendContext) void {
-                var handler = ReadHandler{ .ws = context.ws_ptr };
-                context.client.readLoop(&handler) catch |err| {
-                    const inner = context.ws_ptr;
-                    if (inner.onerror) |error_handler| {
-                        error_handler(inner, .{ .message = @errorName(err) });
-                    }
-                };
-            }
-        }.run, .{ctx}) catch {
-            return error.ConnectionFailed;
-        };
-    }
-
-    /// Send text data
-    pub fn send(w: *WebSocket, data: []const u8) WebSocket.Error!void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w._internal.userdata orelse return error.NotConnected));
-
-        // writeText takes a mutable slice, so we need to copy
-        const buf = w._allocator.alloc(u8, data.len) catch return error.SendFailed;
-        defer w._allocator.free(buf);
-        @memcpy(buf, data);
-
-        ctx.client.writeText(buf) catch return error.SendFailed;
-    }
-
-    /// Send binary data
-    pub fn sendBinary(w: *WebSocket, data: []const u8) WebSocket.Error!void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w._internal.userdata orelse return error.NotConnected));
-
-        // writeBin takes a mutable slice, so we need to copy
-        const buf = w._allocator.alloc(u8, data.len) catch return error.SendFailed;
-        defer w._allocator.free(buf);
-        @memcpy(buf, data);
-
-        ctx.client.writeBin(buf) catch return error.SendFailed;
-    }
-
-    /// Close the connection
-    pub fn close(w: *WebSocket, options: CloseOptions) void {
-        const ctx: *BackendContext = @ptrCast(@alignCast(w._internal.userdata orelse return));
-
-        w.ready_state = .closing;
-        const code = options.code orelse 1000;
-        const reason = options.reason orelse "";
-
-        ctx.client.close(.{ .code = code }) catch {};
-        w.ready_state = .closed;
-
-        if (w.onclose) |handler| {
-            handler(w, .{
-                .code = code,
-                .reason = reason,
-                .was_clean = true,
-            });
-        }
-    }
-
-    /// Clean up resources
-    pub fn deinit(w: *WebSocket) void {
-        if (w._internal.userdata) |ptr| {
-            const ctx: *BackendContext = @ptrCast(@alignCast(ptr));
-            ctx.deinit(w._allocator);
-            w._internal.userdata = null;
-        }
-    }
-};
-
 // --- Shared native server request handler --- //
 
 /// Converts transport-specific (httpz) types to abstract Request/Response,
@@ -991,7 +781,7 @@ fn Handler(comptime Ctx: type) type {
                 .res = res,
             };
             var use_socket = false;
-            const socket: zx.Socket = blk: {
+            const socket: zx.websocket.Socket = blk: {
                 if (route) |r| {
                     if (r.route) |handlers| {
                         if (handlers.socket != null) {
@@ -1196,7 +986,7 @@ fn Handler(comptime Ctx: type) type {
 
             /// Called when a text or binary message is received from the client
             pub fn clientMessage(self: *WebsocketHandler, _: Allocator, data: []const u8, message_type: httpz.websocket.MessageTextType) !void {
-                const message: zx.WebSocket.Message = switch (message_type) {
+                const message: zx.websocket.Message = switch (message_type) {
                     .text => .{ .text = data },
                     .binary => .{ .binary = data },
                 };
@@ -1232,7 +1022,7 @@ fn Handler(comptime Ctx: type) type {
 
             /// Create a Socket interface for the current connection, backed by
             /// this handler via the unified `Transport` vtable (only `ws*` slots).
-            fn createSocket(self: *WebsocketHandler) zx.Socket {
+            fn createSocket(self: *WebsocketHandler) zx.websocket.Socket {
                 return .{ ._internal = .{
                     .http = .{ .userdata = @ptrCast(self), .vtable = &socket_vtable },
                     .attached = true,
@@ -1255,7 +1045,7 @@ fn Handler(comptime Ctx: type) type {
                 return @ptrCast(@alignCast(userdata.?));
             }
 
-            fn socketSend(userdata: ?*anyopaque, message: zx.WebSocket.Message) anyerror!void {
+            fn socketSend(userdata: ?*anyopaque, message: zx.websocket.Message) anyerror!void {
                 const conn = handlerOf(userdata).conn;
                 switch (message) {
                     .text => |data| try conn.writeText(data),

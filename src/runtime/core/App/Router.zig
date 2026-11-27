@@ -655,7 +655,7 @@ pub const HandleOptions = struct {
     app_ctx: ?*anyopaque = null,
     /// When the route has a socket handler, the caller supplies a Socket bound
     /// to the same backend so `handle` can dispatch the upgrade.
-    socket: zx.Socket = .{},
+    socket: zx.websocket.Socket = .{},
 };
 
 pub const Outcome = union(enum) {

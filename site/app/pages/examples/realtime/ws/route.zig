@@ -15,6 +15,7 @@ pub fn GET(ctx: zx.RouteContext) !void {
 }
 
 const MAX_MESSAGES = 100;
+
 pub fn SocketOpen(ctx: zx.SocketOpenCtx(SocketData)) !void {
     ctx.socket.configure(.{ .publish_to_self = true });
     ctx.socket.subscribe(CHAT_TOPIC);
@@ -24,10 +25,9 @@ pub fn SocketOpen(ctx: zx.SocketOpenCtx(SocketData)) !void {
         .{ctx.data.username()},
     ));
 
-    // Send last 5 messages (oldest to newest for correct display with column-reverse)
-    const msg_count = messages.items.len;
-    const start_idx = if (msg_count > MAX_MESSAGES) msg_count - MAX_MESSAGES else 0;
-    for (messages.items[start_idx..]) |msg| {
+    // Replay persisted history (KV on Cloudflare / native FS backend).
+    const history = loadHistory(ctx.arena);
+    for (history) |msg| {
         try ctx.socket.send(.{ .text = try ctx.fmt(
             "{s}: {s}",
             .{ msg.username, msg.text },
@@ -42,23 +42,7 @@ pub fn Socket(ctx: zx.SocketCtx(SocketData)) !void {
     );
 
     _ = ctx.socket.publish(CHAT_TOPIC, formatted);
-
-    const gpa = std.heap.page_allocator;
-    const text = gpa.dupe(u8, ctx.message.bytes()) catch return;
-    const username = gpa.dupe(u8, ctx.data.username()) catch {
-        gpa.free(text);
-        return;
-    };
-    messages.append(gpa, .{ .text = text, .username = username }) catch {
-        gpa.free(text);
-        gpa.free(username);
-        return;
-    };
-    while (messages.items.len > MAX_MESSAGES) {
-        const old = messages.orderedRemove(0);
-        gpa.free(old.text);
-        gpa.free(old.username);
-    }
+    appendHistory(ctx.arena, ctx.data.username(), ctx.message.bytes());
 }
 
 pub fn SocketClose(ctx: zx.SocketCloseCtx(SocketData)) void {
@@ -69,8 +53,35 @@ pub fn SocketClose(ctx: zx.SocketCloseCtx(SocketData)) void {
     _ = ctx.socket.publish(CHAT_TOPIC, msg);
 }
 
-var messages = std.ArrayList(Message).empty;
+fn chatKv() zx.Kv {
+    return zx.kv.scoped(.@"examples/realtime");
+}
 
+fn loadHistory(allocator: std.mem.Allocator) []Message {
+    return chatKv().as(allocator, HISTORY_KEY, []Message) catch null orelse &.{};
+}
+
+fn appendHistory(allocator: std.mem.Allocator, username: []const u8, text: []const u8) void {
+    const prev = loadHistory(allocator);
+    const start: usize = if (prev.len >= MAX_MESSAGES) prev.len - (MAX_MESSAGES - 1) else 0;
+    const kept = prev[start..];
+
+    const next = allocator.alloc(Message, kept.len + 1) catch return;
+    for (kept, 0..) |msg, i| {
+        next[i] = .{
+            .username = allocator.dupe(u8, msg.username) catch return,
+            .text = allocator.dupe(u8, msg.text) catch return,
+        };
+    }
+    next[kept.len] = .{
+        .username = allocator.dupe(u8, username) catch return,
+        .text = allocator.dupe(u8, text) catch return,
+    };
+
+    chatKv().putAs(HISTORY_KEY, next, .{}) catch {};
+}
+
+const HISTORY_KEY = "messages";
 const CHAT_TOPIC = "chat-room";
 const Message = struct { text: []const u8, username: []const u8 };
 

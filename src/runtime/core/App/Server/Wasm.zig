@@ -209,7 +209,7 @@ fn serve(process_init: std.process.Init, allocator: std.mem.Allocator) !void {
     }
 
     const handlers = if (matched) |r| r.route else null;
-    const socket: zx.Socket = if (handlers != null and handlers.?.socket != null)
+    const socket: zx.websocket.Socket = if (handlers != null and handlers.?.socket != null)
         .{ ._internal = .{ .http = ctx.http, .attached = true } }
     else
         .{};
@@ -250,7 +250,7 @@ fn serve(process_init: std.process.Init, allocator: std.mem.Allocator) !void {
     }
 }
 
-fn runWebSocket(ctx: *const Ctx, handlers: core_handler.ServerApp.RouteHandlers, socket: zx.Socket) void {
+fn runWebSocket(ctx: *const Ctx, handlers: core_handler.ServerApp.RouteHandlers, socket: zx.websocket.Socket) void {
     ext.ws.upgrade();
     const upgrade_data = ctx.conn.upgradeData();
     const allocator = ctx.allocator;

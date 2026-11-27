@@ -291,7 +291,7 @@ pub fn Backend(comptime H: type) type {
                             if (handlers.socket) |socket_fn| {
                                 var msg_arena: std.heap.ArenaAllocator = .init(ctx.server.allocator);
                                 defer msg_arena.deinit();
-                                const message: zx.WebSocket.Message = if (msg.type == .binary) .{ .binary = msg.data } else .{ .text = msg.data };
+                                const message: zx.websocket.Message = if (msg.type == .binary) .{ .binary = msg.data } else .{ .text = msg.data };
                                 socket_fn(sock, message, upgrade_data, ctx.server.allocator, msg_arena.allocator(), ctx.server.io) catch {};
                             }
                         },
@@ -332,7 +332,7 @@ const Ws = struct {
         return @ptrCast(@alignCast(userdata.?));
     }
 
-    fn send(userdata: ?*anyopaque, message: zx.WebSocket.Message) anyerror!void {
+    fn send(userdata: ?*anyopaque, message: zx.websocket.Message) anyerror!void {
         switch (message) {
             .text => |data| try of(userdata).ws.send(.text, data),
             .binary => |data| try of(userdata).ws.send(.binary, data),

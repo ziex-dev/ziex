@@ -217,8 +217,8 @@ pub const ServerApp = struct {
     /// Socket message handler function type for WebSocket connections
     /// Called for each message received from the client
     pub const SocketHandler = *const fn (
-        socket: zx.Socket,
-        message: zx.WebSocket.Message,
+        socket: zx.websocket.Socket,
+        message: zx.websocket.Message,
         upgrade_data: ?[]const u8,
         allocator: std.mem.Allocator,
         arena: std.mem.Allocator,
@@ -228,7 +228,7 @@ pub const ServerApp = struct {
     /// Socket open handler function type (optional)
     /// Called once when the WebSocket connection is established
     pub const SocketOpenHandler = *const fn (
-        socket: zx.Socket,
+        socket: zx.websocket.Socket,
         upgrade_data: ?[]const u8,
         allocator: std.mem.Allocator,
         arena: std.mem.Allocator,
@@ -238,7 +238,7 @@ pub const ServerApp = struct {
     /// Socket close handler function type (optional)
     /// Called once when the WebSocket connection is closed
     pub const SocketCloseHandler = *const fn (
-        socket: zx.Socket,
+        socket: zx.websocket.Socket,
         upgrade_data: ?[]const u8,
         allocator: std.mem.Allocator,
         io: std.Io,
@@ -370,7 +370,7 @@ pub const ServerApp = struct {
         const DataType = @TypeOf(@as(CtxType, undefined).data);
 
         return struct {
-            fn wrapper(socket: zx.Socket, message: zx.WebSocket.Message, upgrade_data: ?[]const u8, allocator: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) anyerror!void {
+            fn wrapper(socket: zx.websocket.Socket, message: zx.websocket.Message, upgrade_data: ?[]const u8, allocator: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) anyerror!void {
                 _ = arena;
                 const data: DataType = if (upgrade_data) |bytes|
                     std.mem.bytesToValue(DataType, bytes[0..@sizeOf(DataType)])
@@ -405,7 +405,7 @@ pub const ServerApp = struct {
         const DataType = @TypeOf(@as(CtxType, undefined).data);
 
         return struct {
-            fn wrapper(socket: zx.Socket, upgrade_data: ?[]const u8, allocator: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) anyerror!void {
+            fn wrapper(socket: zx.websocket.Socket, upgrade_data: ?[]const u8, allocator: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) anyerror!void {
                 _ = arena;
                 const data: DataType = if (upgrade_data) |bytes|
                     std.mem.bytesToValue(DataType, bytes[0..@sizeOf(DataType)])
@@ -437,7 +437,7 @@ pub const ServerApp = struct {
         const DataType = @TypeOf(@as(CtxType, undefined).data);
 
         return struct {
-            fn wrapper(socket: zx.Socket, upgrade_data: ?[]const u8, allocator: std.mem.Allocator, io: std.Io) void {
+            fn wrapper(socket: zx.websocket.Socket, upgrade_data: ?[]const u8, allocator: std.mem.Allocator, io: std.Io) void {
                 const data: DataType = if (upgrade_data) |bytes|
                     std.mem.bytesToValue(DataType, bytes[0..@sizeOf(DataType)])
                 else

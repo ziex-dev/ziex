@@ -5,7 +5,7 @@ const std = @import("std");
 
 const CookieOptions = @import("../http.zig").CookieOptions;
 const MultiFormValue = @import("MultiFormData.zig").Value;
-const WebSocketMessage = @import("../WebSocket.zig").Message;
+const WebSocketMessage = @import("../websocket.zig").Message;
 
 userdata: ?*anyopaque = null,
 vtable: *const VTable = &failing_vtable,

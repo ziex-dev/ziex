@@ -4,7 +4,7 @@ const builtin = @import("builtin");
 const zx = @import("../../root.zig");
 pub const ext = @import("window/extern.zig");
 pub const reactivity = @import("reactivity.zig");
-pub const WebSocket = @import("../core/WebSocket.zig");
+pub const websocket = @import("../core/websocket.zig");
 pub const Document = @import("window/document.zig");
 
 pub const is_wasm = zx.platform.role == .client;

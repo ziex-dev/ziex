@@ -24,7 +24,7 @@ pub const data_and_apis = [_]SidebarProps.Section{
     .{ .title = "Feature Flags", .href = "/examples/flag", .tags = &.{ "zx.flag", "OpenFeature" } },
     .{ .title = "CRUD", .href = "/examples/crud", .tags = &.{ "zx.db", "zx.server.Event", experimental.label } },
     // .{ .title = "API Routes", .href = "/examples/api-route" },
-    .{ .title = "Realtime WebSockets", .href = "/examples/realtime", .tags = &.{ "zx.WebSocket", "cookies" } },
+    .{ .title = "Realtime WebSockets", .href = "/examples/realtime", .tags = &.{ "zx.websocket", "cookies" } },
 };
 
 pub const forms_and_actions = [_]SidebarProps.Section{

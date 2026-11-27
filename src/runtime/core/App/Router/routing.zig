@@ -1,8 +1,8 @@
 const std = @import("std");
 const Request = @import("../../http/Request.zig");
 const Response = @import("../../http/Response.zig");
-const Transport = @import("../../http/Transport.zig");
-const WebSocket = @import("../../WebSocket.zig");
+const websocket = @import("../../websocket.zig");
+const Socket = websocket.Socket;
 const Client = @import("../../http/Client.zig");
 
 pub const PageData = struct {
@@ -108,116 +108,6 @@ pub const ErrorContext = struct {
     pub const fetchThen = Fetch(ErrorContext).fetchThen;
 };
 
-/// Socket options for configuring WebSocket behavior
-pub const SocketOptions = struct {
-    /// When true, publish() will also send the message to the sender.
-    publish_to_self: bool = false,
-};
-
-pub const Socket = struct {
-    _internal: Internal = .{},
-
-    pub const Internal = struct {
-        http: Transport = .{},
-        attached: bool = false,
-    };
-
-    pub fn upgrade(self: Socket, data: anytype) !void {
-        if (!self._internal.attached) return;
-        const DataType = @TypeOf(data);
-        if (DataType == void) {
-            try self._internal.http.wsUpgrade(null);
-        } else {
-            try self._internal.http.wsUpgrade(std.mem.asBytes(&data));
-        }
-    }
-
-    /// Sends a text or binary message to the client.
-    ///
-    /// Example:
-    /// ```zig
-    /// try ctx.socket.send(.{ .text = "Hello!" });
-    /// ```
-    pub fn send(self: Socket, message: WebSocket.Message) !void {
-        if (!self._internal.attached) return;
-        try self._internal.http.wsSend(message);
-    }
-
-    pub fn read(self: Socket) ?WebSocket.Message {
-        if (!self._internal.attached) return null;
-        return self._internal.http.wsRead();
-    }
-
-    pub fn close(self: Socket) void {
-        if (!self._internal.attached) return;
-        self._internal.http.wsClose();
-    }
-
-    pub fn isUpgraded(self: Socket) bool {
-        return self._internal.attached;
-    }
-
-    /// Subscribe to a topic to receive published messages.
-    /// Multiple sockets can subscribe to the same topic.
-    ///
-    /// Example:
-    /// ```zig
-    /// ctx.socket.subscribe("chat-room");
-    /// ctx.socket.subscribe("notifications");
-    /// ```
-    pub fn subscribe(self: Socket, topic: []const u8) void {
-        if (!self._internal.attached) return;
-        self._internal.http.wsSubscribe(topic);
-    }
-
-    /// Unsubscribe from a topic to stop receiving messages.
-    ///
-    /// Example:
-    /// ```zig
-    /// ctx.socket.unsubscribe("chat-room");
-    /// ```
-    pub fn unsubscribe(self: Socket, topic: []const u8) void {
-        if (!self._internal.attached) return;
-        self._internal.http.wsUnsubscribe(topic);
-    }
-
-    /// Publish a message to all subscribers of a topic, excluding the sender.
-    /// Returns the number of sockets the message was sent to.
-    ///
-    /// Example:
-    /// ```zig
-    /// const sent = ctx.socket.publish("chat-room", "Hello everyone!");
-    /// ```
-    pub fn publish(self: Socket, topic: []const u8, message: []const u8) usize {
-        if (!self._internal.attached) return 0;
-        return self._internal.http.wsPublish(topic, message);
-    }
-
-    /// Check if this socket is subscribed to a topic.
-    ///
-    /// Example:
-    /// ```zig
-    /// if (ctx.socket.isSubscribed("chat-room")) {
-    ///     // ...
-    /// }
-    /// ```
-    pub fn isSubscribed(self: Socket, topic: []const u8) bool {
-        if (!self._internal.attached) return false;
-        return self._internal.http.wsIsSubscribed(topic);
-    }
-
-    /// Configure socket options.
-    ///
-    /// Example:
-    /// ```zig
-    /// ctx.socket.configure(.{ .publish_to_self = true });
-    /// ```
-    pub fn configure(self: Socket, options: SocketOptions) void {
-        if (!self._internal.attached) return;
-        self._internal.http.wsSetPublishToSelf(options.publish_to_self);
-    }
-};
-
 pub const RouteContext = struct {
     const Self = @This();
 
@@ -267,7 +157,7 @@ pub fn SocketCtx(comptime DataType: type) type {
         /// The WebSocket connection for sending messages
         socket: Socket,
         /// The client message
-        message: WebSocket.Message,
+        message: websocket.Message,
         /// Custom data passed from upgrade handler
         data: DataType,
         /// Global allocator

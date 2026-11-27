@@ -39,6 +39,7 @@ test {
     _ = @import("core/style.zig");
     _ = @import("core/mdzx.zig");
     _ = @import("core/pubsub.zig");
+    _ = @import("core/websocket.zig");
     _ = @import("cli/lsp.zig");
     _ = @import("cli/dev.zig");
     _ = @import("util/sig.zig");

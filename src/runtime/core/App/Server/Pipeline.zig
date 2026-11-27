@@ -19,7 +19,7 @@ pub const Conn = zx.http.Conn;
 pub const Component = zx.Component;
 pub const HeaderEntry = Conn.HeaderEntry;
 pub const PubSub = @import("PubSub.zig");
-pub const Socket = zx.Socket;
+pub const Socket = zx.websocket.Socket;
 pub const RouteHandlers = server_meta.ServerApp.RouteHandlers;
 pub const Meta = server_meta.ServerApp;
 
@@ -521,7 +521,7 @@ pub fn proxyStatus(proxy: Router.ProxyResult) void {
     }
 }
 
-pub fn socket(h: zx.http.Transport, handlers: ?RouteHandlers) zx.Socket {
+pub fn socket(h: zx.http.Transport, handlers: ?RouteHandlers) zx.websocket.Socket {
     if (handlers != null and handlers.?.socket != null) {
         return .{ ._internal = .{ .http = h, .attached = true } };
     }

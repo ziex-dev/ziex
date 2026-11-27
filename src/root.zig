@@ -59,7 +59,6 @@ pub const NotFoundOptions = opts.NotFoundOptions;
 pub const ErrorOptions = opts.ErrorOptions;
 pub const RouteOptions = opts.RouteOptions;
 pub const ProxyOptions = opts.ProxyOptions;
-pub const SocketOptions = routing.SocketOptions;
 
 // --- Contexts --- //
 pub const ProxyContext = ctxs.ProxyContext;
@@ -129,9 +128,8 @@ pub var secrets: Secrets = .failing;
 
 // --- Net --- //
 pub const http = @import("runtime/core/http.zig");
-pub const WebSocket = @import("runtime/core/WebSocket.zig");
+pub const websocket = @import("runtime/core/websocket.zig");
 pub const mcp = @import("runtime/core/mcp.zig");
-pub const Socket = routing.Socket;
 
 // --- Values --- //
 pub const allocator = app_mod.allocator;

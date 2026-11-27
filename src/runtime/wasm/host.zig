@@ -45,24 +45,11 @@ fn dispatchClient(msg: HostMsg, id: u64, a: u64, b: u64, c: u64) void {
         .timeout, .interval, .event => {
             _ = window.dispatchCallback(msg, id, a, std.heap.wasm_allocator);
         },
-        .ws_open => {
-            const protocol = hostBytes(a, @truncate(b));
-            websocket.onOpen(id, protocol.ptr, protocol.len);
-        },
-        .ws_message => {
-            const data = hostBytes(a, @truncate(b));
-            websocket.onMessage(id, data.ptr, data.len, @truncate(c));
-        },
-        .ws_error => {
-            const message = hostBytes(a, @truncate(b));
-            websocket.onError(id, message.ptr, message.len);
-        },
-        .ws_close => {
-            // c: reason length (low 32 bits) | wasClean (high bits).
-            const reason = hostBytes(b, @truncate(c));
-            const was_clean: u8 = @truncate(c >> 32);
-            websocket.onClose(id, @truncate(a), reason.ptr, reason.len, was_clean);
-        },
+        .ws_open => websocket.onOpen(id, hostBytes(a, @truncate(b))),
+        .ws_message => websocket.onMessage(id, hostBytes(a, @truncate(b)), c != 0),
+        .ws_error => websocket.onError(id, hostBytes(a, @truncate(b))),
+        // c: reason length (low 32 bits) | wasClean (high bits).
+        .ws_close => websocket.onClose(id, @truncate(a), hostBytes(b, @truncate(c)), c >> 32 != 0),
         .fetch_success, .fetch_error => unreachable,
     }
 }
