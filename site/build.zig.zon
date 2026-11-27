@@ -24,8 +24,8 @@
             .hash = "N-V-__8AAHMUmwDsRB5yB9XEGz4Z4kxOtPsLjV46IIlLgpck",
         },
         .lunasvg = .{
-            .url = "git+https://github.com/nurulhudaapon/lunasvg.git#9ad04e73f305c0136a1e58307dcb8bafed76b94d",
-            .hash = "lunasvg-0.0.0-9mEwLnURFgA2VHfUlStiUHw9LjNl5X1EaFJxFA9in3Xz",
+            .url = "git+https://github.com/nurulhudaapon/lunasvg.git#bc202a699db5eb4c52490eee61a95971ff2240d4",
+            .hash = "lunasvg-0.0.0-9mEwLi0SFgB6wluo8kf-7y_xnF0OsgKckKkDQZlbFwcO",
             .lazy = true,
         },
         .geist_font = .{

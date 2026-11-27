@@ -6,7 +6,8 @@ pub fn GET(ctx: zx.RouteContext) !void {
     const og_name = pathname["/og/".len .. pathname.len - ".png".len];
     const og_data = getOgImageData(og_name);
 
-    if (builtin.cpu.arch.isWasm())
+    // Client freestanding wasm cannot link LunaSVG; edge (wasi) and native can.
+    if (builtin.os.tag == .freestanding)
         return try ctx.response.json(og_data, .{});
 
     ensureOgFonts();
@@ -16,7 +17,16 @@ pub fn GET(ctx: zx.RouteContext) !void {
 
     try og_template.render(&aw.writer, .{});
     const svg_text = aw.written();
-    const png = try lunasvg.svgToPngAlloc(ctx.arena, svg_text, 1200, 630, 0xff000000);
+
+    const doc = try lunasvg.Document.loadFromData(svg_text);
+    defer doc.deinit();
+    var bitmap = try doc.renderToBitmap(.{
+        .width = 1200,
+        .height = 630,
+        .background_color = 0xff000000,
+    });
+    defer bitmap.deinit();
+    const png = try bitmap.writeToPngAlloc(ctx.arena);
 
     ctx.response.text(png);
     ctx.response.setContentType(.@"image/png");

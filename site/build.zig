@@ -198,7 +198,7 @@ pub fn build(b: *std.Build) !void {
     }));
     app_exe.root_module.addImport("tree_sitter", tree_sitter_dep.module("tree_sitter"));
     app_exe.root_module.addImport("tree_sitter_zx", tree_sitter_zx_dep.module("tree_sitter_zx"));
-    if (!target.result.cpu.arch.isWasm())
+    if (target.result.os.tag != .freestanding)
         if (b.lazyDependency("lunasvg", .{ .optimize = optimize, .target = target })) |lunasvg|
             app_exe.root_module.addImport("lunasvg", lunasvg.module("lunasvg"));
     app_exe.root_module.addImport("geist_fonts", addGeistFontsModule(b));
