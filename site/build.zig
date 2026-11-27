@@ -234,7 +234,7 @@ pub fn build(b: *std.Build) !void {
                 },
             },
         },
-        .cli = .{ .optimize = .debug, .log_level = log_level },
+        .cli = .{ .build = .enabled, .optimize = .debug, .log_level = log_level },
     });
     zx.addImport("cli_args", ziex_dep.module("cli_args"));
     if (!target.result.cpu.arch.isWasm() and server_backend == .dusty) {

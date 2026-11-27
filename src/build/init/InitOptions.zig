@@ -42,10 +42,19 @@ pub const CliOptions = struct {
 
     /// Path to the Ziex CLI executable.
     ///
-    /// - If `null`: Uses the Ziex CLI from the Ziex dependency source (recommended)
-    /// - If set to `"zx"`: Uses the Ziex CLI from the system PATH
-    /// - Otherwise: Uses the specified path to a Ziex CLI executable
+    /// - If set: Uses the specified path (overrides PATH lookup and `build`)
+    /// - If `null` and `build` is `null`: Prefer a matching `zx` on PATH, else
+    ///   build the CLI from the Ziex dependency source
+    /// - If `null` and `.build = .enabled`: Always build from source (skip PATH)
     path: ?LazyPath = null,
+
+    /// Build the `zx` CLI from the Ziex dependency source instead of using a
+    /// matching `zx` on PATH.
+    ///
+    /// `null` (default) prefers PATH when the version matches; `.build = .enabled`
+    /// always compiles the host CLI (similar to `client.bindings.build`).
+    /// Ignored when `path` is set.
+    build: ?BuildOptions = null,
 
     /// Path to the Zig executable passed to the Ziex CLI as `--zig-path`.
     ///
@@ -63,6 +72,10 @@ pub const CliOptions = struct {
 
     /// Log level for the Ziex CLI executable.
     log_level: ?std.log.Level = null,
+
+    pub const BuildOptions = struct {
+        pub const enabled: BuildOptions = .{};
+    };
 };
 
 /// Configuration for the Ziex app directory.

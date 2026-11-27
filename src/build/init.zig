@@ -38,16 +38,26 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         .lsp = false,
     });
 
-    const zx_host_dep = b.dependencyFromBuildZig(build_zig, .{
+    const client = if (options.app) |app| app.client else InitOptions.ClientOptions.default;
+    const features = if (options.app) |app| app.features else InitOptions.AppOptions.FeatureOptions.default;
+
+    // Prefer a matching `zx` on PATH so we don't compile the CLI from source on
+    // every app build. `.cli.build = .enabled` (or no usable PATH `zx`) forces a
+    // from-source host CLI. Explicit `.cli.path` always wins.
+    const build_zon = @import("../../build.zig.zon");
+    const build_cli_from_source = options.cli.build != null;
+    const cli_path: ?LazyPath = options.cli.path orelse if (!build_cli_from_source) blk: {
+        if (findZxInPath(b, build_zon.version)) |zx_path| break :blk .{ .cwd_relative = zx_path };
+        break :blk null;
+    } else null;
+
+    // Host CLI artifact is only needed when we must build `zx` from source.
+    const zx_host_dep = if (cli_path == null) b.dependencyFromBuildZig(build_zig, .{
         .optimize = options.cli.optimize,
         .lsp = ziex_lsp,
         .@"cli-log-level" = options.cli.log_level,
-    });
-
-    const zx_cli = zx_host_dep.artifact("zx");
-
-    const client = if (options.app) |app| app.client else InitOptions.ClientOptions.default;
-    const features = if (options.app) |app| app.features else InitOptions.AppOptions.FeatureOptions.default;
+    }) else null;
+    const zx_cli: ?*std.Build.Step.Compile = if (zx_host_dep) |dep| dep.artifact("zx") else null;
 
     const build_client_wasm = client.wasm.link;
     const wasm_optimize = client.wasm.optimize orelse optimize;
@@ -97,7 +107,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     var opts: Resolved = .{
         .base_path = null,
         .site_path = b.path("app"),
-        .cli_path = null,
+        .cli_path = cli_path,
         .steps = .default,
         .client = client,
         .static_path = options.static_path,
@@ -106,7 +116,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         .server_only_stub_mode = .strict,
         .zig_path = zig_path,
         .zx_module_path = blk: {
-            const dep_root = zx_host_dep.builder.root.root_dir.path orelse ".";
+            const dep_root = zx_dep.builder.root.root_dir.path orelse ".";
             const joined = if (std.fs.path.isAbsolute(dep_root))
                 b.pathJoin(&.{ dep_root, "src", "root.zig" })
             else
@@ -124,18 +134,6 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         opts.site_path = site_opts.path orelse opts.site_path;
         opts.base_path = site_opts.base_path;
         opts.features = site_opts.features;
-    }
-
-    opts.cli_path = options.cli.path;
-
-    if (opts.cli_path == null) {
-        const build_zon = @import("../../build.zig.zon");
-        if (findZxInPath(b, build_zon.version)) |zx_path| {
-            // std.debug.print("ziex: using zx from system path: {s}\n", .{zx_path});
-            opts.cli_path = .{ .cwd_relative = zx_path };
-        } else {
-            // std.debug.print("ziex: building zx from source\n", .{});
-        }
     }
 
     if (options.cli.steps) |cli_steps| {
@@ -680,6 +678,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         .assetsdir = assetsdir,
         .cli = .{
             .exe = zx_cli,
+            .path = cli_path,
         },
         .transformer = .{ .b = b, .userdata = injections },
         .clients = clients,
@@ -843,7 +842,7 @@ fn addAppOpts(b: *std.Build, params: AppOptsParams) *std.Build.Step.Options {
     return app_opts;
 }
 
-fn cliRun(b: *std.Build, zx_exe: *std.Build.Step.Compile, opts: Resolved) *std.Build.Step.Run {
+fn cliRun(b: *std.Build, zx_exe: ?*std.Build.Step.Compile, opts: Resolved) *std.Build.Step.Run {
     const run = appRun(b, zx_exe, opts);
     run.setEnvironmentVariable("ZIEX_MODULE_PATH", opts.zx_module_path);
     run.setEnvironmentVariable("ZIEX_ZIG_PATH", opts.zig_path);
@@ -852,13 +851,13 @@ fn cliRun(b: *std.Build, zx_exe: *std.Build.Step.Compile, opts: Resolved) *std.B
 
 // Sets no env: a step's env map is frozen at configure time and replaces the
 // caller's, so the app would miss vars exported later (e.g. API keys).
-fn appRun(b: *std.Build, zx_exe: *std.Build.Step.Compile, opts: Resolved) *std.Build.Step.Run {
-    const run = if (opts.cli_path) |cli_path| blk: {
+fn appRun(b: *std.Build, zx_exe: ?*std.Build.Step.Compile, opts: Resolved) *std.Build.Step.Run {
+    if (opts.cli_path) |cli_path| {
         const r = std.Build.Step.Run.create(b, "run zx");
         r.addFileArg(cli_path);
-        break :blk r;
-    } else b.addRunArtifact(zx_exe);
-    return run;
+        return r;
+    }
+    return b.addRunArtifact(zx_exe orelse @panic("ziex: no zx on PATH and no host CLI artifact"));
 }
 
 /// Newline-separated route files under `site_path`, relative to it. Every route
@@ -932,7 +931,7 @@ fn addWorker(
 // `worker.<hash>.wasm` otherwise. Returns a file holding its URL.
 fn addWorkerAsset(
     b: *std.Build,
-    zx_cli: *std.Build.Step.Compile,
+    zx_cli: ?*std.Build.Step.Compile,
     opts: Resolved,
     exe: *std.Build.Step.Compile,
     rel: []const u8,
@@ -1131,9 +1130,7 @@ fn makeServerOnlyStubModule(b: *std.Build, name: []const u8, mode: ServerOnlyStu
 }
 
 fn findZxInPath(b: *std.Build, expected_version: []const u8) ?[]const u8 {
-    // TODO: disable for now, always use from source
-    if (true) return null;
-    const zx_path = b.findProgram(&.{"zx"}, &.{}) catch return null;
+    const zx_path = b.findProgram(.{ .names = &.{"zx"} }) orelse return null;
     var exit_code: u8 = undefined;
     const stdout = b.runAllowFail(&.{ zx_path, "version" }, &exit_code, .ignore) catch return null;
     const trimmed = std.mem.trim(u8, stdout, &std.ascii.whitespace);
@@ -1143,7 +1140,7 @@ fn findZxInPath(b: *std.Build, expected_version: []const u8) ?[]const u8 {
 
 fn addStaticAssetCopy(
     b: *std.Build,
-    zx_exe: *std.Build.Step.Compile,
+    zx_exe: ?*std.Build.Step.Compile,
     opts: Resolved,
     src: LazyPath,
     file_stem: []const u8,
@@ -1181,7 +1178,7 @@ fn addStaticAssetCopy(
 
 fn addStaticAssetRun(
     b: *std.Build,
-    zx_exe: *std.Build.Step.Compile,
+    zx_exe: ?*std.Build.Step.Compile,
     opts: Resolved,
     manifest_in: LazyPath,
     src: LazyPath,
@@ -1258,7 +1255,11 @@ const Injections = struct {
 // TODO: move to src/Build.zig
 pub const Build = struct {
     pub const BuildZiex = struct {
-        exe: *std.Build.Step.Compile,
+        /// Set when the CLI was built from source (`cli.build` or no usable PATH `zx`).
+        /// Null when a PATH / `cli.path` `zx` is used.
+        exe: ?*std.Build.Step.Compile = null,
+        /// Path to `zx` when taken from PATH or `cli.path`.
+        path: ?LazyPath = null,
     };
 
     pub const BuildCommand = struct {

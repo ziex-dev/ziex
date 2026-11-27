@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) !void {
 
     exe.root_module.addOptions("build_options", build_options);
     var ziex_b = try ziex.init(b, exe, .{
-        .cli = .{ .optimize = optimize },
+        .cli = .{ .build = .enabled, .optimize = optimize },
         .app = .{
             .base_path = switch (platform) {
                 .extension => "/pages/",
@@ -76,7 +76,7 @@ pub fn build(b: *std.Build) !void {
     b.default_step.dependOn(&install_branding.step);
 
     // Panel pages, exported once and shared by every browser
-    const pages_export = b.addRunArtifact(ziex_b.cli.exe);
+    const pages_export = b.addRunArtifact(ziex_b.cli.exe orelse @panic("ziex: cli.build requires a from-source zx artifact"));
     pages_export.addArgs(&.{ "build", "--static", "--build-args", "-Dplatform=extension", "--outdir" });
     const pages_dir = pages_export.addOutputDirectoryArg("pages");
     // The export runs a nested zig build whose inputs zig can't track
