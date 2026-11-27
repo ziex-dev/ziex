@@ -88,6 +88,8 @@ jobs:
       report_name: playwright-report-post-deploy
 
   build_ssr:
+    # Temp disabled: zig git fetches fail with HttpConnectionClosing in docker
+    if: false
     runs-on: ubuntu-24.04-arm
     name: Build (SSR)
     env:
