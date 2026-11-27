@@ -25,12 +25,70 @@ const Pipeline = @import("Pipeline.zig");
 
 fn onPublishFramed(ctx: *anyopaque, framed: []const u8) anyerror!void {
     const conn: *httpz.websocket.Conn = @ptrCast(@alignCast(ctx));
-    try conn.writeFramed(framed);
+    try wsWriteAll(conn, &.{framed});
 }
 
 fn onPublish(ctx: *anyopaque, message: []const u8) anyerror!void {
     const conn: *httpz.websocket.Conn = @ptrCast(@alignCast(ctx));
-    try conn.writeText(message);
+    try wsWrite(conn, .text, message);
+}
+
+fn wsWrite(conn: *httpz.websocket.Conn, op: httpz.websocket.OpCode, data: []const u8) !void {
+    if (comptime builtin.os.tag == .windows) return conn.writeFrame(op, data);
+    var buf: [10]u8 = undefined;
+    const head = httpz.websocket.proto.writeFrameHeader(&buf, op, data.len, false);
+    try wsWriteAll(conn, &.{ head, data });
+}
+
+// httpz sockets are non-blocking and its writev drops partial progress on
+// EAGAIN, so a large frame gets resent from the start and corrupts the stream.
+// This resumes where the kernel stopped, waiting for the socket to drain.
+fn wsWriteAll(conn: *httpz.websocket.Conn, parts: []const []const u8) !void {
+    if (comptime builtin.os.tag == .windows) {
+        for (parts) |p| try conn.writeFramed(p);
+        return;
+    }
+    const posix = std.posix;
+    var vecs: [2]posix.iovec_const = undefined;
+    std.debug.assert(parts.len <= vecs.len);
+    var n_vecs: usize = 0;
+    for (parts) |p| {
+        if (p.len == 0) continue;
+        vecs[n_vecs] = .{ .base = p.ptr, .len = p.len };
+        n_vecs += 1;
+    }
+
+    const io = conn.io;
+    conn.lock.lockUncancelable(io);
+    defer conn.lock.unlock(io);
+
+    const fd = conn.stream.socket.handle;
+    var i: usize = 0;
+    while (i < n_vecs) {
+        if (conn.isClosed()) return error.Closed;
+        const rc = posix.system.writev(fd, vecs[i..n_vecs].ptr, @intCast(n_vecs - i));
+        switch (posix.errno(rc)) {
+            .SUCCESS => {},
+            .INTR => continue,
+            .AGAIN => {
+                var fds = [_]posix.pollfd{.{ .fd = fd, .events = posix.POLL.OUT, .revents = 0 }};
+                if (try posix.poll(&fds, 30_000) == 0) return error.Timeout;
+                continue;
+            },
+            .PIPE => return error.BrokenPipe,
+            .CONNRESET => return error.ConnectionResetByPeer,
+            else => return error.Unexpected,
+        }
+        var n: usize = @intCast(rc);
+        while (i < n_vecs and n >= vecs[i].len) {
+            n -= vecs[i].len;
+            i += 1;
+        }
+        if (i < n_vecs) {
+            vecs[i].base += n;
+            vecs[i].len -= n;
+        }
+    }
 }
 
 pub const token = "ziex/httpz";
@@ -1048,8 +1106,8 @@ fn Handler(comptime Ctx: type) type {
             fn socketSend(userdata: ?*anyopaque, message: zx.websocket.Message) anyerror!void {
                 const conn = handlerOf(userdata).conn;
                 switch (message) {
-                    .text => |data| try conn.writeText(data),
-                    .binary => |data| try conn.writeBin(data),
+                    .text => |data| try wsWrite(conn, .text, data),
+                    .binary => |data| try wsWrite(conn, .binary, data),
                 }
             }
 

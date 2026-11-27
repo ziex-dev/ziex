@@ -1,3 +1,5 @@
+const chat = @import("../chat.zx");
+
 pub fn Page(ctx: zx.PageContext) zx.Component {
     var chat_username = ctx.request.cookies.get("username") orelse "";
     const set_username = ctx.request.query.get("username") orelse "";
@@ -13,95 +15,83 @@ pub fn Page(ctx: zx.PageContext) zx.Component {
     }
 
     return (
-        <main @allocator={ctx.arena} class="demo-page">
+        <main @allocator={ctx.arena} class="example-page">
+            <header class="example-header">
+                <h1>Realtime chat</h1>
+                <p>WebSocket room with live typing drafts, same studio shell as the DB examples.</p>
+            </header>
             {if (chat_username.len > 0) (<ChatRoom username={chat_username} @client />) else (<JoinScreen />)}
-            <style @escaping={.none}>{@embedFile("style.css")}</style>
         </main>
     );
 }
 
 fn JoinScreen(allocator: zx.Allocator) zx.Component {
     return (
-        <div @allocator={allocator}>
-            <header class="demo-header">
-                <h1>Realtime chat</h1>
-                <p>Choose a name and join a small room powered by Ziex WebSockets.</p>
-            </header>
-            <form class="demo-row demo-row-mobile-stack">
-                <input type="text" class="demo-input" name="username" placeholder="Enter your name" required />
-                <button type="submit" class="demo-button demo-button-primary">Join Chat</button>
-            </form>
-        </div>
+        <form @allocator={allocator} class="chat-join">
+            <input type="text" name="username" placeholder="Enter your name" required autofocus />
+            <div class="chat-join-actions">
+                <button type="submit" class="chat-send">Join room</button>
+            </div>
+        </form>
     );
 }
 
 pub fn ChatRoom(ctx: *zx.ComponentCtx(struct { username: []const u8 })) zx.Component {
-    const msgs_state = ctx.state(MessageList, .empty);
+    const msgs_state = ctx.state([]const chat.Message, &.{});
+    const typing_state = ctx.state([]const chat.TypingDraft, &.{});
     messages = msgs_state;
+    typing = typing_state;
 
-    const connected = ws != null;
-    const status_class = if (connected) "status-online" else "status-offline";
-    const msgs = msgs_state.get();
-
-    if (ws == null) {
-        joinChat(ctx.props.username);
-    }
+    const connected = if (ws) |*w| w.isConnected() else false;
+    if (ws == null) joinChat(ctx.props.username);
 
     return (
-        <section @allocator={ctx.allocator} class="demo-panel chat-room">
-            <div class="chat-header">
-                <div>
-                    <h1>Chat room</h1>
-                </div>
-                <div class="chat-user-info">
-                    <span class={status_class}></span>
-                    <span class="chat-username">{ctx.props.username}</span>
-                    <form class="chat-leave-form">
-                        <button name="leave" class="demo-button chat-leave-btn" value={ctx.props.username}>Leave</button>
+        <div @allocator={ctx.allocator} class="chat">
+            <chat.Bar
+                allocator={ctx.allocator}
+                title="Room"
+                meta={ctx.props.username}
+                online={connected}
+            />
+            <chat.Thread
+                allocator={ctx.allocator}
+                messages={msgs_state.get()}
+                typing={typing_state.get()}
+            />
+            <div class="chat-composer-wrap">
+                <div class="chat-composer">
+                    <form class="chat-composer-form" onsubmit={sendMessage}>
+                        <input
+                            type="text"
+                            id="message-input"
+                            placeholder="Write a message…"
+                            autocomplete="off"
+                            oninput={onTypingInput}
+                            onblur={onTypingBlur}
+                        />
+                        <button type="submit" class="chat-send" onclick={sendMessage}>Send</button>
+                    </form>
+                    <form>
+                        <button name="leave" class="chat-leave" value={ctx.props.username}>Leave</button>
                     </form>
                 </div>
             </div>
-
-            <div class="chat-messages">
-                {for (msgs.items) |msg| (<MessageItem key={msg.text} username={msg.username} text={msg.text} is_system={msg.is_system} />)}
-            </div>
-
-            <form class="demo-row chat-input" onsubmit={sendMessage}>
-                <input type="text" class="demo-input" id="message-input" placeholder="Write a message" />
-                <button class="demo-button demo-button-primary" onclick={sendMessage}>Send</button>
-            </form>
-        </section>
-    );
-}
-
-const MessageItemProps = struct { username: []const u8, text: []const u8, is_system: bool };
-fn MessageItem(allocator: zx.Allocator, props: MessageItemProps) zx.Component {
-    if (props.is_system) {
-        return (<div @allocator={allocator} class="chat-msg chat-msg-system">{props.text}</div>);
-    }
-
-    const is_self = std.mem.eql(u8, props.username, current_username);
-    const msg_class = if (is_self) "chat-msg chat-msg-self" else "chat-msg chat-msg-other";
-
-    return (
-        <div @allocator={allocator} class={msg_class}>
-            <span class="chat-msg-name">{props.username}</span>
-            <p class="chat-msg-text">{props.text}</p>
         </div>
     );
 }
 
-const Message = struct { username: []const u8, text: []const u8, is_system: bool };
-const MessageList = std.ArrayList(Message);
-
-var messages: ?*zx.State(MessageList) = null;
+var messages: ?*zx.State([]const chat.Message) = null;
+var typing: ?*zx.State([]const chat.TypingDraft) = null;
 var ws: ?zx.websocket.Client = null;
 var current_username: []const u8 = "";
+var am_typing = false;
+var last_typing_draft: []const u8 = "";
+var typing_watch_id: ?u64 = null;
+var typing_idle_ticks: u32 = 0;
 
 fn joinChat(username: []const u8) void {
     if (zx.platform.role != .client) return;
 
-    std.log.info("joinChat: {s}", .{username});
     current_username = zx.allocator.dupe(u8, username) catch return;
     ws = .{ .io = zx.Io.default(), .allocator = zx.allocator };
 
@@ -113,9 +103,7 @@ fn joinChat(username: []const u8) void {
         w.connect(.{ .url = "/examples/realtime/ws" }) catch {};
     }
 
-    if (messages) |msgs_state| {
-        msgs_state.set(msgs_state.get());
-    }
+    if (messages) |msgs_state| msgs_state.set(msgs_state.get());
 }
 
 fn sendMessage(e: zx.client.Event) void {
@@ -125,10 +113,9 @@ fn sendMessage(e: zx.client.Event) void {
     const document = zx.client.Document.init(zx.allocator);
     const input = document.getElementById("message-input") catch return;
     const text = input.ref.getAlloc(zx.client.js.String, zx.allocator, "value") catch return;
-
-    std.log.info("sendMessage: {s}", .{text});
     if (text.len == 0) return;
 
+    stopTyping();
     if (ws) |*w| {
         if (w.isConnected()) {
             w.send(.{ .text = text }) catch {};
@@ -137,61 +124,185 @@ fn sendMessage(e: zx.client.Event) void {
     }
 }
 
-fn onWsOpen(_: *zx.websocket.Client) void {}
+fn onTypingInput(_: zx.client.Event) void {
+    if (zx.platform.role != .client) return;
+
+    const document = zx.client.Document.init(zx.allocator);
+    const input = document.getElementById("message-input") catch return;
+    const text = input.ref.getAlloc(zx.client.js.String, zx.allocator, "value") catch return;
+
+    if (text.len == 0) {
+        stopTyping();
+        return;
+    }
+
+    typing_idle_ticks = 0;
+    sendTypingDraft(text);
+    if (typing_watch_id == null) {
+        typing_watch_id = zx.client.setInterval(&onTypingWatch, .fromMilliseconds(400));
+    }
+}
+
+fn onTypingBlur(_: zx.client.Event) void {
+    stopTyping();
+}
+
+fn onTypingWatch() void {
+    typing_idle_ticks += 1;
+    // ~1.2s of silence (3 × 400ms)
+    if (typing_idle_ticks < 3) return;
+    stopTyping();
+}
+
+fn stopTyping() void {
+    if (typing_watch_id) |id| {
+        zx.client.clearInterval(id);
+        typing_watch_id = null;
+    }
+    if (!am_typing) return;
+    am_typing = false;
+    last_typing_draft = "";
+    sendTypingClear();
+}
+
+fn sendTypingDraft(draft: []const u8) void {
+    if (ws) |*w| {
+        if (!w.isConnected()) return;
+        // Skip identical repeats to cut traffic while still pushing new chars.
+        if (am_typing and std.mem.eql(u8, last_typing_draft, draft)) return;
+        const payload = zx.allocator.print("typing:1:{s}", .{draft}) catch return;
+        w.send(.{ .text = payload }) catch return;
+        last_typing_draft = zx.allocator.dupe(u8, draft) catch draft;
+        am_typing = true;
+    }
+}
+
+fn sendTypingClear() void {
+    if (ws) |*w| {
+        if (!w.isConnected()) return;
+        w.send(.{ .text = "typing:0" }) catch {};
+    }
+}
+
+fn onWsOpen(_: *zx.websocket.Client) void {
+    if (messages) |msgs_state| msgs_state.set(msgs_state.get());
+}
 
 fn onWsMessage(_: *zx.websocket.Client, event: zx.websocket.MessageEvent) void {
     if (zx.platform.role != .client) return;
 
     const data = event.text() orelse return;
+
+    if (std.mem.startsWith(u8, data, "typing:")) {
+        handleTypingEvent(data);
+        return;
+    }
+
     const is_system = std.mem.startsWith(u8, data, "system:");
 
-    var username: []const u8 = "";
+    var author: []const u8 = "";
     var text: []const u8 = data;
 
     if (std.mem.indexOf(u8, data, ": ")) |colon_idx| {
-        username = zx.allocator.dupe(u8, data[0..colon_idx]) catch return;
+        author = zx.allocator.dupe(u8, data[0..colon_idx]) catch return;
         text = zx.allocator.dupe(u8, data[colon_idx + 2 ..]) catch return;
     } else {
         text = zx.allocator.dupe(u8, data) catch return;
     }
 
-    if (messages) |msgs_state| {
-        var msgs = msgs_state.get();
-        msgs.insert(zx.allocator, 0, .{
-            .username = username,
-            .text = text,
-            .is_system = is_system,
-        }) catch return;
-        msgs_state.set(msgs);
+    // A chat message means that person stopped typing.
+    if (!is_system and author.len > 0) clearTypist(author);
+
+    const kind: chat.Message.Kind = if (is_system)
+        .system
+    else if (std.mem.eql(u8, author, current_username))
+        .user
+    else
+        .peer;
+
+    appendMessage(.{
+        .kind = kind,
+        .author = if (is_system) "" else author,
+        .text = text,
+    });
+}
+
+fn handleTypingEvent(data: []const u8) void {
+    // typing:{username}:{draft} — empty draft clears
+    const rest = data["typing:".len..];
+    const sep = std.mem.indexOfScalar(u8, rest, ':') orelse return;
+    const name = rest[0..sep];
+    const draft = rest[sep + 1 ..];
+    if (name.len == 0 or std.mem.eql(u8, name, current_username)) return;
+
+    if (draft.len == 0) {
+        setTypist(name, null);
+    } else {
+        setTypist(name, draft);
     }
+}
+
+fn setTypist(name: []const u8, draft: ?[]const u8) void {
+    const state = typing orelse return;
+    const prev = state.get();
+
+    var found_idx: ?usize = null;
+    for (prev, 0..) |t, i| {
+        if (std.mem.eql(u8, t.name, name)) {
+            found_idx = i;
+            break;
+        }
+    }
+
+    if (draft) |d| {
+        const owned_name = if (found_idx) |i| prev[i].name else (zx.allocator.dupe(u8, name) catch return);
+        const owned_draft = zx.allocator.dupe(u8, d) catch return;
+        if (found_idx) |i| {
+            const next = zx.allocator.alloc(chat.TypingDraft, prev.len) catch return;
+            @memcpy(next, prev);
+            next[i] = .{ .name = owned_name, .draft = owned_draft };
+            state.set(next);
+            return;
+        }
+        const next = zx.allocator.alloc(chat.TypingDraft, prev.len + 1) catch return;
+        @memcpy(next[0..prev.len], prev);
+        next[prev.len] = .{ .name = owned_name, .draft = owned_draft };
+        state.set(next);
+        return;
+    }
+
+    const i = found_idx orelse return;
+    const next = zx.allocator.alloc(chat.TypingDraft, prev.len - 1) catch return;
+    var j: usize = 0;
+    for (prev, 0..) |t, idx| {
+        if (idx == i) continue;
+        next[j] = t;
+        j += 1;
+    }
+    state.set(next);
+}
+
+fn clearTypist(name: []const u8) void {
+    setTypist(name, null);
 }
 
 fn onWsClose(_: *zx.websocket.Client, _: zx.websocket.CloseEvent) void {
-    if (zx.platform.role != .client) return;
-
-    if (messages) |msgs_state| {
-        var msgs = msgs_state.get();
-        msgs.insert(zx.allocator, 0, .{
-            .username = "",
-            .text = "Disconnected from server",
-            .is_system = true,
-        }) catch {};
-        msgs_state.set(msgs);
-    }
+    stopTyping();
+    if (typing) |t| t.set(&.{});
+    appendMessage(.{ .kind = .system, .text = "Disconnected from server" });
 }
 
 fn onWsError(_: *zx.websocket.Client, _: zx.websocket.ErrorEvent) void {
-    if (zx.platform.role != .client) return;
+    appendMessage(.{ .kind = .system, .text = "Connection error" });
+}
 
-    if (messages) |msgs_state| {
-        var msgs = msgs_state.get();
-        msgs.insert(zx.allocator, 0, .{
-            .username = "",
-            .text = "Connection error",
-            .is_system = true,
-        }) catch {};
-        msgs_state.set(msgs);
-    }
+fn appendMessage(msg: chat.Message) void {
+    const msgs_state = messages orelse return;
+    const prev = msgs_state.get();
+    const next = zx.allocator.alloc(chat.Message, prev.len + 1) catch return;
+    @memcpy(next[0..prev.len], prev);
+    next[prev.len] = msg;
+    msgs_state.set(next);
 }
 
 const zx = @import("zx");

@@ -30,7 +30,12 @@ const version = "2023-06-01";
 const default_max_tokens = 4096;
 
 pub fn ai(p: *Anthropic) Ai {
-    return .{ .gen = .{ .userdata = p, .vtable = &.{ .text = &text, .stream = &stream, .image = &image } } };
+    return .{ .gen = .{ .userdata = p, .vtable = &.{
+        .text = &text,
+        .stream = &stream,
+        .image = &image,
+        .streamImage = &streamImage,
+    } } };
 }
 
 const Turn = struct {
@@ -74,7 +79,7 @@ fn text(userdata: ?*anyopaque, gpa: std.mem.Allocator, options: Ai.Text.Options)
     const arena = arena_state.allocator();
 
     const url = try api.endpoint(arena, p.base_url, "/messages");
-    const body = try api.post(p.io, gpa, url, try p.headers(arena), try p.messages(arena, options));
+    const body = try api.post(p.io, gpa, url, try p.headers(arena, options.api_key), try p.messages(arena, options));
     defer gpa.free(body);
 
     const Reply = struct {
@@ -107,10 +112,10 @@ fn stream(userdata: ?*anyopaque, gpa: std.mem.Allocator, options: Ai.Text.Option
     request.stream = true;
 
     const url = try api.endpoint(arena, p.base_url, "/messages");
-    return Ai.Stream.open(p.io, gpa, url, try p.headers(arena), request, &parseEvent);
+    return Ai.Stream.open(p.io, gpa, url, try p.headers(arena, options.api_key), request, &parseEvent);
 }
 
-fn parseEvent(s: *Ai.Stream, arena: std.mem.Allocator, data: []const u8) Ai.Error!?[]const u8 {
+fn parseEvent(s: *Ai.Stream, arena: std.mem.Allocator, data: []const u8) Ai.Error!?Ai.Stream.Event {
     const Event = struct {
         type: []const u8,
         message: ?struct { usage: Ai.Usage = .{} } = null,
@@ -124,7 +129,7 @@ fn parseEvent(s: *Ai.Stream, arena: std.mem.Allocator, data: []const u8) Ai.Erro
         .message_start => if (event.message) |m| {
             s.usage = m.usage;
         },
-        .content_block_delta => return if (event.delta) |d| d.text else null,
+        .content_block_delta => if (event.delta) |d| if (d.text) |t| return .{ .text = t },
         .message_delta => {
             if (event.delta) |d| if (d.stop_reason) |r| {
                 s.finish = finish(r);
@@ -143,6 +148,10 @@ fn image(_: ?*anyopaque, _: std.mem.Allocator, _: Ai.Image.Options) Ai.Error!Ai.
     return error.Unsupported;
 }
 
+fn streamImage(_: ?*anyopaque, _: std.mem.Allocator, _: Ai.Image.Options) Ai.Error!*Ai.Stream {
+    return error.Unsupported;
+}
+
 fn finish(reason: []const u8) Ai.Finish {
     const map = std.StaticStringMap(Ai.Finish).initComptime(.{
         .{ "end_turn", .stop },
@@ -154,11 +163,12 @@ fn finish(reason: []const u8) Ai.Finish {
     return map.get(reason) orelse .other;
 }
 
-fn headers(p: *const Anthropic, arena: std.mem.Allocator) Ai.Error![]const http.Header {
+fn headers(p: *const Anthropic, arena: std.mem.Allocator, api_key: ?[]const u8) Ai.Error![]const http.Header {
     const base = [_]http.Header{
         .{ .name = "content-type", .value = "application/json" },
         .{ .name = "anthropic-version", .value = version },
     };
-    const key = p.api_key orelse return arena.dupe(http.Header, &base);
+    const key = api_key orelse p.api_key orelse return arena.dupe(http.Header, &base);
+    if (key.len == 0) return arena.dupe(http.Header, &base);
     return arena.dupe(http.Header, &(base ++ [_]http.Header{.{ .name = "x-api-key", .value = key }}));
 }

@@ -8,7 +8,7 @@ pub const onRefresh = P.onRefresh;
 pub fn Page(ctx: zx.PageContext) !zx.Component {
     const initial = db.bootstrap(ctx.allocator, ctx.arena, ctx.io) catch &.{};
     return (
-        <main @allocator={ctx.arena} class="example-page studio-page">
+        <main @allocator={ctx.arena} class="example-page">
             <header class="example-header">
                 <h1>{db.title}</h1>
                 <p>{db.subtitle}</p>

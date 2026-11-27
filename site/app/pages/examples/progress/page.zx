@@ -5,7 +5,7 @@ var action_id: u64 = 0;
 
 pub fn Page(ctx: zx.PageContext) !zx.Component {
     return (
-        <main @allocator={ctx.arena} class="demo-page">
+        <main @allocator={ctx.arena}>
             <ProgressDemo @client />
         </main>
     );

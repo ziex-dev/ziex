@@ -36,13 +36,29 @@ pub fn SocketOpen(ctx: zx.SocketOpenCtx(SocketData)) !void {
 }
 
 pub fn Socket(ctx: zx.SocketCtx(SocketData)) !void {
+    const raw = ctx.message.bytes();
+
+    // Live typing drafts — not persisted to history.
+    // Client: `typing:0` clears; `typing:1:` + draft publishes the pending text.
+    if (std.mem.eql(u8, raw, "typing:0") or std.mem.startsWith(u8, raw, "typing:1:")) {
+        const draft: []const u8 = if (std.mem.eql(u8, raw, "typing:0"))
+            ""
+        else
+            raw["typing:1:".len..];
+        _ = ctx.socket.publish(CHAT_TOPIC, try ctx.fmt(
+            "typing:{s}:{s}",
+            .{ ctx.data.username(), draft },
+        ));
+        return;
+    }
+
     const formatted = try ctx.fmt(
         "{s}: {s}",
-        .{ ctx.data.username(), ctx.message.bytes() },
+        .{ ctx.data.username(), raw },
     );
 
     _ = ctx.socket.publish(CHAT_TOPIC, formatted);
-    appendHistory(ctx.arena, ctx.data.username(), ctx.message.bytes());
+    appendHistory(ctx.arena, ctx.data.username(), raw);
 }
 
 pub fn SocketClose(ctx: zx.SocketCloseCtx(SocketData)) void {

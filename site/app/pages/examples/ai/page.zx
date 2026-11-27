@@ -1,78 +1,368 @@
-pub fn Page(ctx: zx.PageContext) !zx.Component {
-    const prompt = ctx.request.query.get("prompt") orelse "";
-    const image = std.mem.eql(u8, ctx.request.query.get("mode") orelse "text", "image");
+const chat = @import("../chat.zx");
 
+pub fn Page(ctx: zx.PageContext) zx.Component {
+    const has_server_key = hasServerAi(ctx.arena);
     return (
         <main @allocator={ctx.arena} class="example-page">
             <header class="example-header">
-                <h1>AI</h1>
-                <p>One <code>zx.ai</code> client for OpenAI, Anthropic or any compatible AI gateway, picked by the <code>.ai</code> feature with credentials from env. The model is chosen per call.</p>
+                <h1>AI chat</h1>
+                <p>Studio-styled chat over <code>zx.ai</code>. Text streams token-by-token; image generates from the latest prompt.</p>
             </header>
-
-            <section class="example-section">
-                <form method="get">
-                    <input type="text" name="prompt" value={prompt} placeholder="Ask anything..." />
-                    <button name="mode" value="text">Generate text</button>
-                    <button name="mode" value="image">Generate image</button>
-                </form>
-
-                {if (prompt.len > 0 and !image) (
-                    <div @async={.stream} @fallback={(<p>Thinking...</p>)}>
-                        <Answer prompt={prompt} />
-                    </div>
-                )}
-                {if (prompt.len > 0 and image) (
-                    <div @async={.stream} @fallback={(<p>Drawing...</p>)}>
-                        <Picture prompt={prompt} />
-                    </div>
-                )}
-            </section>
+            <AiChat server_ai={has_server_key} @client />
         </main>
     );
 }
 
-fn Answer(ctx: *zx.ComponentCtx(struct { prompt: []const u8 })) zx.Component {
-    const allocator = ctx.allocator;
-    const stream = zx.ai.gen.stream(allocator, .{
-        .model = "gpt-4o-mini",
-        .system = "Answer in one short paragraph.",
-        .prompt = ctx.props.prompt,
-        .max_tokens = 300,
-    }) catch |err| return Failed(allocator, .{ .err = err });
-    defer stream.deinit();
+fn hasServerAi(arena: zx.Allocator) bool {
+    const key = zx.secrets.get(arena, "OPENAI_API_KEY") catch return false;
+    return if (key) |k| k.len > 0 else false;
+}
 
-    // Each read yields the next delta; flush shows the text so far.
-    var text: std.Io.Writer.Allocating = .init(allocator);
-    while (stream.interface.stream(&text.writer, .unlimited)) |_| {
-        ctx.flush((<p @{allocator}>{text.written()}</p>));
-    } else |err| switch (err) {
-        error.EndOfStream => {},
-        else => return Failed(allocator, .{ .err = stream.err orelse err }),
+pub fn AiChat(ctx: *zx.ComponentCtx(struct { server_ai: bool })) zx.Component {
+    const messages = ctx.state([]const chat.Message, &.{});
+    const streaming = ctx.state(bool, false);
+    messages_state = messages;
+    streaming_state = streaming;
+    server_ai = ctx.props.server_ai;
+
+    if (zx.platform.role == .client and !key_loaded) {
+        key_loaded = true;
+        loadClientKey();
     }
 
     return (
-        <div @{allocator}>
-            <p>{text.written()}</p>
-            <small>{stream.usage.output_tokens} tokens, finished with {@tagName(stream.finish)}</small>
+        <div @allocator={ctx.allocator} class="chat">
+            <chat.Bar allocator={ctx.allocator} title="Assistant" meta="gpt-4o-mini" />
+            {if (!ctx.props.server_ai) (
+                <div class="chat-key-bar">
+                    <label for="ai-api-key">OpenAI API key</label>
+                    <input
+                        type="password"
+                        id="ai-api-key"
+                        placeholder="sk-…"
+                        autocomplete="off"
+                        value={client_api_key orelse ""}
+                    />
+                    <button type="button" onclick={saveClientKey}>Save</button>
+                    <p class="chat-key-hint">No server key configured. Stored in your browser via <code>zx.kv</code> and sent only with your AI requests.</p>
+                </div>
+            )}
+            <chat.Thread
+                allocator={ctx.allocator}
+                messages={messages.get()}
+                streaming={streaming.get()}
+            />
+            <div class="chat-composer-wrap">
+                <form class="chat-composer" onsubmit={sendText}>
+                    <input
+                        type="text"
+                        id="ai-prompt"
+                        name="prompt"
+                        placeholder="Ask anything…"
+                        required
+                        autofocus
+                        disabled={streaming.get()}
+                        autocomplete="off"
+                        onkeydown={onPromptKey}
+                    />
+                    <button
+                        type="submit"
+                        class="chat-send"
+                        disabled={streaming.get()}
+                        onclick={sendText}
+                    >
+                        {if (streaming.get()) "…" else "Send"}
+                    </button>
+                    <button
+                        type="button"
+                        class="chat-send chat-send-secondary"
+                        disabled={streaming.get()}
+                        onclick={sendImage}
+                    >
+                        Image
+                    </button>
+                </form>
+            </div>
         </div>
     );
 }
 
-fn Picture(allocator: zx.Allocator, props: struct { prompt: []const u8 }) zx.Component {
-    const img = zx.ai.gen.image(allocator, .{ .model = "gpt-image-1", .prompt = props.prompt, .size = "1024x1024" }) catch |err|
-        return Failed(allocator, .{ .err = err });
-    const src = std.fmt.allocPrint(allocator, "data:{s};base64,{b64}", .{ img.media_type, img.bytes }) catch |err|
-        return Failed(allocator, .{ .err = err });
+var messages_state: ?*zx.State([]const chat.Message) = null;
+var streaming_state: ?*zx.State(bool) = null;
+var stream_ws: ?zx.websocket.Client = null;
+var pending_payload: ?[]const u8 = null;
+var client_api_key: ?[]const u8 = null;
+var key_loaded = false;
+var server_ai = false;
+var expect_image_bin = false;
 
-    return (<img @{allocator} src={src} width={256} height={256} alt={props.prompt} />);
+const KEY_STORE = "openai_api_key";
+
+fn aiKv() zx.Kv {
+    return zx.kv.scoped(.@"examples/ai");
 }
 
-fn Failed(allocator: zx.Allocator, props: struct { err: anyerror }) zx.Component {
-    return (<p @{allocator}>Generation failed: <code>{@errorName(props.err)}</code></p>);
+fn loadClientKey() void {
+    if (zx.platform.role != .client) return;
+    const key = aiKv().as(zx.allocator, KEY_STORE, []const u8) catch null orelse return;
+    if (key.len == 0) return;
+    client_api_key = key;
+    // Nudge a re-render so the input reflects the saved key.
+    if (streaming_state) |s| s.set(s.get());
 }
 
-pub const options = zx.PageOptions{
-    .rendering = .streamed,
+fn saveClientKey(_: zx.client.Event) void {
+    if (zx.platform.role != .client) return;
+    const document = zx.client.Document.init(zx.allocator);
+    const input = document.getElementById("ai-api-key") catch return;
+    const raw = input.ref.getAlloc(zx.client.js.String, zx.allocator, "value") catch return;
+    const key = std.mem.trim(u8, raw, " \t\r\n");
+    if (key.len == 0) return;
+
+    const owned = zx.allocator.dupe(u8, key) catch return;
+    aiKv().putAs(KEY_STORE, owned, .{}) catch {
+        appendClient(messages_state orelse return, .{ .kind = .system, .text = "Could not save API key in browser storage" });
+        return;
+    };
+    client_api_key = owned;
+    appendClient(messages_state orelse return, .{ .kind = .system, .text = "API key saved in this browser" });
+}
+
+fn resolveApiKey() ?[]const u8 {
+    if (server_ai) return null;
+    if (client_api_key) |k| {
+        if (k.len > 0) return k;
+    }
+    return null;
+}
+
+fn ensureApiKey() bool {
+    if (server_ai) return true;
+    if (resolveApiKey()) |_| return true;
+    appendClient(messages_state orelse return false, .{
+        .kind = .system,
+        .text = "Add an OpenAI API key above to use this demo",
+    });
+    return false;
+}
+
+fn onPromptKey(e: zx.client.Event) void {
+    if (zx.platform.role != .client) return;
+    const key = e.key() orelse return;
+    if (!std.mem.eql(u8, key, "Enter")) return;
+    e.preventDefault();
+    sendText(e);
+}
+
+fn sendText(e: zx.client.Event) void {
+    if (zx.platform.role != .client) return;
+    e.preventDefault();
+    startRequest(.text);
+}
+
+fn sendImage(e: zx.client.Event) void {
+    if (zx.platform.role != .client) return;
+    e.preventDefault();
+    startRequest(.image);
+}
+
+const Mode = enum { text, image };
+
+fn startRequest(mode: Mode) void {
+    const msgs = messages_state orelse return;
+    const streaming = streaming_state orelse return;
+    if (streaming.get()) return;
+    if (!ensureApiKey()) return;
+
+    const document = zx.client.Document.init(zx.allocator);
+    const input = document.getElementById("ai-prompt") catch return;
+    const prompt_raw = input.ref.getAlloc(zx.client.js.String, zx.allocator, "value") catch return;
+    const prompt = std.mem.trim(u8, prompt_raw, " \t\r\n");
+    if (prompt.len == 0) return;
+
+    input.ref.set("value", zx.client.js.string("")) catch {};
+
+    const user_text = zx.allocator.dupe(u8, prompt) catch return;
+    appendClient(msgs, .{ .kind = .user, .author = "You", .text = user_text });
+    appendClient(msgs, .{ .kind = .assistant, .author = "AI", .text = "" });
+
+    streaming.set(true);
+
+    const payload = switch (mode) {
+        .text => buildTextPayload(msgs.get()),
+        .image => buildImagePayload(prompt),
+    } orelse {
+        streaming.set(false);
+        appendClient(msgs, .{ .kind = .system, .text = "Generation failed: OutOfMemory" });
+        return;
+    };
+
+    if (stream_ws) |*w| {
+        w.close(.{}) catch {};
+        stream_ws = null;
+    }
+    expect_image_bin = false;
+
+    stream_ws = .{ .io = zx.Io.default(), .allocator = zx.allocator };
+    if (stream_ws) |*w| {
+        w.onopen = &onStreamOpen;
+        w.onmessage = &onStreamMessage;
+        w.onclose = &onStreamClose;
+        w.onerror = &onStreamError;
+        pending_payload = payload;
+        w.connect(.{ .url = "/examples/ai/ws" }) catch {
+            streaming.set(false);
+            pending_payload = null;
+            appendClient(msgs, .{ .kind = .system, .text = "Generation failed: NetworkError" });
+            return;
+        };
+    }
+}
+
+fn onStreamOpen(w: *zx.websocket.Client) void {
+    const payload = pending_payload orelse return;
+    pending_payload = null;
+    w.send(.{ .text = payload }) catch {
+        finishStream(.{ .kind = .system, .text = "Generation failed: NetworkError" });
+    };
+}
+
+fn onStreamMessage(_: *zx.websocket.Client, event: zx.websocket.MessageEvent) void {
+    if (zx.platform.role != .client) return;
+
+    if (event.binary()) |bytes| {
+        if (!expect_image_bin) return;
+        expect_image_bin = false;
+        const src = pngDataUrl(bytes) orelse return;
+        updateLastAssistant(.{ .image_src = src });
+        return;
+    }
+
+    const data = event.text() orelse return;
+
+    if (std.mem.eql(u8, data, "[DONE]")) {
+        finishStream(null);
+        return;
+    }
+    if (std.mem.startsWith(u8, data, "error:")) {
+        const name = data["error:".len..];
+        finishStream(.{ .kind = .system, .text = zx.allocator.print("Generation failed: {s}", .{name}) catch "Generation failed" });
+        return;
+    }
+    if (std.mem.eql(u8, data, "image-bin")) {
+        expect_image_bin = true;
+        return;
+    }
+    // Only treat plain text as chat deltas (never dump binary/base64 into the bubble).
+    updateLastAssistant(.{ .append_text = data });
+}
+
+fn pngDataUrl(png: []const u8) ?[]const u8 {
+    const enc = std.base64.standard.Encoder;
+    const prefix = "data:image/png;base64,";
+    const out = zx.allocator.alloc(u8, prefix.len + enc.calcSize(png.len)) catch return null;
+    @memcpy(out[0..prefix.len], prefix);
+    _ = enc.encode(out[prefix.len..], png);
+    return out;
+}
+
+fn updateLastAssistant(update: struct { append_text: ?[]const u8 = null, image_src: ?[]const u8 = null }) void {
+    const msgs = messages_state orelse return;
+    const prev = msgs.get();
+    if (prev.len == 0) return;
+    const last = prev[prev.len - 1];
+    if (last.kind != .assistant) return;
+
+    const next_text: []const u8 = if (update.append_text) |chunk| blk: {
+        const buf = zx.allocator.alloc(u8, last.text.len + chunk.len) catch return;
+        @memcpy(buf[0..last.text.len], last.text);
+        @memcpy(buf[last.text.len..], chunk);
+        break :blk buf;
+    } else last.text;
+
+    const next = zx.allocator.alloc(chat.Message, prev.len) catch return;
+    @memcpy(next[0 .. prev.len - 1], prev[0 .. prev.len - 1]);
+    next[prev.len - 1] = .{
+        .kind = .assistant,
+        .author = last.author,
+        .text = next_text,
+        .image_src = update.image_src orelse last.image_src,
+    };
+    msgs.set(next);
+}
+
+fn onStreamClose(_: *zx.websocket.Client, _: zx.websocket.CloseEvent) void {
+    finishStream(null);
+}
+
+fn onStreamError(_: *zx.websocket.Client, _: zx.websocket.ErrorEvent) void {
+    finishStream(.{ .kind = .system, .text = "Generation failed: NetworkError" });
+}
+
+fn finishStream(err_msg: ?chat.Message) void {
+    const was_streaming = if (streaming_state) |s| s.get() else false;
+    if (!was_streaming and err_msg == null) return;
+    if (streaming_state) |s| s.set(false);
+    // Ignore late socket errors after a clean `[DONE]`.
+    if (err_msg) |msg| {
+        if (was_streaming) {
+            if (messages_state) |msgs| appendClient(msgs, msg);
+        }
+    }
+    if (stream_ws) |*w| {
+        w.close(.{}) catch {};
+        stream_ws = null;
+    }
+    pending_payload = null;
+    expect_image_bin = false;
+}
+
+fn appendClient(msgs: *zx.State([]const chat.Message), msg: chat.Message) void {
+    const prev = msgs.get();
+    const next = zx.allocator.alloc(chat.Message, prev.len + 1) catch return;
+    @memcpy(next[0..prev.len], prev);
+    next[prev.len] = msg;
+    msgs.set(next);
+}
+
+fn buildTextPayload(msgs: []const chat.Message) ?[]const u8 {
+    var aw: std.Io.Writer.Allocating = .init(zx.allocator);
+    aw.writer.writeAll("{\"mode\":\"text\",\"messages\":[") catch return null;
+    var first = true;
+    for (msgs) |m| {
+        if (m.kind != .user and m.kind != .assistant) continue;
+        if (m.image_src != null) continue;
+        if (m.text.len == 0 and m.kind == .assistant) continue;
+        if (!first) aw.writer.writeByte(',') catch return null;
+        first = false;
+        const role: []const u8 = if (m.kind == .assistant) "assistant" else "user";
+        aw.writer.print("{{\"role\":\"{s}\",\"content\":", .{role}) catch return null;
+        std.json.Stringify.value(m.text, .{}, &aw.writer) catch return null;
+        aw.writer.writeByte('}') catch return null;
+    }
+    aw.writer.writeAll("]") catch return null;
+    tryWriteApiKey(&aw.writer) catch return null;
+    aw.writer.writeByte('}') catch return null;
+    return aw.toOwnedSlice() catch null;
+}
+
+fn buildImagePayload(prompt: []const u8) ?[]const u8 {
+    var aw: std.Io.Writer.Allocating = .init(zx.allocator);
+    aw.writer.writeAll("{\"mode\":\"image\",\"prompt\":") catch return null;
+    std.json.Stringify.value(prompt, .{}, &aw.writer) catch return null;
+    tryWriteApiKey(&aw.writer) catch return null;
+    aw.writer.writeByte('}') catch return null;
+    return aw.toOwnedSlice() catch null;
+}
+
+fn tryWriteApiKey(w: *std.Io.Writer) !void {
+    const key = resolveApiKey() orelse return;
+    try w.writeAll(",\"api_key\":");
+    try std.json.Stringify.value(key, .{}, w);
+}
+
+pub const options: zx.PageOptions = .{
+    .methods = &.{ .GET },
 };
 
 const zx = @import("zx");

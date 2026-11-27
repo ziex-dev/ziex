@@ -1,0 +1,112 @@
+//! Shared studio-styled chat pieces used by realtime and AI examples.
+
+pub const Message = struct {
+    pub const Kind = enum { user, assistant, peer, system };
+
+    kind: Kind,
+    author: []const u8 = "",
+    text: []const u8 = "",
+    image_src: ?[]const u8 = null,
+};
+
+pub const TypingDraft = struct {
+    name: []const u8,
+    draft: []const u8 = "",
+};
+
+const BarProps = struct {
+    title: []const u8,
+    meta: []const u8 = "",
+    /// `null` hides the status dot; otherwise online/offline.
+    online: ?bool = null,
+};
+
+pub fn Bar(allocator: zx.Allocator, props: BarProps) zx.Component {
+    const status_class: []const u8 = if (props.online) |o|
+        (if (o) "chat-status chat-status-online" else "chat-status chat-status-offline")
+    else
+        "chat-status chat-status-hidden";
+
+    return (
+        <div @allocator={allocator} class="chat-bar">
+            <span class="chat-tab">{props.title}</span>
+            <div class="chat-bar-meta">
+                <span class={status_class} aria-hidden="true"></span>
+                {if (props.meta.len > 0) (<span class="chat-meta">{props.meta}</span>)}
+            </div>
+        </div>
+    );
+}
+
+const ThreadProps = struct {
+    messages: []const Message,
+    streaming: bool = false,
+    typing: []const TypingDraft = &.{},
+};
+
+pub fn Thread(allocator: zx.Allocator, props: ThreadProps) zx.Component {
+    // DOM order is newest-first; CSS `column-reverse` puts the latest at the
+    // visual bottom and keeps the viewport pinned there without JS.
+    return (
+        <div @allocator={allocator} class="chat-thread">
+            {if (props.typing.len > 0) (
+                <Typing drafts={props.typing} />
+            )}
+            {for (0..props.messages.len) |ri| (
+                <Bubble
+                    message={props.messages[props.messages.len - 1 - ri]}
+                    streaming={props.streaming and ri == 0 and props.messages[props.messages.len - 1 - ri].kind == .assistant}
+                />
+            )}
+            {if (props.messages.len == 0 and props.typing.len == 0) (
+                <div class="chat-empty">No messages yet</div>
+            )}
+        </div>
+    );
+}
+
+fn Bubble(allocator: zx.Allocator, props: struct { message: Message, streaming: bool = false }) zx.Component {
+    const msg = props.message;
+    if (msg.kind == .system) {
+        return (
+            <div @allocator={allocator} class="chat-bubble chat-bubble-system">{msg.text}</div>
+        );
+    }
+
+    const kind_class: []const u8 = switch (msg.kind) {
+        .user => "chat-bubble chat-bubble-user",
+        .assistant => if (props.streaming) "chat-bubble chat-bubble-assistant is-streaming" else "chat-bubble chat-bubble-assistant",
+        .peer => "chat-bubble chat-bubble-peer",
+        .system => "chat-bubble chat-bubble-system",
+    };
+
+    return (
+        <div @allocator={allocator} class={kind_class}>
+            {if (msg.author.len > 0) (<span class="chat-bubble-author">{msg.author}</span>)}
+            {if (msg.text.len > 0 or props.streaming) (
+                <p class="chat-bubble-text">{msg.text}</p>
+            )}
+            {if (msg.image_src) |src| (<img class="chat-bubble-image" src={src} alt={msg.text} />)}
+        </div>
+    );
+}
+
+fn Typing(allocator: zx.Allocator, props: struct { drafts: []const TypingDraft }) zx.Component {
+    return (
+        <div @allocator={allocator} class="chat-typing-list" aria-live="polite">
+            {for (props.drafts) |d| (
+                <div class="chat-typing">
+                    <div class="chat-typing-head">
+                        <span class="chat-typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                        <span class="chat-typing-label">{d.name} is typing</span>
+                    </div>
+                    {if (d.draft.len > 0) (
+                        <p class="chat-typing-draft">{d.draft}</p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+const zx = @import("zx");

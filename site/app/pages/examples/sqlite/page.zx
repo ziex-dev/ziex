@@ -1,6 +1,6 @@
 pub fn Page(ctx: zx.PageContext) zx.Component {
     return (
-        <main @allocator={ctx.arena} class="example-page studio-page">
+        <main @allocator={ctx.arena} class="example-page">
             <header class="example-header">
                 <h1>SQLite Studio</h1>
                 <p>zx.Db.Sqlite running in a Web Worker, persisted to OPFS. Press Ctrl/⌘+Enter to run.</p>

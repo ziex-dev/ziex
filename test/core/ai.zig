@@ -25,6 +25,7 @@ test "failing > every call is unavailable" {
     try std.testing.expectError(error.Unavailable, Ai.failing.gen.text(gpa, .{ .prompt = "hi" }));
     try std.testing.expectError(error.Unavailable, Ai.failing.gen.stream(gpa, .{ .prompt = "hi" }));
     try std.testing.expectError(error.Unavailable, Ai.failing.gen.image(gpa, .{ .prompt = "hi" }));
+    try std.testing.expectError(error.Unavailable, Ai.failing.gen.streamImage(gpa, .{ .prompt = "hi" }));
 }
 
 test "zx.ai > defaults to failing" {
@@ -179,6 +180,202 @@ test "openai > stream bad key is unauthorized" {
             try std.testing.expectError(error.Unauthorized, openai.ai().gen.stream(gpa, .{ .prompt = "hi" }));
         }
     }.run);
+}
+
+test "openai > stream events are text deltas" {
+    try withServer(struct {
+        fn run(base: []const u8) !void {
+            var buf: [96]u8 = undefined;
+            var openai: Ai.OpenAi = .{ .io = io, .api_key = "test-key", .base_url = join(&buf, base, "/openai"), .model = "gpt-test" };
+
+            const stream = try openai.ai().gen.stream(gpa, .{ .prompt = "hey" });
+            defer stream.deinit();
+
+            var out: std.Io.Writer.Allocating = .init(gpa);
+            defer out.deinit();
+            while (try stream.next()) |event| try out.writer.writeAll(event.text);
+            try std.testing.expectEqualStrings("gpt-test|u|hey", out.written());
+            try std.testing.expect(try stream.next() == null);
+        }
+    }.run);
+}
+
+test "openai > stream image sends partials then the final image" {
+    try withServer(struct {
+        fn run(base: []const u8) !void {
+            var buf: [96]u8 = undefined;
+            var openai: Ai.OpenAi = .{ .io = io, .api_key = "test-key", .base_url = join(&buf, base, "/openai"), .image_model = "gpt-image-1" };
+
+            const stream = try openai.ai().gen.streamImage(gpa, .{ .prompt = "abcdef", .partial_images = 2 });
+            defer stream.deinit();
+
+            const want = [_]struct { []const u8, bool }{ .{ "ab", true }, .{ "abcd", true }, .{ "abcdef", false } };
+            for (want) |w| {
+                const img = (try stream.next()).?.image;
+                const bytes = try img.decode(gpa);
+                defer gpa.free(bytes);
+                try std.testing.expectEqualStrings(w[0], bytes);
+                try std.testing.expectEqual(w[1], img.partial);
+                try std.testing.expectEqualStrings("image/webp", img.media_type);
+            }
+            try std.testing.expect(try stream.next() == null);
+            try std.testing.expectEqual(Ai.Finish.stop, stream.finish);
+            try std.testing.expectEqual(Ai.Usage{ .input_tokens = 3, .output_tokens = 7 }, stream.usage);
+        }
+    }.run);
+}
+
+test "openai > stream image reads events larger than the transfer buffer" {
+    try withServer(struct {
+        fn run(base: []const u8) !void {
+            var buf: [96]u8 = undefined;
+            var openai: Ai.OpenAi = .{ .io = io, .api_key = "test-key", .base_url = join(&buf, base, "/openai"), .image_model = "gpt-image-1" };
+
+            const prompt = try gpa.alloc(u8, 96 * 1024);
+            defer gpa.free(prompt);
+            for (prompt, 0..) |*c, i| c.* = 'a' + @as(u8, @intCast(i % 26));
+
+            const stream = try openai.ai().gen.streamImage(gpa, .{ .prompt = prompt, .partial_images = 1 });
+            defer stream.deinit();
+
+            try std.testing.expect((try stream.next()).?.image.partial);
+            const bytes = try (try stream.next()).?.image.decode(gpa);
+            defer gpa.free(bytes);
+            try std.testing.expectEqualStrings(prompt, bytes);
+        }
+    }.run);
+}
+
+test "openai > reader skips image events" {
+    try withServer(struct {
+        fn run(base: []const u8) !void {
+            var buf: [96]u8 = undefined;
+            var openai: Ai.OpenAi = .{ .io = io, .api_key = "test-key", .base_url = join(&buf, base, "/openai"), .image_model = "gpt-image-1" };
+
+            const stream = try openai.ai().gen.streamImage(gpa, .{ .prompt = "fox" });
+            defer stream.deinit();
+            const text = try stream.interface.allocRemaining(gpa, .unlimited);
+            defer gpa.free(text);
+            try std.testing.expectEqualStrings("", text);
+        }
+    }.run);
+}
+
+// --- AI SDK UI message stream --- //
+
+test "ui > text stream as UI message chunks" {
+    try withServer(struct {
+        fn run(base: []const u8) !void {
+            var buf: [96]u8 = undefined;
+            var openai: Ai.OpenAi = .{ .io = io, .api_key = "test-key", .base_url = join(&buf, base, "/openai"), .model = "gpt-test" };
+
+            const stream = try openai.ai().gen.stream(gpa, .{ .prompt = "hey" });
+            defer stream.deinit();
+
+            var out: std.Io.Writer.Allocating = .init(gpa);
+            defer out.deinit();
+            try Ai.ui.write(&out.writer, stream);
+
+            try std.testing.expectEqualStrings(
+                \\data: {"type":"start"}
+                \\
+                \\data: {"type":"text-start","id":"text-0"}
+                \\
+                \\data: {"type":"text-delta","id":"text-0","delta":"gpt"}
+                \\
+                \\data: {"type":"text-delta","id":"text-0","delta":"-te"}
+                \\
+                \\data: {"type":"text-delta","id":"text-0","delta":"st|"}
+                \\
+                \\data: {"type":"text-delta","id":"text-0","delta":"u|h"}
+                \\
+                \\data: {"type":"text-delta","id":"text-0","delta":"ey"}
+                \\
+                \\data: {"type":"text-end","id":"text-0"}
+                \\
+                \\data: {"type":"finish","finishReason":"stop"}
+                \\
+                \\data: [DONE]
+                \\
+                \\
+            , out.written());
+        }
+    }.run);
+}
+
+test "ui > image stream as transient previews and a file part" {
+    try withServer(struct {
+        fn run(base: []const u8) !void {
+            var buf: [96]u8 = undefined;
+            var openai: Ai.OpenAi = .{ .io = io, .api_key = "test-key", .base_url = join(&buf, base, "/openai"), .image_model = "gpt-image-1" };
+
+            const stream = try openai.ai().gen.streamImage(gpa, .{ .prompt = "fox", .partial_images = 1 });
+            defer stream.deinit();
+
+            var out: std.Io.Writer.Allocating = .init(gpa);
+            defer out.deinit();
+            try Ai.ui.write(&out.writer, stream);
+
+            // "f" and "fox" in base64.
+            try std.testing.expectEqualStrings(
+                \\data: {"type":"start"}
+                \\
+                \\data: {"type":"data-image","id":"image-0","transient":true,"data":{"partial":true,"mediaType":"image/webp","url":"data:image/webp;base64,Zg=="}}
+                \\
+                \\data: {"type":"file","mediaType":"image/webp","url":"data:image/webp;base64,Zm94"}
+                \\
+                \\data: {"type":"finish","finishReason":"stop"}
+                \\
+                \\data: [DONE]
+                \\
+                \\
+            , out.written());
+        }
+    }.run);
+}
+
+test "ui > a failing stream ends with an error part" {
+    try withServer(struct {
+        fn run(base: []const u8) !void {
+            var buf: [96]u8 = undefined;
+            var anthropic: Ai.Anthropic = .{ .io = io, .api_key = "test-key", .base_url = join(&buf, base, "/anthropic"), .model = "claude-error" };
+
+            const stream = try anthropic.ai().gen.stream(gpa, .{ .prompt = "hi" });
+            defer stream.deinit();
+
+            var out: std.Io.Writer.Allocating = .init(gpa);
+            defer out.deinit();
+            try Ai.ui.write(&out.writer, stream);
+
+            try std.testing.expect(std.mem.endsWith(u8, out.written(),
+                \\data: {"type":"error","errorText":"ApiError"}
+                \\
+                \\data: [DONE]
+                \\
+                \\
+            ));
+        }
+    }.run);
+}
+
+test "ui > messages joins text parts and skips the rest" {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+
+    const Body = struct { messages: []const Ai.ui.Message };
+    const body = try std.json.parseFromSliceLeaky(Body, arena.allocator(),
+        \\{"id":"c1","trigger":"submit-message","messages":[
+        \\  {"id":"1","role":"system","parts":[{"type":"text","text":"be brief"}]},
+        \\  {"id":"2","role":"user","parts":[{"type":"text","text":"a "},{"type":"step-start"},{"type":"text","text":"b"}]},
+        \\  {"id":"3","role":"assistant","parts":[{"type":"file","url":"data:,","mediaType":"image/png"}]},
+        \\  {"id":"4","role":"assistant","content":"c"}
+        \\]}
+    , .{ .ignore_unknown_fields = true });
+    const msgs = try Ai.ui.messages(arena.allocator(), body.messages);
+    try std.testing.expectEqual(3, msgs.len);
+    try std.testing.expectEqual(Ai.Message.Role.system, msgs[0].role);
+    try std.testing.expectEqualStrings("a b", msgs[1].content);
+    try std.testing.expectEqualStrings("c", msgs[2].content);
 }
 
 // --- Anthropic --- //

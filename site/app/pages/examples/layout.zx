@@ -4,14 +4,12 @@ pub fn Layout(ctx: zx.LayoutContext, children: zx.Component) zx.Component {
     return (
         <div @allocator={ctx.arena}>
             <Sidebar allocator={ctx.arena} categories={&catalog.categories} active_path="/examples" children={(
-                <fragment>
-                    <div class="example-source-bar">
-                        <a class="example-source-link" href={source_url} target="_blank" rel="noopener noreferrer">
-                            View source on GitHub ↗
-                        </a>
-                    </div>
+                <div class="example-shell">
+                    <a class="example-source-link" href={source_url} target="_blank" rel="noopener noreferrer">
+                        View source ↗
+                    </a>
                     {children}
-                </fragment>
+                </div>
             )} />
             <style @escaping={.none}>{@embedFile("style.css")}</style>
         </div>

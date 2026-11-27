@@ -129,3 +129,52 @@ fn echo(backend: Backend) !void {
 fn after(ms: i64) std.Io.Timeout {
     return .{ .duration = .{ .raw = .fromMilliseconds(ms), .clock = .awake } };
 }
+
+// A frame far larger than the socket's send buffer must arrive whole.
+test "websocket > large frame through each server backend" {
+    inline for (backends) |backend| {
+        large(backend) catch |err| {
+            std.debug.print("backend={s} failed: {s}\n", .{ backend.name(), @errorName(err) });
+            return err;
+        };
+    }
+}
+
+const Large = struct {
+    io: std.Io,
+    len: usize = 0,
+    intact: bool = false,
+    done: std.Io.Event = .unset,
+
+    fn onMessage(client: *Client, event: zx.websocket.MessageEvent) void {
+        const self = client.userData(Large).?;
+        switch (event.data) {
+            .binary => |data| {
+                self.len = data.len;
+                self.intact = for (data, 0..) |b, i| {
+                    if (b != @as(u8, @truncate(i *% 31))) break false;
+                } else true;
+            },
+            .text => |data| if (std.mem.eql(u8, data, "done")) self.done.set(self.io),
+        }
+    }
+};
+
+fn large(backend: Backend) !void {
+    var harness = try Harness.start(backend, io, gpa, .{});
+    defer harness.stop();
+
+    var url_buf: [64]u8 = undefined;
+    const url = try std.fmt.bufPrint(&url_buf, "ws://127.0.0.1:{d}/ws", .{harness.tcp.?.port});
+
+    var state: Large = .{ .io = io };
+    var ws: Client = .{ .io = io, .allocator = gpa, .onmessage = &Large.onMessage };
+    defer ws.deinit();
+
+    try ws.connect(.{ .url = url, .user_data = &state });
+    try ws.send(.{ .text = "big" });
+    try state.done.waitTimeout(io, after(10_000));
+    try std.testing.expectEqual(8 * 1024 * 1024, state.len);
+    try std.testing.expect(state.intact);
+    try ws.close(.{});
+}

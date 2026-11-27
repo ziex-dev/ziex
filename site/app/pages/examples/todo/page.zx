@@ -1,6 +1,6 @@
 pub fn Page(ctx: zx.PageContext) zx.Component {
     return (
-        <main @allocator={ctx.arena} class="demo-page">
+        <main @allocator={ctx.arena}>
             <TodoApp @client />
         </main>
     );
