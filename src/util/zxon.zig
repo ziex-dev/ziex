@@ -163,7 +163,11 @@ fn readValue(comptime T: type, allocator: std.mem.Allocator, d: []const u8, p: *
             if (literal(d, p, "false")) return false;
             return false;
         },
-        .@"enum" => |e| return @fromBackingInt(@intCast(readInt(e.tag_type, d, p) catch 0)),
+        .@"enum" => |e| {
+            const tag = readInt(e.tag_type, d, p) catch 0;
+            if (e.mode == .nonexhaustive) return @fromBackingInt(tag);
+            return std.enums.fromInt(T, tag) orelse error.InvalidEnumTag;
+        },
         else => return error.UnsupportedType,
     }
 }
@@ -208,7 +212,8 @@ fn readStr(allocator: std.mem.Allocator, d: []const u8, p: *usize) ![]u8 {
     while (p.* < d.len and d[p.*] != '"') {
         if (d[p.*] == '\\') {
             has_escapes = true;
-            p.* += 2;
+            // A trailing backslash must not step past the end.
+            p.* = @min(p.* + 2, d.len);
         } else {
             p.* += 1;
         }
@@ -275,6 +280,10 @@ fn readInt(comptime T: type, d: []const u8, p: *usize) !T {
 
 fn readFloat(comptime T: type, d: []const u8, p: *usize) !T {
     skip(d, p);
+    // `{d}` writes non-finite floats as these words.
+    if (literal(d, p, "inf")) return std.math.inf(T);
+    if (literal(d, p, "-inf")) return -std.math.inf(T);
+    if (literal(d, p, "nan")) return std.math.nan(T);
     const start = p.*;
 
     if (peek(d, p) == '-') p.* += 1;

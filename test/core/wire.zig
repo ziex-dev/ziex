@@ -140,3 +140,20 @@ fn freeRecords(rows: []const Wire.Record) void {
     }
     std.testing.allocator.free(rows);
 }
+
+// Found by fuzzing: a truncated column name freed never-written name slots.
+test "wire rejects truncated or oversized payloads" {
+    const gpa = std.testing.allocator;
+    const magic: [4]u8 = @bitCast(std.mem.nativeToLittle(u32, Wire.magic));
+    // records: 2 columns, 1 row, only the first name present.
+    const truncated = magic ++ [_]u8{1} ++ [_]u8{ 2, 0, 0, 0, 1, 0, 0, 0, 1, 0, 'a' };
+    try std.testing.expectError(error.EndOfStream, Wire.decodeRecords(gpa, &truncated));
+    // A count far beyond the payload must fail before allocating.
+    const huge = magic ++ [_]u8{5} ++ [_]u8{ 0xff, 0xff, 0xff, 0xff };
+    try std.testing.expectError(error.EndOfStream, Wire.decodeStrings(gpa, &huge));
+    const huge_rows = magic ++ [_]u8{3} ++ [_]u8{ 0xff, 0xff, 0xff, 0xff };
+    try std.testing.expectError(error.EndOfStream, Wire.decodeRows(gpa, &huge_rows));
+    // A value truncated mid-row is freed along with the rows before it.
+    const partial = magic ++ [_]u8{3} ++ [_]u8{ 2, 0, 0, 0, 1, 0, 0, 0, 3, 1, 0, 0, 0, 'x', 1, 0, 0, 0, 3, 9 };
+    try std.testing.expectError(error.EndOfStream, Wire.decodeRows(gpa, &partial));
+}

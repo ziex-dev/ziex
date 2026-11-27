@@ -138,6 +138,39 @@ pub fn readValue(r: *std.Io.Reader, gpa: std.mem.Allocator) !Value {
     };
 }
 
+fn freeValue(gpa: std.mem.Allocator, value: Value) void {
+    switch (value) {
+        .text, .blob => |bytes| gpa.free(bytes),
+        else => {},
+    }
+}
+
+fn freeValues(gpa: std.mem.Allocator, values: []const Value) void {
+    for (values) |v| freeValue(gpa, v);
+    gpa.free(values);
+}
+
+// Rejects counts the remaining input can't hold, so a bad header can't force a huge allocation.
+fn takeCount(r: *std.Io.Reader, min_item_len: usize) !u32 {
+    const n = try r.takeInt(u32, .little);
+    if (@as(u64, n) * min_item_len > r.bufferedLen()) return error.EndOfStream;
+    return n;
+}
+
+fn readValues(r: *std.Io.Reader, gpa: std.mem.Allocator) ![]const Value {
+    const values = try gpa.alloc(Value, try takeCount(r, 1));
+    var filled: usize = 0;
+    errdefer {
+        for (values[0..filled]) |v| freeValue(gpa, v);
+        gpa.free(values);
+    }
+    for (values) |*v| {
+        v.* = try readValue(r, gpa);
+        filled += 1;
+    }
+    return values;
+}
+
 pub fn encodePair(w: *std.Io.Writer, a: i64, b: i64) !void {
     try header(w, .pair);
     try w.writeInt(i64, a, .little);
@@ -159,8 +192,7 @@ pub fn encodeStrings(w: *std.Io.Writer, items: []const []const u8) !void {
 pub fn decodeStrings(gpa: std.mem.Allocator, bytes: []const u8) ![][]u8 {
     var r = std.Io.Reader.fixed(bytes);
     try expect(&r, .strings);
-    const n = try r.takeInt(u32, .little);
-    const out = try gpa.alloc([]u8, n);
+    const out = try gpa.alloc([]u8, try takeCount(&r, 4));
     var filled: usize = 0;
     errdefer {
         for (out[0..filled]) |s| gpa.free(s);
@@ -187,25 +219,45 @@ pub fn encodeRecords(w: *std.Io.Writer, columns: []const []const u8, rows: []con
 pub fn decodeRecords(gpa: std.mem.Allocator, bytes: []const u8) ![]const Record {
     var r = std.Io.Reader.fixed(bytes);
     try expect(&r, .records);
-    const ncols = try r.takeInt(u32, .little);
+    const ncols = try takeCount(&r, 2);
     const nrows = try r.takeInt(u32, .little);
     if (nrows == 0) return &.{};
 
     const names = try gpa.alloc([]const u8, ncols);
-    errdefer {
-        for (names) |n| gpa.free(n);
-        gpa.free(names);
+    defer gpa.free(names);
+    var named: usize = 0;
+    // Names are shared by every row's fields; free them only if decoding fails.
+    errdefer for (names[0..named]) |n| gpa.free(n);
+    for (names) |*n| {
+        n.* = try gpa.dupe(u8, try takeLenBytes(&r, u16));
+        named += 1;
     }
-    for (names) |*n| n.* = try gpa.dupe(u8, try takeLenBytes(&r, u16));
 
+    // Each row holds `ncols` values of at least one byte; SQL rows always have a column.
+    if (@as(u64, nrows) * @max(ncols, 1) > r.bufferedLen()) return error.EndOfStream;
     const records = try gpa.alloc(Record, nrows);
-    errdefer gpa.free(records);
+    var filled: usize = 0;
+    errdefer {
+        for (records[0..filled]) |rec| {
+            for (rec.fields) |f| freeValue(gpa, f.value);
+            gpa.free(rec.fields);
+        }
+        gpa.free(records);
+    }
     for (records) |*rec| {
         const fields = try gpa.alloc(Field, ncols);
-        for (fields, names) |*f, name| f.* = .{ .name = name, .value = try readValue(&r, gpa) };
+        var set: usize = 0;
+        errdefer {
+            for (fields[0..set]) |f| freeValue(gpa, f.value);
+            gpa.free(fields);
+        }
+        for (fields, names) |*f, name| {
+            f.* = .{ .name = name, .value = try readValue(&r, gpa) };
+            set += 1;
+        }
         rec.* = .{ .fields = fields };
+        filled += 1;
     }
-    gpa.free(names);
     return records;
 }
 
@@ -221,13 +273,15 @@ pub fn encodeRows(w: *std.Io.Writer, rows: []const []const Value) !void {
 pub fn decodeRows(gpa: std.mem.Allocator, bytes: []const u8) ![]const []const Value {
     var r = std.Io.Reader.fixed(bytes);
     try expect(&r, .rows);
-    const nrows = try r.takeInt(u32, .little);
-    const out = try gpa.alloc([]const Value, nrows);
+    const out = try gpa.alloc([]const Value, try takeCount(&r, 4));
+    var filled: usize = 0;
+    errdefer {
+        for (out[0..filled]) |row| freeValues(gpa, row);
+        gpa.free(out);
+    }
     for (out) |*row| {
-        const ncols = try r.takeInt(u32, .little);
-        const cells = try gpa.alloc(Value, ncols);
-        for (cells) |*cell| cell.* = try readValue(&r, gpa);
-        row.* = cells;
+        row.* = try readValues(&r, gpa);
+        filled += 1;
     }
     return out;
 }
@@ -249,12 +303,7 @@ pub fn decodeArgs(gpa: std.mem.Allocator, bytes: []const u8) ![]const Value {
     try expect(&r, .args);
     switch (try r.takeByte()) {
         0 => return &.{},
-        1 => {
-            const n = try r.takeInt(u32, .little);
-            const values = try gpa.alloc(Value, n);
-            for (values) |*v| v.* = try readValue(&r, gpa);
-            return values;
-        },
+        1 => return readValues(&r, gpa),
         else => return error.Unsupported,
     }
 }

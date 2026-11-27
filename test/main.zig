@@ -45,6 +45,7 @@ test {
     _ = @import("cli/dev.zig");
     _ = @import("util/sig.zig");
     _ = @import("core/whitespace.zig");
+    _ = @import("fuzz/lang.zig");
 }
 
 pub const std_options = std.Options{

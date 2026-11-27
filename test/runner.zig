@@ -36,6 +36,13 @@ pub fn main(init: std.process.Init) !void {
 
     const env = Env.init(allocator, init.minimal.environ);
     defer env.deinit(allocator);
+    fuzz_state.iters = env.fuzz_iters;
+    fuzz_state.budget_ns = @as(u64, env.fuzz_ms) * std.time.ns_per_ms;
+    fuzz_state.seed = env.fuzz_seed orelse seed: {
+        var b: [8]u8 = undefined;
+        init.io.random(&b);
+        break :seed std.mem.readInt(u64, &b, .little);
+    };
 
     var slowest = SlowTracker.init(allocator, io, 15);
     defer slowest.deinit(allocator);
@@ -423,6 +430,9 @@ const Env = struct {
     fail_first: bool,
     filter: ?[]const u8,
     flaky_retries: u32,
+    fuzz_iters: u32,
+    fuzz_ms: u32,
+    fuzz_seed: ?u64,
     environ: std.process.Environ,
 
     fn init(allocator: Allocator, environ: std.process.Environ) Env {
@@ -433,6 +443,12 @@ const Env = struct {
             .fail_first = readEnvBool(environ, allocator, "TEST_FAIL_FIRST", false),
             .filter = readEnv(environ, allocator, "TEST_FILTER"),
             .flaky_retries = readEnvInt(environ, allocator, "TEST_FLAKY_RETRIES", 3),
+            .fuzz_iters = readEnvInt(environ, allocator, "TEST_FUZZ_ITERS", 0),
+            .fuzz_ms = readEnvInt(environ, allocator, "TEST_FUZZ_MS", 1000),
+            .fuzz_seed = if (readEnv(environ, allocator, "TEST_FUZZ_SEED")) |v| blk: {
+                defer allocator.free(v);
+                break :blk std.fmt.parseInt(u64, v, 0) catch null;
+            } else null,
             .environ = environ,
         };
     }
@@ -470,9 +486,109 @@ pub const panic = std.debug.FullPanic(struct {
         if (current_test) |ct| {
             std.debug.print("\x1b[31m{s}\npanic running \"{s}\"\n{s}\x1b[0m\n", .{ BORDER, ct, BORDER });
         }
+        if (fuzz_state.input) |input| reportFuzzInput("panicked", input);
         std.debug.defaultPanic(msg, first_trace_addr);
     }
 }.panicFn);
+
+// Like the default runner, std.testing.fuzz runs the corpus plus an empty input.
+// Fuzz tests that link C (so can't use `--fuzz`) can opt into TEST_FUZZ_ITERS seeded
+// random/mutated inputs, capped at TEST_FUZZ_MS per test; reproduce with TEST_FUZZ_SEED.
+const fuzz_state = struct {
+    var iters: u32 = 0;
+    var budget_ns: u64 = std.time.ns_per_s;
+    var seed: u64 = 0;
+    var input: ?[]const u8 = null;
+};
+
+const max_fuzz_input = 4096;
+
+fn reportFuzzInput(what: []const u8, input: []const u8) void {
+    std.debug.print("\x1b[31mfuzz input {s} (TEST_FUZZ_SEED=0x{x}, {d} bytes):\n\"", .{ what, fuzz_state.seed, input.len });
+    for (input) |c| std.debug.print("\\x{x:0>2}", .{c});
+    std.debug.print("\"\x1b[0m\n", .{});
+}
+
+pub fn fuzz(
+    context: anytype,
+    comptime testOne: fn (context: @TypeOf(context), *std.testing.Smith) anyerror!void,
+    options: std.testing.FuzzInputOptions,
+) anyerror!void {
+    const prev_allocator = std.testing.allocator_instance;
+    defer std.testing.allocator_instance = prev_allocator;
+    defer fuzz_state.input = null;
+
+    var prng: std.Random.DefaultPrng = .init(fuzz_state.seed);
+    const rand = prng.random();
+    var buf: [max_fuzz_input]u8 = undefined;
+
+    const io = std.testing.io;
+    const start = std.Io.Timestamp.now(io, .awake);
+    var i: usize = 0;
+    const total = options.corpus.len + 1 + fuzz_state.iters;
+    while (i < total) : (i += 1) {
+        if (i > options.corpus.len) {
+            const elapsed = std.Io.Timestamp.now(io, .awake).nanoseconds -| start.nanoseconds;
+            if (elapsed >= fuzz_state.budget_ns) break;
+        }
+        const input: []const u8 = if (i < options.corpus.len)
+            options.corpus[i]
+        else if (i == options.corpus.len)
+            ""
+        else
+            randomInput(rand, &buf, options.corpus);
+
+        fuzz_state.input = input;
+        std.testing.allocator_instance = .init(std.heap.page_allocator, .{});
+        var smith: std.testing.Smith = .{ .in = input };
+        const result = testOne(context, &smith);
+        const leaked = std.testing.allocator_instance.deinit() != 0;
+        if (result) |_| {} else |err| switch (err) {
+            error.SkipZigTest => {},
+            else => {
+                reportFuzzInput(@errorName(err), input);
+                return err;
+            },
+        }
+        if (leaked) {
+            reportFuzzInput("leaked", input);
+            return error.FuzzInputLeaked;
+        }
+    }
+}
+
+fn randomInput(rand: std.Random, buf: *[max_fuzz_input]u8, corpus: []const []const u8) []const u8 {
+    var len: usize = 0;
+    if (corpus.len > 0 and rand.boolean()) {
+        const seed_input = corpus[rand.uintLessThan(usize, corpus.len)];
+        len = @min(seed_input.len, buf.len);
+        @memcpy(buf[0..len], seed_input[0..len]);
+        const mutations = rand.intRangeAtMost(usize, 1, 8);
+        for (0..mutations) |_| {
+            switch (rand.uintLessThan(u8, 4)) {
+                0 => if (len > 0) {
+                    buf[rand.uintLessThan(usize, len)] = rand.int(u8);
+                },
+                1 => if (len < buf.len) {
+                    const at = rand.uintAtMost(usize, len);
+                    std.mem.copyBackwards(u8, buf[at + 1 .. len + 1], buf[at..len]);
+                    buf[at] = rand.int(u8);
+                    len += 1;
+                },
+                2 => if (len > 0) {
+                    const at = rand.uintLessThan(usize, len);
+                    std.mem.copyForwards(u8, buf[at .. len - 1], buf[at + 1 .. len]);
+                    len -= 1;
+                },
+                else => len = rand.uintAtMost(usize, len),
+            }
+        }
+    } else {
+        len = rand.uintAtMost(usize, if (rand.boolean()) 64 else buf.len);
+        rand.bytes(buf[0..len]);
+    }
+    return buf[0..len];
+}
 
 fn isUnnamed(t: std.builtin.TestFn) bool {
     const marker = ".test_";

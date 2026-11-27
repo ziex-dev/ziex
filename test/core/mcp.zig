@@ -75,6 +75,10 @@ test "server > dispatches JSON-RPC messages" {
     try expectEqual(mcp.error_codes.method_not_found, errorCode(try rpc(arena, &server,
         \\{"jsonrpc":"2.0","id":1,"method":"prompts/list"}
     )));
+    // An id outside i64 range used to trap in @intFromFloat.
+    try expectEqual(mcp.error_codes.method_not_found, errorCode(try rpc(arena, &server,
+        \\{"jsonrpc":"2.0","id":1e300,"method":"bogus"}
+    )));
     try expectEqual(mcp.error_codes.invalid_request, errorCode(try rpc(arena, &server,
         \\{"jsonrpc":"2.0","id":1,"result":{}}
     )));

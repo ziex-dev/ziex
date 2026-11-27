@@ -184,6 +184,23 @@ pub fn build(b: *std.Build) !void {
         const test_step = b.step("test", "Run tests");
         test_step.dependOn(&test_run.step);
 
+        const fuzz_zx = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
+        fuzz_zx.addOptions("zx_info", options);
+        _ = @import("src/Build.zig").Testing.configure(b, fuzz_zx, .{
+            .target = target,
+            .optimize = optimize,
+            .app = b.path("test/fuzz/app.zig"),
+            .manifest = b.path("test/server/manifest.zon"),
+            .enable_httpz = false,
+        });
+        const fuzz_tests = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("test/fuzz.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zx", .module = fuzz_zx }},
+        }) });
+        test_step.dependOn(&b.addRunArtifact(fuzz_tests).step);
+
         // protocol/auth/url unit tests for the postgres package; no server needed
         const pg_unit = b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path("pkg/db-postgres/src/postgres.zig"),

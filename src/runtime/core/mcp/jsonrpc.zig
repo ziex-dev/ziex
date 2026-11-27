@@ -14,7 +14,8 @@ pub const Id = union(enum) {
         return switch (v) {
             .string => |s| .{ .string = s },
             .integer => |n| .{ .number = n },
-            .float => |f| .{ .number = @intFromFloat(f) },
+            // Ids outside i64 range would trap in @intFromFloat.
+            .float => |f| if (std.math.isFinite(f) and @abs(f) < 0x1p63) .{ .number = @intFromFloat(f) } else .null,
             .null => .null,
             else => .null,
         };
