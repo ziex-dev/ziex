@@ -24,7 +24,7 @@
             .hash = "N-V-__8AAHMUmwDsRB5yB9XEGz4Z4kxOtPsLjV46IIlLgpck",
         },
         .lunasvg = .{
-            .url = "git+https://github.com/nurulhudaapon/lunasvg.git#bc202a699db5eb4c52490eee61a95971ff2240d4",
+            .url = "git+https://github.com/ziex-dev/lunasvg.git#bc202a699db5eb4c52490eee61a95971ff2240d4",
             .hash = "lunasvg-0.0.0-9mEwLi0SFgB6wluo8kf-7y_xnF0OsgKckKkDQZlbFwcO",
             .lazy = true,
         },
