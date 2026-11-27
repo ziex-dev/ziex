@@ -242,9 +242,9 @@ const EmailBackend = if (app_opts.feat_email_server) switch (std.meta.stringToEn
 var email_backend: EmailBackend = undefined;
 var email_env: if (app_opts.feat_email_server) std.heap.ArenaAllocator else void = undefined;
 
-const BucketBackend = if (app_opts.feat_bucket_server) switch (if (app_opts.bucket_provider) |p|
+const BucketBackend = if (app_opts.feat_bucket_server) switch (@as(zx.Bucket.Provider, if (app_opts.bucket_provider) |p|
     std.meta.stringToEnum(zx.Bucket.Provider, p).?
-else if (platform.os == .wasi) .wasm else .fs) {
+else if (platform.os == .wasi) .wasm else .fs)) {
     .s3 => zx.Bucket.S3,
     .wasm, .fs => if (platform.os == .wasi) zx.Bucket.Wasm else zx.Bucket.Fs,
 } else void;
