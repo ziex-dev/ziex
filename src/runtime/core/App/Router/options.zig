@@ -132,12 +132,6 @@ pub const RouteOptions = struct {
     static: ?StaticFn = null,
 };
 
-/// Options for proxy middleware
-pub const ProxyOptions = struct {
-    /// Whether to continue to the next handler if proxy doesn't handle the request
-    pass_through: bool = true,
-};
-
 /// Default std_options for zx apps.
 /// Re-export this in your main.zig:
 /// ```zig

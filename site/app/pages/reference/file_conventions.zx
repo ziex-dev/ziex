@@ -51,7 +51,10 @@ pub fn SocketClose(ctx: zx.SocketCloseContext) void {
 
 // --- proxy.zig ---
 pub fn Proxy(ctx: *zx.ProxyContext) !void {
+    // Before: runs ahead of child proxies and the handler.
     ctx.next();
+    // After: the handler has run; status and headers can still change.
+    ctx.response.headers.set("X-Served-By", "ziex");
 }
 
 pub fn PageProxy(ctx: *zx.ProxyContext) !void {

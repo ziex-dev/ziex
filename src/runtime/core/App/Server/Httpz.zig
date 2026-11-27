@@ -175,6 +175,7 @@ pub const HttpzCtx = struct {
         .reqMultiHas = &reqMultiHas,
         .reqMultiGetAll = &reqMultiGetAll,
         .resSetStatus = &resSetStatus,
+        .resGetStatus = &resGetStatus,
         .resSetBody = &resSetBody,
         .resHeaderGet = &resHeaderGet,
         .resHeaderSet = &resHeaderSet,
@@ -273,6 +274,10 @@ pub const HttpzCtx = struct {
         ctx(userdata).res.status = code;
     }
 
+    fn resGetStatus(userdata: ?*anyopaque) u16 {
+        return ctx(userdata).res.status;
+    }
+
     fn resSetBody(userdata: ?*anyopaque, content: []const u8) void {
         ctx(userdata).res.body = content;
     }
@@ -282,6 +287,14 @@ pub const HttpzCtx = struct {
     }
 
     fn resHeaderSet(userdata: ?*anyopaque, name: []const u8, value: []const u8) void {
+        // httpz only appends; replace an existing value so `set` matches the other backends.
+        const headers = &ctx(userdata).res.headers;
+        for (headers.keys[0..headers.len], 0..) |key, i| {
+            if (std.ascii.eqlIgnoreCase(key, name)) {
+                headers.values[i] = value;
+                return;
+            }
+        }
         ctx(userdata).res.header(name, value);
     }
 
@@ -752,15 +765,31 @@ fn Handler(comptime Ctx: type) type {
             else
                 zx.Router.findRoute(path, .{ .match = .exact });
 
-            const proxy_result = core_handler.executeNotFoundProxy(path, abstract_req, abstract_res, req.arena, self.io);
-            if (proxy_result.aborted) {
-                AccessLog.ProxyStatus.markAborted();
-                return;
-            }
-            if (proxy_result.state_ptr != null) AccessLog.ProxyStatus.markExecuted();
+            const NotFound = struct {
+                http: zx.http.Transport,
+                path: []const u8,
+                req: zx.server.Request,
+                res: zx.server.Response,
+                arena: std.mem.Allocator,
+                io: std.Io,
+                route: ?*const ServerApp.Route,
+                component: ?Component = null,
 
-            const component = core_handler.prepareNotFound(http, path, abstract_req, abstract_res, req.arena, self.io, matched_route);
-            try self.emitHtmlOrPlain(req, res, component);
+                fn call(ptr: *anyopaque, _: *zx.ProxyContext) void {
+                    const nf: *@This() = @ptrCast(@alignCast(ptr));
+                    nf.component = core_handler.prepareNotFound(nf.http, nf.path, nf.req, nf.res, nf.arena, nf.io, nf.route);
+                }
+            };
+            var nf: NotFound = .{ .http = http, .path = path, .req = abstract_req, .res = abstract_res, .arena = req.arena, .io = self.io, .route = matched_route };
+            const proxy_result = core_handler.executeNotFoundProxy(path, .{ .ptr = &nf, .call = &NotFound.call }, abstract_req, abstract_res, req.arena, self.io);
+            if (comptime is_dev) Pipeline.proxyStatus(proxy_result);
+
+            if (proxy_result.err) |err| {
+                const component = core_handler.prepareError(http, path, abstract_req, abstract_res, req.arena, self.io, err);
+                return self.emitHtmlOrPlain(req, res, component);
+            }
+            if (proxy_result.aborted) return;
+            try self.emitHtmlOrPlain(req, res, nf.component);
         }
 
         pub fn uncaughtError(self: *Self, req: *httpz.Request, res: *httpz.Response, err: anyerror) void {

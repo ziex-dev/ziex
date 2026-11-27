@@ -14,7 +14,17 @@ const routing = @import("routing.zig");
 const StateContext = CoreEvent.StateContext;
 const Allocator = zx.Allocator;
 
-// TODO: Re-work proxy arhitecture to allow intercepting request before and after
+// Proxies run as an onion, root first:
+//
+//     pub fn Proxy(ctx: *zx.ProxyContext) !void {
+//         // before: runs ahead of child proxies and the handler
+//         ctx.next(); // runs the rest of the chain, handler included
+//         // after: the handler has run; status and headers can still change
+//     }
+//
+// Returning without `next()` continues the chain once the proxy returns;
+// `abort()` stops it and sends the response as it stands. Aborting after
+// `next()` discards a page that has not been rendered yet.
 pub const ProxyContext = struct {
     request: Request,
     response: Response,
@@ -24,9 +34,12 @@ pub const ProxyContext = struct {
 
     _internal: Internal = .{},
 
+    pub const Handler = *const fn (ctx: *ProxyContext) anyerror!void;
+
     pub const Internal = struct {
         aborted: bool = false,
         state_ptr: ?*const anyopaque = null,
+        chain: ?*Chain = null,
     };
 
     pub fn init(request: Request, response: Response, allocator: Allocator, arena: Allocator, io: std.Io) ProxyContext {
@@ -44,13 +57,51 @@ pub const ProxyContext = struct {
         self._internal.aborted = true;
     }
 
+    // Runs the remaining proxies and the handler now; later calls do nothing.
     pub fn next(self: *ProxyContext) void {
-        _ = self;
+        const chain = self._internal.chain orelse return;
+        chain.run(self);
     }
 
     pub fn isAborted(self: *const ProxyContext) bool {
         return self._internal.aborted;
     }
+
+    pub const Chain = struct {
+        handlers: []const Handler,
+        terminal: Terminal,
+        index: usize = 0,
+        // The terminal has run.
+        done: bool = false,
+        // First error a proxy returned; stops the chain.
+        err: ?anyerror = null,
+
+        pub const Terminal = struct {
+            ptr: *anyopaque,
+            call: *const fn (ptr: *anyopaque, ctx: *ProxyContext) void,
+        };
+
+        pub fn run(self: *Chain, ctx: *ProxyContext) void {
+            while (self.index < self.handlers.len) {
+                if (self.halted(ctx)) return;
+                const handler = self.handlers[self.index];
+                self.index += 1;
+                handler(ctx) catch |e| {
+                    if (self.err == null) self.err = e;
+                    return;
+                };
+                // The handler called next(), so the rest has already run.
+                if (self.done) return;
+            }
+            if (self.done or self.halted(ctx)) return;
+            self.done = true;
+            self.terminal.call(self.terminal.ptr, ctx);
+        }
+
+        fn halted(self: *const Chain, ctx: *const ProxyContext) bool {
+            return ctx._internal.aborted or self.err != null;
+        }
+    };
 };
 
 //  ----- ComponentCtx ----- //

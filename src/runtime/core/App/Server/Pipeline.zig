@@ -516,7 +516,7 @@ pub const web = struct {
 pub fn proxyStatus(proxy: Router.ProxyResult) void {
     if (proxy.aborted) {
         AccessLog.ProxyStatus.markAborted();
-    } else if (proxy.state_ptr != null) {
+    } else if (proxy.ran) {
         AccessLog.ProxyStatus.markExecuted();
     }
 }

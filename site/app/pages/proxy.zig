@@ -59,7 +59,3 @@ pub fn PageProxy(ctx: *zx.ProxyContext) !void {
     // }
     ctx.next(); // Continue to next handler
 }
-
-pub const options: zx.ProxyOptions = .{
-    .pass_through = true,
-};

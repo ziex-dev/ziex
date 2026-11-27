@@ -47,22 +47,20 @@ pub const ApiResult = union(enum) {
     handler_error: anyerror,
 };
 
-/// Execute cascading + page-local proxy chain for a page route.
-pub fn executePageProxy(route: *const Route, request: Request, response: Response, arena: Allocator, io: std.Io) ProxyResult {
-    return Router.executeProxyChain(route.path, route.page_proxy, request, response, arena, io);
+/// Run the cascading proxies of the closest route for a path no route matches.
+/// `terminal` runs once the chain gets through (see `zx.ProxyContext`).
+pub fn executeNotFoundProxy(
+    pathname: []const u8,
+    terminal: zx.ProxyContext.Chain.Terminal,
+    request: Request,
+    response: Response,
+    arena: Allocator,
+    io: std.Io,
+) ProxyResult {
+    return Router.runProxies(Router.notFoundProxies(pathname), terminal, request, response, arena, io);
 }
 
-/// Execute cascading + route-local proxy chain for an API route.
-pub fn executeRouteProxy(route: *const Route, request: Request, response: Response, arena: Allocator, io: std.Io) ProxyResult {
-    return Router.executeProxyChain(route.path, route.route_proxy, request, response, arena, io);
-}
-
-/// Execute cascading proxy chain for not-found handling (no local proxy).
-pub fn executeNotFoundProxy(pathname: []const u8, request: Request, response: Response, arena: Allocator, io: std.Io) ProxyResult {
-    return Router.executeProxyChain(pathname, null, request, response, arena, io);
-}
-
-fn pageMethodAllowed(route: *const Route, method: Request.Method) bool {
+pub fn pageMethodAllowed(route: *const Route, method: Request.Method) bool {
     if (method == .GET) return true;
 
     const methods = if (route.page_opts) |opts| opts.methods else &[_]zx.PageOptions.Method{.GET};
@@ -94,7 +92,6 @@ fn pageMethodEquals(page_method: zx.PageOptions.Method, method: Request.Method) 
 /// component ready to be serialized by the backend.
 ///
 /// The caller is responsible for:
-/// - Proxy execution (call `executePageProxy` before this)
 /// - Writing the component to the response (streaming or buffered)
 /// - Dev-mode features (dev script injection, logging)
 /// - Caching
@@ -171,7 +168,6 @@ pub fn handlePage(
 /// and check for upgrades after this returns.
 ///
 /// The caller is responsible for:
-/// - Proxy execution (call `executeRouteProxy` before this)
 /// - WebSocket upgrade detection and completion
 /// - Error rendering on handler_error
 pub fn handleApi(

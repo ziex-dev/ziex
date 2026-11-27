@@ -40,91 +40,48 @@ pub const RouteMatch = struct {
 };
 
 pub const ProxyResult = struct {
+    // At least one proxy ran.
+    ran: bool = false,
     aborted: bool = false,
     state_ptr: ?*const anyopaque = null,
+    // First error a proxy returned.
+    err: ?anyerror = null,
 };
 
-/// Execute cascading Proxy() handlers from root "/" down to the target path, plus optional local proxy.
-pub fn executeProxyChain(
-    path: []const u8,
-    local_proxy: ?ServerApp.ProxyHandler,
+/// Runs `proxies` as an onion around `terminal` (see `zx.ProxyContext`).
+/// `terminal` runs once, unless a proxy aborts or fails first.
+pub fn runProxies(
+    proxies: []const ServerApp.ProxyHandler,
+    terminal: zx.ProxyContext.Chain.Terminal,
     req: zx.server.Request,
     res: zx.server.Response,
     arena: std.mem.Allocator,
     io: std.Io,
 ) ProxyResult {
-    var proxy_ctx = zx.ProxyContext.init(req, res, arena, arena, io);
-    var proxies: [16]ServerApp.ProxyHandler = undefined;
-    var count: usize = 0;
+    var ctx = zx.ProxyContext.init(req, res, arena, arena, io);
+    var chain: zx.ProxyContext.Chain = .{ .handlers = proxies, .terminal = terminal };
+    ctx._internal.chain = &chain;
+    chain.run(&ctx);
+    return .{
+        .ran = proxies.len > 0,
+        .aborted = ctx.isAborted(),
+        .state_ptr = ctx._internal.state_ptr,
+        .err = chain.err,
+    };
+}
 
-    // Root "/" proxy
-    for (app.meta.routes) |*route| {
-        if (std.mem.eql(u8, route.path, "/")) {
-            if (route.proxy) |proxy_fn| {
-                if (count < proxies.len) {
-                    proxies[count] = proxy_fn;
-                    count += 1;
-                }
-            }
-            break;
-        }
-    }
+/// Proxies for a request to `route`: the page chain when the page serves it,
+/// else the API chain.
+pub fn routeProxies(route: *const Route, method: zx.server.Request.Method) []const ServerApp.ProxyHandler {
+    if (route.page != null and (route.route == null or core_handler.pageMethodAllowed(route, method))) return route.page_proxies;
+    if (route.route != null) return route.route_proxies;
+    return route.proxies;
+}
 
-    // Build path segments and check each intermediate path
-    var segments: [32][]const u8 = undefined;
-    var seg_count: usize = 0;
-    var seg_iter = std.mem.splitScalar(u8, path, '/');
-    while (seg_iter.next()) |seg| {
-        if (seg.len > 0 and seg_count < segments.len) {
-            segments[seg_count] = seg;
-            seg_count += 1;
-        }
-    }
-
-    for (1..seg_count + 1) |depth| {
-        var path_buf: [256]u8 = undefined;
-        var offset: usize = 0;
-        for (0..depth) |d| {
-            path_buf[offset] = '/';
-            offset += 1;
-            const seg = segments[d];
-            @memcpy(path_buf[offset .. offset + seg.len], seg);
-            offset += seg.len;
-        }
-        const check_path = path_buf[0..offset];
-        if (std.mem.eql(u8, check_path, "/")) continue;
-
-        for (app.meta.routes) |*route| {
-            if (std.mem.eql(u8, route.path, check_path)) {
-                if (route.proxy) |proxy_fn| {
-                    if (count < proxies.len) {
-                        proxies[count] = proxy_fn;
-                        count += 1;
-                    }
-                }
-                break;
-            }
-        }
-    }
-
-    // Execute collected proxies in order (root to leaf)
-    for (proxies[0..count]) |proxy_fn| {
-        proxy_fn(&proxy_ctx) catch {};
-        if (proxy_ctx.isAborted()) {
-            return .{ .aborted = true, .state_ptr = proxy_ctx._internal.state_ptr };
-        }
-    }
-
-    // Execute local proxy (page_proxy or route_proxy). Returns updated ProxyResult.
-    if (local_proxy) |proxy_fn| {
-        proxy_ctx._internal.state_ptr = proxy_ctx._internal.state_ptr;
-        proxy_fn(&proxy_ctx) catch {};
-        if (proxy_ctx.isAborted()) {
-            return .{ .aborted = true, .state_ptr = proxy_ctx._internal.state_ptr };
-        }
-    }
-
-    return .{ .aborted = false, .state_ptr = proxy_ctx._internal.state_ptr };
+/// Cascading proxies for a path no route matches: those of its closest ancestor route.
+pub fn notFoundProxies(path: []const u8) []const ServerApp.ProxyHandler {
+    const route = findRoute(path, .{ .match = .closest }) orelse return &.{};
+    return route.proxies;
 }
 
 /// Registry for server actions and events (for streaming and event dispatch)
@@ -322,99 +279,6 @@ pub fn resolveRouteHandler(handlers: ServerApp.RouteHandlers, method: zx.server.
         .OPTIONS => handlers.options orelse handlers.handler,
         else => handlers.handler,
     };
-}
-
-/// Execute cascading Proxy() handlers from root "/" down to the target path.
-/// Does NOT execute local page_proxy/route_proxy - those are handled by the caller.
-pub fn executeCascadingProxies(
-    path: []const u8,
-    req: zx.server.Request,
-    res: zx.server.Response,
-    arena: std.mem.Allocator,
-    io: std.Io,
-) ProxyResult {
-    var proxy_ctx = zx.ProxyContext.init(req, res, arena, arena, io);
-
-    var proxies: [16]ServerApp.ProxyHandler = undefined;
-    var count: usize = 0;
-
-    // Root "/" proxy
-    for (app.meta.routes) |*route| {
-        if (std.mem.eql(u8, route.path, "/")) {
-            if (route.proxy) |proxy_fn| {
-                if (count < proxies.len) {
-                    proxies[count] = proxy_fn;
-                    count += 1;
-                }
-            }
-            break;
-        }
-    }
-
-    // Build path segments and check each intermediate path
-    var segments: [32][]const u8 = undefined;
-    var seg_count: usize = 0;
-    var seg_iter = std.mem.splitScalar(u8, path, '/');
-    while (seg_iter.next()) |seg| {
-        if (seg.len > 0 and seg_count < segments.len) {
-            segments[seg_count] = seg;
-            seg_count += 1;
-        }
-    }
-
-    for (1..seg_count + 1) |depth| {
-        var path_buf: [256]u8 = undefined;
-        var offset: usize = 0;
-        for (0..depth) |d| {
-            path_buf[offset] = '/';
-            offset += 1;
-            const seg = segments[d];
-            @memcpy(path_buf[offset .. offset + seg.len], seg);
-            offset += seg.len;
-        }
-        const check_path = path_buf[0..offset];
-        if (std.mem.eql(u8, check_path, "/")) continue;
-
-        for (app.meta.routes) |*route| {
-            if (std.mem.eql(u8, route.path, check_path)) {
-                if (route.proxy) |proxy_fn| {
-                    if (count < proxies.len) {
-                        proxies[count] = proxy_fn;
-                        count += 1;
-                    }
-                }
-                break;
-            }
-        }
-    }
-
-    // Execute collected proxies in order (root to leaf)
-    for (proxies[0..count]) |proxy_fn| {
-        proxy_fn(&proxy_ctx) catch {};
-        if (proxy_ctx.isAborted()) {
-            return .{ .aborted = true, .state_ptr = proxy_ctx._internal.state_ptr };
-        }
-    }
-
-    return .{ .aborted = false, .state_ptr = proxy_ctx._internal.state_ptr };
-}
-
-/// Execute a single local proxy (page_proxy or route_proxy). Returns updated ProxyResult.
-pub fn executeLocalProxy(
-    proxy_fn: ServerApp.ProxyHandler,
-    parent_result: ProxyResult,
-    req: zx.server.Request,
-    res: zx.server.Response,
-    arena: std.mem.Allocator,
-    io: std.Io,
-) ProxyResult {
-    var proxy_ctx = zx.ProxyContext.init(req, res, arena, arena, io);
-    proxy_ctx._internal.state_ptr = parent_result.state_ptr;
-    proxy_fn(&proxy_ctx) catch {};
-    if (proxy_ctx.isAborted()) {
-        return .{ .aborted = true, .state_ptr = proxy_ctx._internal.state_ptr };
-    }
-    return .{ .aborted = false, .state_ptr = proxy_ctx._internal.state_ptr };
 }
 
 /// Apply layout hierarchy for a matched route.
@@ -678,36 +542,77 @@ pub const HandleResult = struct {
 };
 
 pub fn handle(comptime options: core_handler.Options, opts: HandleOptions) !HandleResult {
+    const matched_route = findRoute(opts.pathname, .{ .match = .exact });
+    const proxies = if (matched_route) |route| routeProxies(route, opts.method) else notFoundProxies(opts.pathname);
+
+    // Fast path: no proxy wraps this request.
+    if (proxies.len == 0) return .{ .outcome = try dispatch(options, opts, matched_route, null) };
+
+    const Terminal = struct {
+        opts: *const HandleOptions,
+        route: ?*const Route,
+        outcome: ?Outcome = null,
+        err: ?anyerror = null,
+
+        fn call(ptr: *anyopaque, ctx: *zx.ProxyContext) void {
+            const self: *@This() = @ptrCast(@alignCast(ptr));
+            self.outcome = dispatch(options, self.opts.*, self.route, ctx._internal.state_ptr) catch |e| {
+                self.err = e;
+                return;
+            };
+        }
+    };
+    var terminal: Terminal = .{ .opts = &opts, .route = matched_route };
+    const proxy = runProxies(
+        proxies,
+        .{ .ptr = &terminal, .call = &Terminal.call },
+        opts.request,
+        opts.response,
+        opts.arena,
+        opts.io,
+    );
+
+    if (terminal.err) |e| return e;
+    if (proxy.err) |err| {
+        if (terminal.outcome) |o| if (o == .ws_upgraded) return .{ .outcome = o, .proxy = proxy };
+        return .{ .outcome = errorOutcome(opts, err), .proxy = proxy };
+    }
+    const outcome = terminal.outcome orelse return .{ .outcome = .response_ready, .proxy = proxy };
+    if (proxy.aborted and outcome != .ws_upgraded) return .{ .outcome = .response_ready, .proxy = proxy };
+    return .{ .outcome = outcome, .proxy = proxy };
+}
+
+fn errorOutcome(opts: HandleOptions, err: anyerror) Outcome {
+    const cmp = core_handler.prepareError(opts.http, opts.pathname, opts.request, opts.response, opts.arena, opts.io, err) orelse return .response_ready;
+    return .{ .component = .{ .component = cmp, .streaming = false } };
+}
+
+// Runs the page, action/event or API handler for `matched_route`, else not-found.
+fn dispatch(
+    comptime options: core_handler.Options,
+    opts: HandleOptions,
+    matched_route: ?*const Route,
+    state_ptr: ?*const anyopaque,
+) !Outcome {
     const http = opts.http;
     const request = opts.request;
     const response = opts.response;
     const pathname = opts.pathname;
-    const allocator = opts.allocator;
     const arena = opts.arena;
     const io = opts.io;
 
-    const route_match = matchRoute(pathname, .{ .match = .exact });
-    const matched_route = if (route_match) |m| m.route else null;
-
-    var proxy_result: ProxyResult = .{};
-
     if (matched_route) |route| {
-        // -- Proxy chain --
-        const local_proxy = route.page_proxy orelse route.route_proxy;
-        proxy_result = executeProxyChain(pathname, local_proxy, request, response, arena, io);
-        if (proxy_result.aborted) return .{ .outcome = .response_ready, .proxy = proxy_result };
-
         // -- Page (action/event dispatch + render) --
         const page_result = try core_handler.handlePage(
             options,
             route,
             request,
             response,
-            allocator,
+            opts.allocator,
             arena,
             io,
             opts.app_ctx,
-            proxy_result.state_ptr,
+            state_ptr,
         );
 
         switch (page_result) {
@@ -716,38 +621,28 @@ pub fn handle(comptime options: core_handler.Options, opts: HandleOptions) !Hand
                     http.resHeaderSet("Content-Type", "application/json");
                     http.resSetBody(body);
                 }
-                return .{ .outcome = .response_ready, .proxy = proxy_result };
+                return .response_ready;
             },
             .action_not_found => {
                 http.resSetStatus(400);
                 http.resSetBody("No action handler registered for this route");
-                return .{ .outcome = .response_ready, .proxy = proxy_result };
+                return .response_ready;
             },
             .event_handled => |r| {
                 http.resHeaderSet("Content-Type", "application/json");
                 http.resSetBody(r.body orelse "{}");
-                return .{ .outcome = .response_ready, .proxy = proxy_result };
+                return .response_ready;
             },
             .event_not_found => {
                 http.resSetStatus(404);
                 http.resSetBody("No server event handler registered for this route");
-                return .{ .outcome = .response_ready, .proxy = proxy_result };
+                return .response_ready;
             },
-            .page_error => |err| {
-                if (core_handler.prepareError(http, pathname, request, response, arena, io, err)) |cmp| {
-                    return .{ .outcome = .{ .component = .{ .component = cmp, .streaming = false } }, .proxy = proxy_result };
-                }
-                return .{ .outcome = .response_ready, .proxy = proxy_result };
-            },
-            .component => |cmp| {
-                return .{
-                    .outcome = .{ .component = .{
-                        .component = cmp,
-                        .streaming = core_handler.isStreamingEnabled(route),
-                    } },
-                    .proxy = proxy_result,
-                };
-            },
+            .page_error => |err| return errorOutcome(opts, err),
+            .component => |cmp| return .{ .component = .{
+                .component = cmp,
+                .streaming = core_handler.isStreamingEnabled(route),
+            } },
             .not_found => {
                 // Fall through to API route dispatch below.
             },
@@ -760,41 +655,26 @@ pub fn handle(comptime options: core_handler.Options, opts: HandleOptions) !Hand
                     route,
                     request,
                     response,
-                    allocator,
+                    opts.allocator,
                     io,
                     opts.app_ctx,
-                    proxy_result.state_ptr,
+                    state_ptr,
                     opts.socket,
                 );
 
+                if (opts.socket.isUpgraded()) return .ws_upgraded;
                 switch (api_result) {
-                    .handler_error => |err| {
-                        if (!opts.socket.isUpgraded()) {
-                            if (core_handler.prepareError(http, pathname, request, response, arena, io, err)) |cmp| {
-                                return .{ .outcome = .{ .component = .{ .component = cmp, .streaming = false } }, .proxy = proxy_result };
-                            }
-                            return .{ .outcome = .response_ready, .proxy = proxy_result };
-                        }
-                    },
+                    .handler_error => |err| return errorOutcome(opts, err),
+                    .handled => return .response_ready,
                     .not_found => {},
-                    .handled => {},
                 }
-
-                if (opts.socket.isUpgraded()) return .{ .outcome = .ws_upgraded, .proxy = proxy_result };
-                if (api_result != .not_found) return .{ .outcome = .response_ready, .proxy = proxy_result };
             }
         }
     }
 
     // -- Not found --
-    const nf_proxy = core_handler.executeNotFoundProxy(pathname, request, response, arena, io);
-    if (nf_proxy.aborted) {
-        return .{ .outcome = .response_ready, .proxy = nf_proxy };
-    }
-    if (nf_proxy.state_ptr != null) proxy_result = nf_proxy;
-
     const nf_component = core_handler.prepareNotFound(http, pathname, request, response, arena, io, matched_route);
-    return .{ .outcome = .{ .not_found = .{ .component = nf_component } }, .proxy = proxy_result };
+    return .{ .not_found = .{ .component = nf_component } };
 }
 
 pub fn streamComponent(io: std.Io, component: Component, allocator: std.mem.Allocator, writer: *std.Io.Writer, base_path: ?[]const u8) ![]render.AsyncComponent {

@@ -25,6 +25,11 @@ pub fn setStatus(self: *const Response, stat: http.Status) void {
     self._internal.http.resSetStatus(@backingInt(stat));
 }
 
+/// The HTTP status code set so far (200 unless changed).
+pub fn status(self: *const Response) u16 {
+    return self._internal.http.resGetStatus();
+}
+
 /// Sets the response body directly.
 pub fn text(self: *const Response, content: []const u8) void {
     self._internal.http.resSetBody(content);

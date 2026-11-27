@@ -33,6 +33,7 @@ pub const VTable = struct {
     reqMultiGetAll: *const fn (userdata: ?*anyopaque, name: []const u8, allocator: std.mem.Allocator) ?[]const MultiFormValue,
 
     resSetStatus: *const fn (userdata: ?*anyopaque, code: u16) void,
+    resGetStatus: *const fn (userdata: ?*anyopaque) u16,
     resSetBody: *const fn (userdata: ?*anyopaque, content: []const u8) void,
 
     resHeaderGet: *const fn (userdata: ?*anyopaque, name: []const u8) ?[]const u8,
@@ -92,6 +93,9 @@ pub fn reqMultiGetAll(self: Transport, name: []const u8, allocator: std.mem.Allo
 
 pub fn resSetStatus(self: Transport, code: u16) void {
     self.vtable.resSetStatus(self.userdata, code);
+}
+pub fn resGetStatus(self: Transport) u16 {
+    return self.vtable.resGetStatus(self.userdata);
 }
 pub fn resSetBody(self: Transport, content: []const u8) void {
     self.vtable.resSetBody(self.userdata, content);
@@ -162,6 +166,9 @@ fn failMultiGetAll(_: ?*anyopaque, _: []const u8, _: std.mem.Allocator) ?[]const
     return null;
 }
 fn failSetStatus(_: ?*anyopaque, _: u16) void {}
+fn failGetStatus(_: ?*anyopaque) u16 {
+    return 200;
+}
 fn failSetBody(_: ?*anyopaque, _: []const u8) void {}
 fn failHeaderSet(_: ?*anyopaque, _: []const u8, _: []const u8) void {}
 fn failWriter(_: ?*anyopaque) ?*std.Io.Writer {
@@ -202,6 +209,7 @@ pub const failing_vtable = VTable{
     .reqMultiHas = &failNamedBool,
     .reqMultiGetAll = &failMultiGetAll,
     .resSetStatus = &failSetStatus,
+    .resGetStatus = &failGetStatus,
     .resSetBody = &failSetBody,
     .resHeaderGet = &failNamedStr,
     .resHeaderSet = &failHeaderSet,

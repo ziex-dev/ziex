@@ -58,7 +58,6 @@ pub const LayoutOptions = opts.LayoutOptions;
 pub const NotFoundOptions = opts.NotFoundOptions;
 pub const ErrorOptions = opts.ErrorOptions;
 pub const RouteOptions = opts.RouteOptions;
-pub const ProxyOptions = opts.ProxyOptions;
 
 // --- Contexts --- //
 pub const ProxyContext = ctxs.ProxyContext;

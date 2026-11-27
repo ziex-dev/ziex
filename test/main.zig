@@ -10,6 +10,7 @@ test {
     _ = @import("core/net/http.zig");
     _ = @import("core/server.zig");
     _ = @import("core/server/handlers.zig");
+    _ = @import("core/proxy.zig");
     _ = @import("core/zxon.zig");
     _ = @import("core/html.zig");
     _ = @import("core/props.zig");

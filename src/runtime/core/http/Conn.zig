@@ -111,6 +111,7 @@ const vtable = Transport.VTable{
     .reqMultiHas = &reqMultiHas,
     .reqMultiGetAll = &reqMultiGetAll,
     .resSetStatus = &resSetStatus,
+    .resGetStatus = &resGetStatus,
     .resSetBody = &resSetBody,
     .resHeaderGet = &resHeaderGet,
     .resHeaderSet = &resHeaderSet,
@@ -216,6 +217,10 @@ fn reqMultiGetAll(userdata: ?*anyopaque, name: []const u8, allocator: std.mem.Al
 
 fn resSetStatus(userdata: ?*anyopaque, code: u16) void {
     self_(userdata).status = code;
+}
+
+fn resGetStatus(userdata: ?*anyopaque) u16 {
+    return self_(userdata).status;
 }
 
 fn resSetBody(userdata: ?*anyopaque, content: []const u8) void {

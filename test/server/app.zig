@@ -13,6 +13,7 @@ pub const modules = .{
 const auth = @import("routes/auth/routes.zig");
 pub const auth_app = @import("routes/auth/app.zig");
 pub const mcp_oauth = @import("routes/mcp_oauth.zig");
+const proxy = @import("routes/proxy.zig");
 
 pub const routes = [_]zx.App.Route{
     .{ .path = "/", .route = @import("routes/root.zig") },
@@ -38,6 +39,14 @@ pub const routes = [_]zx.App.Route{
     .{ .path = "/secure/mcp/*", .route = mcp_oauth.api },
     .{ .path = "/.well-known/*", .route = mcp_oauth.api },
     .{ .path = "/secure/consent", .route = mcp_oauth.consent },
+    .{ .path = "/proxy", .route = proxy.root, .proxy = proxy.root },
+    .{ .path = "/proxy/inner", .route = proxy.inner, .proxy = proxy.inner },
+    .{ .path = "/proxy/inner/page", .page = proxy.page, .proxy = proxy.page },
+    .{ .path = "/proxy/guard", .route = proxy.guard, .proxy = proxy.guard },
+    .{ .path = "/proxy/after", .route = proxy.after, .proxy = proxy.after },
+    .{ .path = "/proxy/fail", .route = proxy.fail, .proxy = proxy.fail },
+    .{ .path = "/proxy/items/:id", .route = proxy.item, .proxy = proxy.item },
+    .{ .path = "/proxy/items/:id/detail", .route = proxy.item_detail },
     .{ .path = "/events", .page = pages.events },
     .{ .path = "/events/other", .page = pages.events },
     .{ .path = "/actions", .page = pages.actions },
@@ -67,6 +76,14 @@ pub const RoutePaths = enum {
     @"/secure/mcp/*",
     @"/.well-known/*",
     @"/secure/consent",
+    @"/proxy",
+    @"/proxy/inner",
+    @"/proxy/inner/page",
+    @"/proxy/guard",
+    @"/proxy/after",
+    @"/proxy/fail",
+    @"/proxy/items/:id",
+    @"/proxy/items/:id/detail",
     @"/events",
     @"/events/other",
     @"/actions",

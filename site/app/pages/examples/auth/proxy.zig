@@ -6,10 +6,10 @@ pub fn Proxy(ctx: *zx.ProxyContext) !void {
         .is_authenticated = session != null,
     });
 
-    if (isProtectedRoute(ctx.request.pathname) and session == null)
-        return ctx.response.redirect("/examples/auth?msg=You must be logged in to access /examples/auth/protected route", .found);
-
-    ctx.next();
+    if (isProtectedRoute(ctx.request.pathname) and session == null) {
+        ctx.response.redirect("/examples/auth?msg=You must be logged in to access /examples/auth/protected route", .found);
+        return ctx.abort();
+    }
 }
 
 const protected_routes: []const []const u8 = &.{"/examples/auth/protected"};

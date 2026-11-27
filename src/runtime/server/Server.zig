@@ -487,6 +487,10 @@ pub const ServerApp = struct {
         }
         const ptr = state_ptr.?;
 
+        if (@typeInfo(StateType) == .optional and @typeInfo(@typeInfo(StateType).optional.child) == .pointer) {
+            const typed: @typeInfo(StateType).optional.child = @ptrFromInt(@intFromPtr(ptr));
+            return typed;
+        }
         if (@typeInfo(StateType) == .pointer) {
             const addr = @intFromPtr(ptr);
             const typed: StateType = @ptrFromInt(addr);
@@ -527,7 +531,7 @@ pub const ServerApp = struct {
     }
 
     /// Proxy handler function type - called before page/route handlers
-    pub const ProxyHandler = *const fn (ctx: *zx.ProxyContext) anyerror!void;
+    pub const ProxyHandler = zx.ProxyContext.Handler;
 
     /// Wrapper to allow proxy handlers to return void or !void
     fn wrapProxy(comptime proxyFn: anytype) ProxyHandler {
@@ -657,6 +661,11 @@ pub const ServerApp = struct {
         proxy: ?ProxyHandler = null,
         page_proxy: ?ProxyHandler = null,
         route_proxy: ?ProxyHandler = null,
+        // Full chains, resolved at comptime: every ancestor `Proxy` (root first,
+        // this route's own last), then `PageProxy` / `RouteProxy`.
+        proxies: []const ProxyHandler = &.{},
+        page_proxies: []const ProxyHandler = &.{},
+        route_proxies: []const ProxyHandler = &.{},
         /// Effective rendering after layout inheritance (see `resolveRendering`).
         rendering: zx.PageOptions.Rendering = .default,
 
@@ -720,6 +729,9 @@ const server_routes = blk: {
             .proxy = if (route.proxy) |proxy| ServerApp.proxy(proxy) else null,
             .page_proxy = if (route.proxy) |proxy| ServerApp.pageProxy(proxy) else null,
             .route_proxy = if (route.proxy) |proxy| ServerApp.routeProxy(proxy) else null,
+            .proxies = proxyChain(route.path, null),
+            .page_proxies = proxyChain(route.path, if (route.proxy) |proxy| ServerApp.pageProxy(proxy) else null),
+            .route_proxies = proxyChain(route.path, if (route.proxy) |proxy| ServerApp.routeProxy(proxy) else null),
             .rendering = rendering,
         };
     }
@@ -777,6 +789,28 @@ fn checkRendering(comptime path: []const u8, comptime r: zx.PageOptions.Renderin
 }
 
 /// Whether `ancestor` is `path` or one of its parent paths, on segment boundaries.
+// Ancestor `Proxy` handlers of `path` ordered root first, then `local`.
+fn proxyChain(comptime path: []const u8, comptime local: ?ServerApp.ProxyHandler) []const ServerApp.ProxyHandler {
+    comptime {
+        @setEvalBranchQuota(100_000);
+        var lens: []const usize = &.{};
+        var chain: []const ServerApp.ProxyHandler = &.{};
+        for (app.routes) |r| {
+            const m = r.proxy orelse continue;
+            const handler = ServerApp.proxy(m) orelse continue;
+            if (!isPathAncestor(r.path, path)) continue;
+            // Insert sorted by depth, keeping file order for equal paths.
+            var at = lens.len;
+            while (at > 0 and lens[at - 1] > r.path.len) at -= 1;
+            lens = lens[0..at] ++ [_]usize{r.path.len} ++ lens[at..];
+            chain = chain[0..at] ++ [_]ServerApp.ProxyHandler{handler} ++ chain[at..];
+        }
+        if (local) |l| chain = chain ++ [_]ServerApp.ProxyHandler{l};
+        const out = chain[0..chain.len].*;
+        return &out;
+    }
+}
+
 fn isPathAncestor(comptime ancestor: []const u8, comptime path: []const u8) bool {
     if (std.mem.eql(u8, ancestor, "/")) return true;
     if (!std.mem.startsWith(u8, path, ancestor)) return false;

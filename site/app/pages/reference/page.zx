@@ -480,7 +480,7 @@ fn FileConventions(allocator: zx.Allocator) zx.Component {
             <ApiTable fields={api_docs.route_options} defaults={true} />
 
             <h3 id="file-proxy"><SectionAnchor id="file-proxy">proxy.zig</SectionAnchor></h3>
-            <p>Runs before handlers, like middleware. <code>Proxy</code>{" "}runs for this path and every path below it; <code>PageProxy</code>{" "}runs only before this directory's page and <code>RouteProxy</code>{" "}only before its <code>route.zig</code>. Call <code>ctx.abort()</code>{" "}to stop the chain and send the response as it is; otherwise the request continues.</p>
+            <p>Runs before handlers, like middleware. <code>Proxy</code>{" "}runs for this path and every path below it; <code>PageProxy</code>{" "}runs only before this directory's page and <code>RouteProxy</code>{" "}only before its <code>route.zig</code>. Proxies nest like an onion, root first: <code>ctx.next()</code>{" "}runs the rest of the chain and the handler, so code after it runs once the handler is done and can still change the status and headers. Call <code>ctx.abort()</code>{" "}to stop the chain and send the response as it is; a proxy that returns without either lets the request continue. A proxy that returns an error stops the chain and answers with the closest error page.</p>
             <CodeBlock code={util.extractSignatures(allocator, source, "proxy.zig")} />
             <ApiTable fields={api_docs.proxy_context} />
         </section>
