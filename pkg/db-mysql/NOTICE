@@ -1,0 +1,9 @@
+The MySQL wire-protocol code in this package (packet layouts, handshake and
+authentication flow, result set and binary value decoding) is adapted from
+Bun's Zig MySQL client:
+
+  https://github.com/oven-sh/bun  commit 7e57e529, src/sql/mysql
+  Bun is MIT licensed.
+
+Bun's socket, TLS (BoringSSL) and JavaScriptCore layers were not used; this
+package runs on std.Io and std.crypto.tls.

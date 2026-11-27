@@ -9,6 +9,7 @@ vtable: *const VTable,
 pub const Sqlite = @import("Db/Sqlite.zig");
 pub const Wasm = @import("Db/Wasm.zig");
 pub const Postgres = @import("Db/Postgres.zig");
+pub const Mysql = @import("Db/Mysql.zig");
 
 pub const Error = error{
     Unimplemented,

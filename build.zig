@@ -19,6 +19,7 @@ pub fn build(b: *std.Build) !void {
     const enable_lsp = b.option(bool, "lsp", "Enable zx lsp (backed by ZLS)") orelse true;
     const enable_sqlite = b.option(bool, "feature-sqlite", "Enabled sqlite support") orelse false;
     const enable_postgres = b.option(bool, "feature-postgres", "Enabled postgres support") orelse false;
+    const enable_mysql = b.option(bool, "feature-mysql", "Enabled mysql support") orelse false;
     const log_level = b.option(std.log.Level, "cli-log-level", "Log level for the CLI") orelse .info;
     const is_client = b.option(bool, "is-client", "Building for the browser (client)") orelse false;
     const enable_httpz = b.option(bool, "enable-httpz", "Enable httpz backend for server") orelse false;
@@ -56,6 +57,11 @@ pub fn build(b: *std.Build) !void {
             if (enable_postgres) {
                 const db_postgres_dp = b.lazyDependency("db_postgres", .{ .target = target, .optimize = optimize });
                 if (db_postgres_dp) |a| mod.addImport("db_postgres", a.module("postgres"));
+            }
+
+            if (enable_mysql) {
+                const db_mysql_dp = b.lazyDependency("db_mysql", .{ .target = target, .optimize = optimize });
+                if (db_mysql_dp) |a| mod.addImport("db_mysql", a.module("mysql"));
             }
 
             if (enable_httpz) {
@@ -128,6 +134,7 @@ pub fn build(b: *std.Build) !void {
         const mode_test = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
         if (b.lazyDependency("db_sqlite", .{})) |ad| mode_test.addImport("sqlite", ad.module("sqlite"));
         if (b.lazyDependency("db_postgres", .{})) |ad| mode_test.addImport("db_postgres", ad.module("postgres"));
+        if (b.lazyDependency("db_mysql", .{})) |ad| mode_test.addImport("db_mysql", ad.module("mysql"));
         mode_test.addOptions("zx_info", options);
         mode_test.addImport("lang", lang_mod);
 
@@ -184,6 +191,14 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
         }) });
         test_step.dependOn(&b.addRunArtifact(pg_unit).step);
+
+        // protocol/auth/url unit tests for the mysql package; no server needed
+        const mysql_unit = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("pkg/db-mysql/src/mysql.zig"),
+            .target = target,
+            .optimize = optimize,
+        }) });
+        test_step.dependOn(&b.addRunArtifact(mysql_unit).step);
 
         const transpile_only = b.addExecutable(.{
             .name = "transpile-only",

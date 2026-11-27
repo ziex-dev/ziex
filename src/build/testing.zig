@@ -23,6 +23,7 @@ pub fn configure(b: *std.Build, zx_mod: *std.Build.Module, opts: Options) *std.B
     app_opts.addOption(bool, "feat_sqlite_server", false);
     app_opts.addOption(bool, "feat_sqlite_client", false);
     app_opts.addOption(bool, "feat_pg_server", false);
+    app_opts.addOption(bool, "feat_mysql_server", false);
     app_opts.addOption(bool, "feat_kv_server", false);
     app_opts.addOption(bool, "feat_kv_client", false);
     app_opts.addOption(bool, "feat_cache_server", false);

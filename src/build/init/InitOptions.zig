@@ -113,6 +113,16 @@ pub const AppOptions = struct {
             server: ?PostgresServerOptions = null,
         };
 
+        /// Enable MySQL/MariaDB database client, available through `zx.Db.Mysql`.
+        pub const MysqlOptions = struct {
+            pub const MysqlServerOptions = struct {
+                pub const enabled: MysqlServerOptions = .{};
+            };
+            pub const enabled: MysqlOptions = .{ .server = .enabled };
+
+            server: ?MysqlServerOptions = null,
+        };
+
         /// Filesystem-backed key/value store, exposed at runtime as `zx.kv`.
         pub const KvOptions = struct {
             pub const KvServerOptions = struct {
@@ -213,6 +223,7 @@ pub const AppOptions = struct {
 
         sqlite: ?SqliteOptions = null,
         postgres: ?PostgresOptions = null,
+        mysql: ?MysqlOptions = null,
         kv: ?KvOptions = null,
         cache: ?CacheOptions = null,
         fs: ?FsOptions = null,

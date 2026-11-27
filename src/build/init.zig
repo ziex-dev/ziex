@@ -32,6 +32,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
         .@"feature-sqlite" = if (options.app != null and options.app.?.features.sqlite != null) true else null,
         .@"feature-postgres" = if (options.app != null and options.app.?.features.postgres != null) true else null,
+        .@"feature-mysql" = if (options.app != null and options.app.?.features.mysql != null) true else null,
 
         .@"enable-httpz" = enable_httpz,
         .lsp = false,
@@ -823,6 +824,7 @@ fn addAppOpts(b: *std.Build, params: AppOptsParams) *std.Build.Step.Options {
     app_opts.addOption(bool, "feat_sqlite_server", if (params.features.sqlite) |s| s.server != null else false);
     app_opts.addOption(bool, "feat_sqlite_client", if (params.features.sqlite) |s| s.client != null else false);
     app_opts.addOption(bool, "feat_pg_server", if (params.features.postgres) |s| s.server != null else false);
+    app_opts.addOption(bool, "feat_mysql_server", if (params.features.mysql) |s| s.server != null else false);
     app_opts.addOption(bool, "feat_kv_server", if (params.features.kv) |k| k.server != null else false);
     app_opts.addOption(bool, "feat_kv_client", if (params.features.kv) |k| k.client != null else false);
     app_opts.addOption(bool, "feat_cache_server", if (params.features.cache) |c| c.server != null else false);

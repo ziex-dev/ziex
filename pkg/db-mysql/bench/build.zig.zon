@@ -1,0 +1,10 @@
+.{
+    .name = .db_mysql_bench,
+    .version = "0.0.0",
+    .fingerprint = 0x4d764065f1fe6d31,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .db_mysql = .{ .path = ".." },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src" },
+}

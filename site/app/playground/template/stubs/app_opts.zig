@@ -7,6 +7,7 @@ pub const omit_prerendered: bool = false;
 pub const feat_sqlite_server: bool = false;
 pub const feat_sqlite_client: bool = false;
 pub const feat_pg_server: bool = false;
+pub const feat_mysql_server: bool = false;
 pub const feat_kv_server: bool = false;
 pub const feat_kv_client: bool = false;
 pub const feat_cache_server: bool = false;

@@ -1,0 +1,6 @@
+.{
+    .name = .db_mysql,
+    .version = "0.1.0",
+    .fingerprint = 0x837079e15f65da29,
+    .paths = .{ "build.zig", "build.zig.zon", "src", "NOTICE" },
+}

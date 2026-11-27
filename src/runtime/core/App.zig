@@ -397,6 +397,19 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
         resolved.db_url = db_url;
     }
 
+    // Feature ==> zx.db (mysql backend)
+    if (comptime app_opts.feat_mysql_server) {
+        if (comptime app_opts.feat_sqlite_server) @compileError("zx.db: enable either the sqlite or the mysql feature, not both");
+        if (comptime app_opts.feat_pg_server) @compileError("zx.db: enable either the postgres or the mysql feature, not both");
+        const db_url = envVar(alloc, "DATABASE_URL") orelse {
+            std.log.err("mysql is enabled but DATABASE_URL is not set", .{});
+            return error.MissingDatabaseUrl;
+        };
+        errdefer alloc.free(db_url);
+        zx.db = try zx.Db.Mysql.open(alloc, inita.io, db_url, .{});
+        resolved.db_url = db_url;
+    }
+
     // Feature ==> zx.ai
     if (comptime app_opts.feat_ai_server) initAi(alloc, inita);
 
@@ -555,8 +568,8 @@ fn freeResolved(alloc: std.mem.Allocator) void {
 
     if (resolved.datadir == null) return;
 
-    // Feature ==> zx.db (sqlite or postgres backend)
-    if (comptime app_opts.feat_sqlite_server or app_opts.feat_pg_server) {
+    // Feature ==> zx.db (sqlite, postgres or mysql backend)
+    if (comptime app_opts.feat_sqlite_server or app_opts.feat_pg_server or app_opts.feat_mysql_server) {
         if (resolved.db_url) |s| {
             zx.db.deinit();
             alloc.free(s);
