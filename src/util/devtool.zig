@@ -140,7 +140,7 @@ pub const ComponentSerializable = struct {
                     var children = try allocator.alloc(StateItem, value.len);
                     for (value, 0..) |v, i| {
                         var buf: [32]u8 = undefined;
-                        const index_key = std.fmt.bufPrint(&buf, "{d}", .{i}) catch "item";
+                        const index_key = std.mem.print(&buf, "{d}", .{i}) catch "item";
                         children[i] = try toStateItem(allocator, p.child, try allocator.dupe(u8, index_key), v, depth + 1);
                     }
                     item.children = children;
@@ -380,7 +380,7 @@ pub const ComponentSerializable = struct {
                 var children = try allocator.alloc(StateItem, arr.items.len);
                 for (arr.items, 0..) |v, i| {
                     var buf: [32]u8 = undefined;
-                    const index_key = try std.fmt.bufPrint(&buf, "{d}", .{i});
+                    const index_key = try std.mem.print(&buf, "{d}", .{i});
                     children[i] = try stateItemFromJsonValue(allocator, try allocator.dupe(u8, index_key), v);
                 }
                 break :blk .{

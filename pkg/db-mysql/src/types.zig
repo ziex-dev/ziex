@@ -181,7 +181,7 @@ pub fn decodeBinary(comptime Value: type, comptime copy: bool, gpa: std.mem.Allo
         .ulonglong => blk: {
             const v = try cur.int8();
             if (v <= std.math.maxInt(i64)) break :blk .{ .integer = @intCast(v) };
-            break :blk .{ .text = try std.fmt.allocPrint(gpa, "{d}", .{v}) };
+            break :blk .{ .text = try gpa.print("{d}", .{v}) };
         },
         .float32 => .{ .float = @as(f32, @bitCast(try cur.int4())) },
         .float64 => .{ .float = @as(f64, @bitCast(try cur.int8())) },
@@ -225,9 +225,9 @@ fn decodeDateTime(gpa: std.mem.Allocator, cur: *protocol.Cursor, date_only: bool
         },
         else => return error.InvalidBinaryValue,
     }
-    if (date_only) return std.fmt.allocPrint(gpa, "{d:0>4}-{d:0>2}-{d:0>2}", .{ year, month, day });
-    if (micro != 0) return std.fmt.allocPrint(gpa, "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}.{d:0>6}", .{ year, month, day, hour, minute, second, micro });
-    return std.fmt.allocPrint(gpa, "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}", .{ year, month, day, hour, minute, second });
+    if (date_only) return gpa.print("{d:0>4}-{d:0>2}-{d:0>2}", .{ year, month, day });
+    if (micro != 0) return gpa.print("{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}.{d:0>6}", .{ year, month, day, hour, minute, second, micro });
+    return gpa.print("{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}", .{ year, month, day, hour, minute, second });
 }
 
 fn decodeTime(gpa: std.mem.Allocator, cur: *protocol.Cursor) ![]u8 {
@@ -250,8 +250,8 @@ fn decodeTime(gpa: std.mem.Allocator, cur: *protocol.Cursor) ![]u8 {
         else => return error.InvalidBinaryValue,
     }
     const sign = if (negative) "-" else "";
-    if (micro != 0) return std.fmt.allocPrint(gpa, "{s}{d:0>2}:{d:0>2}:{d:0>2}.{d:0>6}", .{ sign, hours, minute, second, micro });
-    return std.fmt.allocPrint(gpa, "{s}{d:0>2}:{d:0>2}:{d:0>2}", .{ sign, hours, minute, second });
+    if (micro != 0) return gpa.print("{s}{d:0>2}:{d:0>2}:{d:0>2}.{d:0>6}", .{ sign, hours, minute, second, micro });
+    return gpa.print("{s}{d:0>2}:{d:0>2}:{d:0>2}", .{ sign, hours, minute, second });
 }
 
 /// Integer text: optional sign, then digits. Faster than std.fmt.parseInt (no base/underscores).
@@ -276,7 +276,7 @@ fn parseInt(data: []const u8) !i64 {
 
 /// Text form of a float that the server parses back exactly.
 pub fn formatFloat(buf: []u8, value: f64) ![]const u8 {
-    return std.fmt.bufPrint(buf, "{e}", .{value});
+    return std.mem.print(buf, "{e}", .{value});
 }
 
 // --- Tests --- //

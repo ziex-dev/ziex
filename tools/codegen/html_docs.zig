@@ -52,7 +52,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
     const root = parsed.value.object;
 
     var elements = std.StringHashMap(ElementDoc).init(a);
-    var attrs: std.ArrayListUnmanaged(AttrDoc) = .empty;
+    var attrs: std.ArrayList(AttrDoc) = .empty;
 
     const tags = (root.get("tags") orelse return error.BadHtmlData).array;
     for (tags.items) |tag_val| {
@@ -143,7 +143,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
     );
 
     try w.writeAll("const elements = Map.initComptime(.{\n");
-    var el_keys: std.ArrayListUnmanaged([]const u8) = .empty;
+    var el_keys: std.ArrayList([]const u8) = .empty;
     {
         var kit = elements.keyIterator();
         while (kit.next()) |k| try el_keys.append(a, k.*);
@@ -159,7 +159,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
 
     try w.writeAll("const global_attributes = AttrMap.initComptime(.{\n");
     {
-        var global_keys: std.ArrayListUnmanaged([]const u8) = .empty;
+        var global_keys: std.ArrayList([]const u8) = .empty;
         var seen = std.StringHashMap(void).init(a);
         for (attrs.items) |at| {
             if (at.element.len != 0) continue;
@@ -181,7 +181,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
     try w.writeAll("// Keyed by \"<element>\\t<attr>\" (lower-case element).\n");
     try w.writeAll("const element_attributes = AttrMap.initComptime(.{\n");
     {
-        var keys: std.ArrayListUnmanaged([]const u8) = .empty;
+        var keys: std.ArrayList([]const u8) = .empty;
         var seen = std.StringHashMap(void).init(a);
         for (attrs.items) |at| {
             if (at.element.len == 0) continue;
@@ -192,7 +192,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
         }
         std.mem.sort([]const u8, keys.items, {}, lessThan);
         for (keys.items) |key| {
-            const tab = std.mem.indexOfScalar(u8, key, '\t').?;
+            const tab = std.mem.findScalar(u8, key, '\t').?;
             const element = key[0..tab];
             const attr = key[tab + 1 ..];
             const href = attrField(attrs.items, element, attr, .href);

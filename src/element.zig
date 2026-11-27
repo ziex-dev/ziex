@@ -3,12 +3,12 @@ const std = @import("std");
 pub const Tag = enum {
     pub fn isSelf(tag: Tag) bool {
         const SELF_CLOSING_ONLY: []const Tag = &.{ .br, .hr, .img, .input, .link, .source, .track, .wbr };
-        return std.mem.indexOfScalar(Tag, SELF_CLOSING_ONLY, tag) != null;
+        return std.mem.findScalar(Tag, SELF_CLOSING_ONLY, tag) != null;
     }
 
     pub fn isVoid(tag: Tag) bool {
         const NO_CHILDREN_ONLY: []const Tag = &.{ .meta, .link, .input };
-        return std.mem.indexOfScalar(Tag, NO_CHILDREN_ONLY, tag) != null;
+        return std.mem.findScalar(Tag, NO_CHILDREN_ONLY, tag) != null;
     }
 
     /// First SVG tag in enum order; JS DomCmd uses this as `SVG_TAG_START_INDEX`.

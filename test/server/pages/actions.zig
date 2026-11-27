@@ -7,16 +7,16 @@ pub const src = struct {
     pub const add = addSrc();
     pub const direct = directSrc();
 
-    fn profileSrc() std.builtin.SourceLocation {
+    fn profileSrc() std.lang.SourceLocation {
         return @src();
     }
-    fn greetSrc() std.builtin.SourceLocation {
+    fn greetSrc() std.lang.SourceLocation {
         return @src();
     }
-    fn addSrc() std.builtin.SourceLocation {
+    fn addSrc() std.lang.SourceLocation {
         return @src();
     }
-    fn directSrc() std.builtin.SourceLocation {
+    fn directSrc() std.lang.SourceLocation {
         return @src();
     }
 };

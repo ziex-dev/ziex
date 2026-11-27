@@ -32,7 +32,7 @@ pub fn SocketOpen(ctx: zx.SocketOpenCtx(SocketData)) !void {
 
 pub fn Socket(ctx: zx.SocketCtx(SocketData)) !void {
     var buf: [4096]u8 = undefined;
-    const out = std.fmt.bufPrint(&buf, "{s}: {s}", .{ ctx.data.name, ctx.message.bytes() }) catch {
+    const out = std.mem.print(&buf, "{s}: {s}", .{ ctx.data.name, ctx.message.bytes() }) catch {
         const allocated = try ctx.fmt("{s}: {s}", .{ ctx.data.name, ctx.message.bytes() });
         _ = ctx.socket.publish(ROOM_TOPIC, allocated);
         return;

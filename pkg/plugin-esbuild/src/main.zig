@@ -208,7 +208,7 @@ fn collectMetafileDeps(
         const key = entry.key_ptr.*;
         // Skip plugin-namespaced keys (e.g. "text-attr:/abs/path") if any appear.
         var path = key;
-        if (std.mem.indexOfScalar(u8, key, ':')) |colon| {
+        if (std.mem.findScalar(u8, key, ':')) |colon| {
             if (colon > 1) path = key[colon + 1 ..];
         }
 

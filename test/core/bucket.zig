@@ -62,7 +62,7 @@ fn header(signed: sign.Signed, name: []const u8) ?[]const u8 {
 
 fn expectSignature(signed: sign.Signed, signed_headers: []const u8, signature: []const u8) !void {
     var buf: [512]u8 = undefined;
-    const want = try std.fmt.bufPrint(&buf, "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders={s}, Signature={s}", .{ signed_headers, signature });
+    const want = try std.mem.print(&buf, "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders={s}, Signature={s}", .{ signed_headers, signature });
     try std.testing.expectEqualStrings(want, header(signed, "authorization").?);
 }
 
@@ -147,7 +147,7 @@ test "sign > path style, session token and missing credentials" {
     try std.testing.expectEqualStrings("http://localhost:9000/my%20bucket/a%20b/c%2Bd.txt", signed.url);
     try std.testing.expectEqualStrings("tok", header(signed, "x-amz-security-token").?);
     try std.testing.expectEqualStrings("UNSIGNED-PAYLOAD", header(signed, "x-amz-content-sha256").?);
-    try std.testing.expect(std.mem.indexOf(u8, header(signed, "authorization").?, "/auto/s3/aws4_request") != null);
+    try std.testing.expect(std.mem.find(u8, header(signed, "authorization").?, "/auto/s3/aws4_request") != null);
     try std.testing.expectError(error.InvalidOptions, sign.sign(c, arena.allocator(), 0, .{ .method = "GET", .key = "a", .headers = &.{.{ .name = "x-a", .value = "1\r\n2" }} }));
 
     c.secret_access_key = "";
@@ -382,7 +382,7 @@ fn withS3(comptime bucket_name: []const u8, comptime case: fn (s3: *S3) anyerror
         .allocator = gpa,
         .access_key_id = "test-key",
         .secret_access_key = "test-secret",
-        .endpoint = try std.fmt.bufPrint(&buf, "http://127.0.0.1:{d}/s3", .{harness.tcp.?.port}),
+        .endpoint = try std.mem.print(&buf, "http://127.0.0.1:{d}/s3", .{harness.tcp.?.port}),
         .bucket_name = bucket_name,
     };
     try case(&s3);
@@ -529,9 +529,9 @@ test "s3 > presigned URLs" {
             const url = try s3.bucket().presign(gpa, "a b.txt", .{ .method = .PUT, .expires = 60 });
             defer gpa.free(url);
             try std.testing.expect(std.mem.startsWith(u8, url, "http://127.0.0.1:"));
-            try std.testing.expect(std.mem.indexOf(u8, url, "/s3/presign/a%20b.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=test-key%2F") != null);
-            try std.testing.expect(std.mem.indexOf(u8, url, "&X-Amz-Expires=60&") != null);
-            try std.testing.expect(std.mem.indexOf(u8, url, "&X-Amz-Signature=") != null);
+            try std.testing.expect(std.mem.find(u8, url, "/s3/presign/a%20b.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=test-key%2F") != null);
+            try std.testing.expect(std.mem.find(u8, url, "&X-Amz-Expires=60&") != null);
+            try std.testing.expect(std.mem.find(u8, url, "&X-Amz-Signature=") != null);
         }
     }.run);
 }

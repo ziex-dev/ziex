@@ -30,7 +30,7 @@ pub const Scram = struct {
     /// Postgres ignores the SCRAM user name (it uses the startup message), so pass "*".
     pub fn init(user: []const u8, nonce: []const u8) Error!Scram {
         var self: Scram = .{};
-        const prefix = std.fmt.bufPrint(&self.first_bare_buf, "n={s},r=", .{user}) catch return Error.BufferTooSmall;
+        const prefix = std.mem.print(&self.first_bare_buf, "n={s},r=", .{user}) catch return Error.BufferTooSmall;
         self.nonce_start = prefix.len;
         if (prefix.len + nonce.len > self.first_bare_buf.len) return Error.BufferTooSmall;
         @memcpy(self.first_bare_buf[prefix.len..][0..nonce.len], nonce);
@@ -55,7 +55,7 @@ pub const Scram = struct {
 
     /// client-first-message: GS2 header (no channel binding) + bare message.
     pub fn clientFirst(self: *const Scram, buf: []u8) Error![]const u8 {
-        return std.fmt.bufPrint(buf, "n,,{s}", .{self.firstBare()}) catch Error.BufferTooSmall;
+        return std.mem.print(buf, "n,,{s}", .{self.firstBare()}) catch Error.BufferTooSmall;
     }
 
     /// client-final-message for the given server-first-message; caller owns the result.
@@ -91,9 +91,9 @@ pub const Scram = struct {
         try std.crypto.pwhash.pbkdf2(&salted, password, salt, iterations, HmacSha256);
         defer std.crypto.secureZero(u8, &salted);
 
-        const without_proof = try std.fmt.allocPrint(gpa, "c=biws,r={s}", .{server_nonce});
+        const without_proof = try gpa.print("c=biws,r={s}", .{server_nonce});
         defer gpa.free(without_proof);
-        const auth_message = try std.fmt.allocPrint(gpa, "{s},{s},{s}", .{ self.firstBare(), server_first, without_proof });
+        const auth_message = try gpa.print("{s},{s},{s}", .{ self.firstBare(), server_first, without_proof });
         defer gpa.free(auth_message);
 
         const client_key = hmac(&salted, "Client Key");
@@ -108,7 +108,7 @@ pub const Scram = struct {
         self.awaiting_final = true;
 
         var proof_b64: [b64.Encoder.calcSize(proof.len)]u8 = undefined;
-        return std.fmt.allocPrint(gpa, "{s},p={s}", .{ without_proof, b64.Encoder.encode(&proof_b64, &proof) });
+        return gpa.print("{s},p={s}", .{ without_proof, b64.Encoder.encode(&proof_b64, &proof) });
     }
 
     pub fn verifyServerFinal(self: *Scram, server_final: []const u8) Error!void {

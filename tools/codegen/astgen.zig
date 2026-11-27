@@ -84,7 +84,7 @@ pub const Editor = struct {
 
 pub const File = struct {
     arena: std.heap.ArenaAllocator,
-    decls: std.ArrayListUnmanaged(*DeclNode),
+    decls: std.ArrayList(*DeclNode),
 
     pub fn init(child_allocator: std.mem.Allocator) File {
         return .{ .arena = std.heap.ArenaAllocator.init(child_allocator), .decls = .empty };
@@ -256,8 +256,8 @@ pub const ContainerDecl = struct {
     name: []const u8,
     doc: []const u8,
     tag_type: []const u8,
-    fields: std.ArrayListUnmanaged(Field),
-    methods: std.ArrayListUnmanaged(*FnDecl),
+    fields: std.ArrayList(Field),
+    methods: std.ArrayList(*FnDecl),
 
     pub fn addField(self: *ContainerDecl, allocator: std.mem.Allocator, doc: []const u8, name: []const u8, type_expr: []const u8, default_expr: ?[]const u8) !void {
         try self.fields.append(allocator, .{

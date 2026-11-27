@@ -202,7 +202,7 @@ test "event > no header renders page" {
         fn run(h: *Harness, arena: Allocator) !void {
             const get = try h.fetch(arena, .{ .path = "/events" });
             try expectEqual(@as(u16, 200), get.status);
-            try expect(std.mem.indexOf(u8, get.body, "<button") != null);
+            try expect(std.mem.find(u8, get.body, "<button") != null);
 
             const post = try h.fetch(arena, .{
                 .method = .POST,
@@ -211,7 +211,7 @@ test "event > no header renders page" {
                 .body = try eventBody(arena, "ignored", &.{}),
             });
             try expectEqual(@as(u16, 200), post.status);
-            try expect(std.mem.indexOf(u8, post.body, "<button") != null);
+            try expect(std.mem.find(u8, post.body, "<button") != null);
 
             try expectNoEventCalls();
         }
@@ -225,10 +225,10 @@ test "action > forms carry id" {
         fn run(h: *Harness, arena: Allocator) !void {
             const res = try h.fetch(arena, .{ .path = "/actions" });
             try expectEqual(@as(u16, 200), res.status);
-            try expect(std.mem.indexOf(u8, res.body, "method=\"post\" enctype=\"multipart/form-data\"") != null);
+            try expect(std.mem.find(u8, res.body, "method=\"post\" enctype=\"multipart/form-data\"") != null);
             inline for (.{ actions.onProfile, actions.onGreet, actions.onAdd, actions.onDirect }) |s| {
                 const needle = try arena.print("name=\"__$action\" value=\"{s}\"", .{idStr(arena, s)});
-                if (std.mem.indexOf(u8, res.body, needle) == null) {
+                if (std.mem.find(u8, res.body, needle) == null) {
                     std.debug.print("missing `{s}` in:\n{s}\n", .{ needle, res.body });
                     return error.MissingActionId;
                 }
@@ -249,7 +249,7 @@ test "action > native multipart" {
                 .{ "nickname", "ada" },
             });
             try expectEqual(@as(u16, 200), res.status);
-            try expect(std.mem.indexOf(u8, res.body, "<form") != null);
+            try expect(std.mem.find(u8, res.body, "<form") != null);
             try expectEqual(@as(u32, 1), actions.calls.profile);
             try expectEqualStrings("Ada Lovelace", actions.calls.name());
             try expectEqual(@as(i32, 36), actions.calls.age);
@@ -270,7 +270,7 @@ test "action > native urlencoded" {
                 .body = body,
             });
             try expectEqual(@as(u16, 200), res.status);
-            try expect(std.mem.indexOf(u8, res.body, "<form") != null);
+            try expect(std.mem.find(u8, res.body, "<form") != null);
             try expectEqual(@as(u32, 1), actions.calls.profile);
             try expectEqualStrings("Grace Hopper", actions.calls.name());
             try expectEqual(@as(i32, 85), actions.calls.age);
@@ -375,7 +375,7 @@ test "action > non-numeric id ignored" {
         fn run(h: *Harness, arena: Allocator) !void {
             const res = try postMultipart(h, arena, "/actions", null, &.{.{ "__$action", "abc" }});
             try expectEqual(@as(u16, 200), res.status);
-            try expect(std.mem.indexOf(u8, res.body, "<form") != null);
+            try expect(std.mem.find(u8, res.body, "<form") != null);
             try expectNoActionCalls();
         }
     }.run);
@@ -471,7 +471,7 @@ fn expectStates(arena: Allocator, body: []const u8, expected: []const []const u8
 
 fn expectContentType(res: FetchResult, expected: []const u8) !void {
     const ct = res.header("content-type") orelse return error.MissingContentType;
-    try expect(std.mem.indexOf(u8, ct, expected) != null);
+    try expect(std.mem.find(u8, ct, expected) != null);
 }
 
 fn expectNoEventCalls() !void {

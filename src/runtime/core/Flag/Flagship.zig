@@ -56,12 +56,12 @@ fn rest(f: *Flagship, arena: std.mem.Allocator, key: []const u8, context: Flag.C
     const app_id = f.app_id orelse return error.ProviderNotReady;
     const token = f.api_token orelse return error.ProviderNotReady;
 
-    const url = std.fmt.allocPrint(arena, "{s}/accounts/{s}/flagship/apps/{s}/evaluate", .{
+    const url = arena.print("{s}/accounts/{s}/flagship/apps/{s}/evaluate", .{
         std.mem.trimEnd(u8, f.base_url, "/"), account_id, app_id,
     }) catch return error.General;
     const headers = [_]http.Header{
         .{ .name = "content-type", .value = "application/json" },
-        .{ .name = "authorization", .value = std.fmt.allocPrint(arena, "Bearer {s}", .{token}) catch return error.General },
+        .{ .name = "authorization", .value = arena.print("Bearer {s}", .{token}) catch return error.General },
     };
 
     const res = try wire.post(f.io, arena, url, &headers, .{ .flagKey = key, .context = context });
@@ -85,7 +85,7 @@ fn evaluate(arena: std.mem.Allocator, binding: []const u8, key: []const u8, kind
         .int, .float => .{ "getNumberDetails", "0" },
         .object => .{ "getObjectDetails", "{}" },
     };
-    const args = std.fmt.allocPrint(arena, "[{f},{s},{s}]", .{
+    const args = arena.print("[{f},{s},{s}]", .{
         std.json.fmt(key, .{}), default, try wire.json(arena, context),
     }) catch return error.General;
 

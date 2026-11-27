@@ -61,10 +61,10 @@ pub fn collect(a: std.mem.Allocator, io: std.Io) !Stats {
     var file_count: u64 = 0;
     var lang_lines: [CODE_EXTS.len]u64 = @splat(0);
     for (tracked) |rel| {
-        const ext = std.fs.path.extension(rel);
+        const ext = std.Io.Dir.path.extension(rel);
         const li = extIndex(ext) orelse continue;
         file_count += 1;
-        const full = try std.fs.path.join(a, &.{ repo_root, rel });
+        const full = try std.Io.Dir.path.join(a, &.{ repo_root, rel });
         const stat = statFile(io, full) orelse continue;
         total_bytes += stat.size;
         const lines = stat.lines;
@@ -84,7 +84,7 @@ pub fn collect(a: std.mem.Allocator, io: std.Io) !Stats {
 
     const commits_per_month = blk: {
         const log = try gitOutAt(a, io, repo_root, &.{ "log", "--format=%ad", "--date=format:%Y-%m" });
-        var counts = std.array_list.Managed(MonthCount).init(a);
+        var counts: std.ArrayList(MonthCount) = .empty;
         try tallyMonths(a, log, &counts);
         break :blk counts.items;
     };
@@ -118,9 +118,9 @@ const Acc = struct {
 };
 
 fn getTimeline(a: std.mem.Allocator, io: std.Io, repo_root: []const u8) ![]const TimelineEntry {
-    var args = std.array_list.Managed([]const u8).init(a);
-    try args.appendSlice(&.{ "log", "--reverse", "--format=__C__%ad %aE", "--date=format:%Y-%m", "--numstat", "--" });
-    for (CODE_EXTS) |ext| try args.append(try a.print("*{s}", .{ext}));
+    var args: std.ArrayList([]const u8) = .empty;
+    try args.appendSlice(a, &.{ "log", "--reverse", "--format=__C__%ad %aE", "--date=format:%Y-%m", "--numstat", "--" });
+    for (CODE_EXTS) |ext| try args.append(a, try a.print("*{s}", .{ext}));
 
     const log = try gitOutAt(a, io, repo_root, args.items);
 
@@ -137,7 +137,7 @@ fn getTimeline(a: std.mem.Allocator, io: std.Io, repo_root: []const u8) ![]const
         if (std.mem.startsWith(u8, line, "__C__")) {
             acc.commits += 1;
             const rest = line["__C__".len..];
-            const sp = std.mem.indexOfScalar(u8, rest, ' ') orelse continue;
+            const sp = std.mem.findScalar(u8, rest, ' ') orelse continue;
             const ym = rest[0..sp]; // YYYY-MM
             const email = rest[sp + 1 ..];
             if (cur == null) cur = try a.dupe(u8, ym);
@@ -188,7 +188,7 @@ fn fetchStarCount(a: std.mem.Allocator, io: std.Io) !u64 {
 }
 
 fn getStarTimeline(a: std.mem.Allocator, io: std.Io) ![]const StarEntry {
-    var dates = std.array_list.Managed([]const u8).init(a);
+    var dates: std.ArrayList([]const u8) = .empty;
     var page: usize = 1;
     while (page <= 20) : (page += 1) {
         const url = try a.print("https://api.github.com/repos/{s}/stargazers?per_page=100&page={d}", .{ REPO, page });
@@ -198,10 +198,10 @@ fn getStarTimeline(a: std.mem.Allocator, io: std.Io) ![]const StarEntry {
         _ = it.next(); // before first match
         while (it.next()) |chunk| {
             // chunk starts with ` "YYYY-MM-...`
-            const q1 = std.mem.indexOfScalar(u8, chunk, '"') orelse continue;
+            const q1 = std.mem.findScalar(u8, chunk, '"') orelse continue;
             if (chunk.len < q1 + 8) continue;
             const ym = chunk[q1 + 1 .. q1 + 8]; // YYYY-MM
-            try dates.append(try a.dupe(u8, ym));
+            try dates.append(a, try a.dupe(u8, ym));
             got += 1;
         }
         if (got < 100) break;
@@ -231,9 +231,9 @@ fn gitOut(a: std.mem.Allocator, io: std.Io, args: []const []const u8) ![]const u
 }
 
 fn gitOutAt(a: std.mem.Allocator, io: std.Io, cwd: []const u8, args: []const []const u8) ![]const u8 {
-    var argv = std.array_list.Managed([]const u8).init(a);
-    try argv.append("git");
-    try argv.appendSlice(args);
+    var argv: std.ArrayList([]const u8) = .empty;
+    try argv.append(a, "git");
+    try argv.appendSlice(a, args);
     return run(a, io, argv.items, cwd);
 }
 
@@ -306,11 +306,11 @@ fn extIndex(ext: []const u8) ?usize {
 
 fn lsFiles(a: std.mem.Allocator, io: std.Io, repo_root: []const u8) ![][]const u8 {
     const s = try gitOutAt(a, io, repo_root, &.{"ls-files"});
-    var list = std.array_list.Managed([]const u8).init(a);
+    var list: std.ArrayList([]const u8) = .empty;
     var it = std.mem.splitScalar(u8, s, '\n');
     while (it.next()) |line| {
         if (line.len == 0) continue;
-        try list.append(line);
+        try list.append(a, line);
     }
     return list.items;
 }
@@ -330,20 +330,20 @@ fn countNonEmptyLines(s: []const u8) u64 {
 }
 
 fn countMatches(a: std.mem.Allocator, io: std.Io, repo_root: []const u8) !u64 {
-    var args = std.array_list.Managed([]const u8).init(a);
-    try args.appendSlice(&.{ "grep", "-I", "-E", "TODO|FIXME", "--" });
-    for (CODE_EXTS) |ext| try args.append(try a.print("*{s}", .{ext}));
+    var args: std.ArrayList([]const u8) = .empty;
+    try args.appendSlice(a, &.{ "grep", "-I", "-E", "TODO|FIXME", "--" });
+    for (CODE_EXTS) |ext| try args.append(a, try a.print("*{s}", .{ext}));
     const s = gitOutAt(a, io, repo_root, args.items) catch return 0;
     return countNonEmptyLines(s);
 }
 
 fn firstLine(a: std.mem.Allocator, s: []const u8) ![]const u8 {
     _ = a;
-    const nl = std.mem.indexOfScalar(u8, s, '\n') orelse return s;
+    const nl = std.mem.findScalar(u8, s, '\n') orelse return s;
     return s[0..nl];
 }
 
-fn tallyMonths(a: std.mem.Allocator, log: []const u8, out: *std.array_list.Managed(MonthCount)) !void {
+fn tallyMonths(a: std.mem.Allocator, log: []const u8, out: *std.ArrayList(MonthCount)) !void {
     var it = std.mem.splitScalar(u8, log, '\n');
     while (it.next()) |line| {
         const m = std.mem.trim(u8, line, " \r");
@@ -356,7 +356,7 @@ fn tallyMonths(a: std.mem.Allocator, log: []const u8, out: *std.array_list.Manag
                 break;
             }
         }
-        if (!found) try out.append(.{ .month = try a.dupe(u8, m), .count = 1 });
+        if (!found) try out.append(a, .{ .month = try a.dupe(u8, m), .count = 1 });
     }
     std.mem.sort(MonthCount, out.items, {}, struct {
         fn lt(_: void, x: MonthCount, y: MonthCount) bool {
@@ -366,7 +366,7 @@ fn tallyMonths(a: std.mem.Allocator, log: []const u8, out: *std.array_list.Manag
 }
 
 fn findIntField(body: []const u8, key: []const u8) ?u64 {
-    const i = std.mem.indexOf(u8, body, key) orelse return null;
+    const i = std.mem.find(u8, body, key) orelse return null;
     var j = i + key.len;
     while (j < body.len and (body[j] == ' ' or body[j] == '"')) j += 1;
     var k = j;

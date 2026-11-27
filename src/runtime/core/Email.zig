@@ -53,7 +53,7 @@ pub const Address = struct {
     pub fn parse(text: []const u8) Error!Address {
         const s = std.mem.trim(u8, text, " \t");
         const addr: Address = if (std.mem.endsWith(u8, s, ">")) blk: {
-            const lt = std.mem.lastIndexOfScalar(u8, s, '<') orelse return error.InvalidAddress;
+            const lt = std.mem.findScalarLast(u8, s, '<') orelse return error.InvalidAddress;
             var name = std.mem.trim(u8, s[0..lt], " \t");
             if (name.len >= 2 and name[0] == '"' and name[name.len - 1] == '"') name = name[1 .. name.len - 1];
             break :blk .{ .email = s[lt + 1 .. s.len - 1], .name = if (name.len > 0) name else null };
@@ -63,7 +63,7 @@ pub const Address = struct {
     }
 
     pub fn validate(a: Address) Error!void {
-        const at = std.mem.lastIndexOfScalar(u8, a.email, '@') orelse return error.InvalidAddress;
+        const at = std.mem.findScalarLast(u8, a.email, '@') orelse return error.InvalidAddress;
         if (at == 0 or at == a.email.len - 1) return error.InvalidAddress;
         for (a.email) |c| switch (c) {
             0...' ', 0x7f, '<', '>', '(', ')', ',', ';', ':', '"', '\\', '[', ']' => return error.InvalidAddress,
@@ -163,7 +163,7 @@ pub fn send(e: Email, gpa: std.mem.Allocator, message: Message) Error!Sent {
 }
 
 fn hasLineBreak(s: []const u8) bool {
-    return std.mem.indexOfAny(u8, s, "\r\n") != null;
+    return std.mem.findAny(u8, s, "\r\n") != null;
 }
 
 fn dupeOpt(arena: std.mem.Allocator, s: ?[]const u8) std.mem.Allocator.Error!?[]const u8 {

@@ -41,7 +41,7 @@ pub fn render(w: *std.Io.Writer, label: ?[]const u8) !void {
     const text = truncate(std.mem.trim(u8, label orelse "", " \t\r\n"));
     if (text.len == 0) return w.writeAll(src);
 
-    const end = std.mem.lastIndexOf(u8, src, "</svg>") orelse return error.InvalidBanner;
+    const end = std.mem.findLast(u8, src, "</svg>") orelse return error.InvalidBanner;
     try w.writeAll(src[0..end]);
     try writeTag(w, text);
     try w.writeAll(src[end..]);

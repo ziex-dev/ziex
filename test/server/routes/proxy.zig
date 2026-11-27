@@ -17,7 +17,7 @@ pub const root = struct {
         ctx.next();
         trace(ctx.response, ctx.arena, "<root");
         // The handler's status is visible after next().
-        ctx.response.headers.set("x-seen-status", try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.response.status()}));
+        ctx.response.headers.set("x-seen-status", try ctx.arena.print("{d}", .{ctx.response.status()}));
     }
 
     pub fn GET(ctx: zx.RouteContext) void {

@@ -183,7 +183,7 @@ test "api > value types round-trip" {
         try t.expect(row.boolean("flag"));
         try t.expectEqualStrings("héllo ✓", row.text("s"));
         try t.expectEqualSlices(u8, &blob, row.get("vb").?.blob);
-        try t.expect(std.mem.indexOf(u8, row.text("j"), "[1, 2]") != null);
+        try t.expect(std.mem.find(u8, row.text("j"), "[1, 2]") != null);
     }
 }
 
@@ -331,7 +331,7 @@ test "api > bad credentials fail at open" {
     var parsed = try zx.Db.Mysql.uri.parse(t.allocator, url);
     defer parsed.deinit();
 
-    const bad = try std.fmt.allocPrint(t.allocator, "mysql://{s}:definitely-wrong@{s}:{d}/{s}?sslmode={s}", .{
+    const bad = try t.allocator.print("mysql://{s}:definitely-wrong@{s}:{d}/{s}?sslmode={s}", .{
         parsed.user, parsed.host, parsed.port, parsed.database orelse "", @tagName(parsed.sslmode),
     });
     defer t.allocator.free(bad);
@@ -349,8 +349,8 @@ test "api > readonly option rejects writes" {
 fn urlWith(param: []const u8) ![]u8 {
     const url = try testUrl();
     defer t.allocator.free(url);
-    const sep: u8 = if (std.mem.indexOfScalar(u8, url, '?') == null) '?' else '&';
-    return std.fmt.allocPrint(t.allocator, "{s}{c}{s}", .{ url, sep, param });
+    const sep: u8 = if (std.mem.findScalar(u8, url, '?') == null) '?' else '&';
+    return t.allocator.print("{s}{c}{s}", .{ url, sep, param });
 }
 
 fn cipher(database: Db) ![]u8 {
@@ -405,7 +405,7 @@ test "api > statement cache is bounded and can be disabled" {
         var database = try Mysql.open(t.allocator, t.io, url, .{ .max_pool_size = 1 });
         defer database.deinit();
         for (1..6) |i| {
-            const sql = try std.fmt.allocPrint(t.allocator, "SELECT {d} + ? AS v", .{i});
+            const sql = try t.allocator.print("SELECT {d} + ? AS v", .{i});
             defer t.allocator.free(sql);
             _ = try database.run(sql, .{1});
         }

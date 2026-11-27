@@ -9,11 +9,11 @@ const gpa = zx.allocator;
 pub const Os = enum { mac, windows, linux, other };
 
 pub fn fromUserAgent(ua: []const u8) Os {
-    if (std.mem.indexOf(u8, ua, "Windows NT") != null) return .windows;
-    if (std.mem.indexOf(u8, ua, "Android") != null) return .other;
-    if (std.mem.indexOf(u8, ua, "iPhone") != null or std.mem.indexOf(u8, ua, "iPad") != null) return .other;
-    if (std.mem.indexOf(u8, ua, "Macintosh") != null or std.mem.indexOf(u8, ua, "Mac OS X") != null) return .mac;
-    if (std.mem.indexOf(u8, ua, "Linux") != null) return .linux;
+    if (std.mem.find(u8, ua, "Windows NT") != null) return .windows;
+    if (std.mem.find(u8, ua, "Android") != null) return .other;
+    if (std.mem.find(u8, ua, "iPhone") != null or std.mem.find(u8, ua, "iPad") != null) return .other;
+    if (std.mem.find(u8, ua, "Macintosh") != null or std.mem.find(u8, ua, "Mac OS X") != null) return .mac;
+    if (std.mem.find(u8, ua, "Linux") != null) return .linux;
     return .other;
 }
 

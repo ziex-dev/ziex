@@ -150,12 +150,12 @@ pub fn parseOidcUser(arena: std.mem.Allocator, body: []const u8) !Identity {
 // Numeric ids are stable; logins can be renamed and re-registered by someone else.
 fn parseGitHubUser(arena: std.mem.Allocator, body: []const u8) !Identity {
     const user = try std.json.parseFromSliceLeaky(struct { id: u64, login: []const u8 }, arena, body, .{ .ignore_unknown_fields = true });
-    return .{ .id = try std.fmt.allocPrint(arena, "{d}", .{user.id}), .name = user.login };
+    return .{ .id = try arena.print("{d}", .{user.id}), .name = user.login };
 }
 
 fn parseGitLabUser(arena: std.mem.Allocator, body: []const u8) !Identity {
     const user = try std.json.parseFromSliceLeaky(struct { id: u64, username: []const u8 }, arena, body, .{ .ignore_unknown_fields = true });
-    return .{ .id = try std.fmt.allocPrint(arena, "{d}", .{user.id}), .name = user.username };
+    return .{ .id = try arena.print("{d}", .{user.id}), .name = user.username };
 }
 
 fn parseDiscordUser(arena: std.mem.Allocator, body: []const u8) !Identity {
@@ -197,7 +197,7 @@ pub const Callback = struct { state: ?[]const u8, code: ?[]const u8, @"error": ?
 
 pub fn authorizeUrl(arena: std.mem.Allocator, p: Provider, cfg: Config, redirect_uri: []const u8, flow: Flow) ![]const u8 {
     var out: std.Io.Writer.Allocating = .init(arena);
-    try out.writer.print("{s}{c}response_type=code", .{ p.authorize_url, @as(u8, if (std.mem.indexOfScalar(u8, p.authorize_url, '?') == null) '?' else '&') });
+    try out.writer.print("{s}{c}response_type=code", .{ p.authorize_url, @as(u8, if (std.mem.findScalar(u8, p.authorize_url, '?') == null) '?' else '&') });
     try param(&out.writer, "client_id", cfg.client_id);
     try param(&out.writer, "redirect_uri", redirect_uri);
     if (p.scope.len > 0) try param(&out.writer, "scope", p.scope);
@@ -247,7 +247,7 @@ pub fn accessToken(arena: std.mem.Allocator, body: []const u8) ![]const u8 {
     if (token.@"error" != null) return error.TokenExchangeFailed;
     const value = token.access_token orelse return error.TokenExchangeFailed;
     if (value.len == 0) return error.TokenExchangeFailed;
-    for (value) |c| if (!(std.ascii.isAlphanumeric(c) or std.mem.indexOfScalar(u8, "-._~+/=", c) != null)) return error.TokenExchangeFailed;
+    for (value) |c| if (!(std.ascii.isAlphanumeric(c) or std.mem.findScalar(u8, "-._~+/=", c) != null)) return error.TokenExchangeFailed;
     return value;
 }
 
@@ -257,7 +257,7 @@ pub fn userRequest(arena: std.mem.Allocator, p: Provider, access_token: []const 
         .url = p.user_url,
         .headers = try arena.dupe(std.http.Header, &.{
             .{ .name = "Accept", .value = "application/json" },
-            .{ .name = "Authorization", .value = try std.fmt.allocPrint(arena, "Bearer {s}", .{access_token}) },
+            .{ .name = "Authorization", .value = try arena.print("Bearer {s}", .{access_token}) },
         }),
     };
 }
@@ -343,5 +343,5 @@ fn param(w: *std.Io.Writer, name: []const u8, value: []const u8) !void {
 }
 
 fn isUnreserved(c: u8) bool {
-    return std.ascii.isAlphanumeric(c) or std.mem.indexOfScalar(u8, "-._~", c) != null;
+    return std.ascii.isAlphanumeric(c) or std.mem.findScalar(u8, "-._~", c) != null;
 }

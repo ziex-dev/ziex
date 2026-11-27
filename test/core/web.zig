@@ -10,7 +10,7 @@ const wasm = "\x00asm\x01\x00\x00\x00" ++
     "\x03env\x01x\x00\x00";
 
 test "webglue reads only __zx_web imports" {
-    var names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var names: std.ArrayList([]const u8) = .empty;
     defer names.deinit(std.testing.allocator);
     try webglue.importNames(std.testing.allocator, wasm, webglue.module_name, &names);
     try std.testing.expectEqual(@as(usize, 1), names.items.len);

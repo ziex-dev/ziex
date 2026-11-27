@@ -17,11 +17,11 @@ test "formatting" {
 
     // std.debug.print("\nGenerated CSS: {s}\n", .{result});
 
-    try std.testing.expect(std.mem.indexOf(u8, result, "display: flex;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "flex-direction: column;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "background-color: #ff0000;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "padding-top: 10px;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "width: 100px;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "display: flex;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "flex-direction: column;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "background-color: #ff0000;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "padding-top: 10px;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "width: 100px;") != null);
 }
 
 test "in component" {
@@ -72,8 +72,8 @@ test "pseudo-states" {
     const result = try std.testing.allocator.print("{f}", .{style});
     defer std.testing.allocator.free(result);
 
-    try std.testing.expect(std.mem.indexOf(u8, result, "background-color: #0000ff;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "hover { background-color: #ff0000; }") != null);
+    try std.testing.expect(std.mem.find(u8, result, "background-color: #0000ff;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "hover { background-color: #ff0000; }") != null);
 }
 
 test "shorthands" {
@@ -85,8 +85,8 @@ test "shorthands" {
     const result = try std.testing.allocator.print("{f}", .{style});
     defer std.testing.allocator.free(result);
 
-    try std.testing.expect(std.mem.indexOf(u8, result, "padding: 10px 20px;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "margin: 5px 10px 15px 20px;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "padding: 10px 20px;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "margin: 5px 10px 15px 20px;") != null);
 }
 
 test "viewport units and calc" {
@@ -100,7 +100,7 @@ test "viewport units and calc" {
     const result = try std.testing.allocator.print("{f}", .{style});
     defer std.testing.allocator.free(result);
 
-    try std.testing.expect(std.mem.indexOf(u8, result, "min-height: 60vh;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "width: 100vw;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "max-width: calc((960px - 48px));") != null);
+    try std.testing.expect(std.mem.find(u8, result, "min-height: 60vh;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "width: 100vw;") != null);
+    try std.testing.expect(std.mem.find(u8, result, "max-width: calc((960px - 48px));") != null);
 }

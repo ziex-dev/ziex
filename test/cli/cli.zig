@@ -123,7 +123,7 @@ test "init → build" {
     defer allocator.free(test_dir_abs);
 
     // Update build.zig.zon to use the local zx dependency, copy local_zon_str to build.zig.zon
-    const build_zig_zon_path = try std.fs.path.join(allocator, &.{ test_dir_abs, "build.zig.zon" });
+    const build_zig_zon_path = try std.Io.Dir.path.join(allocator, &.{ test_dir_abs, "build.zig.zon" });
     defer allocator.free(build_zig_zon_path);
     var build_zig_zon = try std.Io.Dir.openDirAbsolute(std.testing.io, test_dir_abs, .{});
     defer build_zig_zon.close(std.testing.io);
@@ -149,21 +149,21 @@ test "dev > lifecycle" {
 
     const test_dir_abs = try getTestDirPath();
     defer allocator.free(test_dir_abs);
-    const page_path = try std.fs.path.join(allocator, &.{ test_dir_abs, "app", "pages", "page.zx" });
+    const page_path = try std.Io.Dir.path.join(allocator, &.{ test_dir_abs, "app", "pages", "page.zx" });
     defer allocator.free(page_path);
     const original = try std.Io.Dir.cwd().readFileAlloc(io, page_path, allocator, .limited(1024 * 1024));
     defer allocator.free(original);
     defer writePage(page_path, original, &.{}) catch {};
 
     const anchor = "Build full-stack web apps with Zig.";
-    try std.testing.expect(std.mem.indexOf(u8, original, anchor) != null);
+    try std.testing.expect(std.mem.find(u8, original, anchor) != null);
 
     var dev = try DevSession.start(io, test_dir_abs);
     defer dev.deinit();
 
     const port = try dev.waitForPort(0, 180_000);
     try dev.expectPage(port, anchor, 30_000);
-    try std.testing.expect(std.mem.indexOf(u8, dev.snapshot(), "- v" ++ zx.info.version) != null);
+    try std.testing.expect(std.mem.find(u8, dev.snapshot(), "- v" ++ zx.info.version) != null);
 
     var mark = dev.len();
     try writePage(page_path, original, &.{.{ anchor, "zx-dev-change-1" }});
@@ -190,7 +190,7 @@ test "dev > leaks" {
 
     const test_dir_abs = try getTestDirPath();
     defer allocator.free(test_dir_abs);
-    const page_path = try std.fs.path.join(allocator, &.{ test_dir_abs, "app", "pages", "page.zx" });
+    const page_path = try std.Io.Dir.path.join(allocator, &.{ test_dir_abs, "app", "pages", "page.zx" });
     defer allocator.free(page_path);
     const original = try std.Io.Dir.cwd().readFileAlloc(io, page_path, allocator, .limited(1024 * 1024));
     defer allocator.free(original);
@@ -199,7 +199,7 @@ test "dev > leaks" {
     const anchor = "Build full-stack web apps with Zig.";
     const body_start = "    const query = ctx.request.query;\n";
     const leak = body_start ++ "    _ = zx.allocator.alloc(u8, 16) catch {};\n";
-    try std.testing.expect(std.mem.indexOf(u8, original, body_start) != null);
+    try std.testing.expect(std.mem.find(u8, original, body_start) != null);
     try writePage(page_path, original, &.{ .{ body_start, leak }, .{ anchor, "zx-dev-leak-0" } });
 
     var dev = try DevSession.start(io, test_dir_abs);
@@ -251,7 +251,7 @@ test "build --static" {
             "events.html",
             "db.html",
             "kv.html",
-            "assets" ++ std.fs.path.sep_str ++ "style.css",
+            "assets" ++ std.Io.Dir.path.sep_str ++ "style.css",
             "favicon.ico",
         },
         .expected_files = &.{
@@ -399,11 +399,11 @@ test "init -t <remote>" {
 
 test "fmt" {
     try test_cmd(.{
-        .args = &.{ "fmt", "app" ++ std.fs.path.sep_str ++ "pages" },
+        .args = &.{ "fmt", "app" ++ std.Io.Dir.path.sep_str ++ "pages" },
         .expected_exit_code = 0,
         .expected_stdout_strings = &.{
-            // "app" ++ std.fs.path.sep_str ++ "pages" ++ std.fs.path.sep_str ++ "layout.zx",
-            // "app" ++ std.fs.path.sep_str ++ "pages" ++ std.fs.path.sep_str ++ "page.zx",
+            // "app" ++ std.Io.Dir.path.sep_str ++ "pages" ++ std.Io.Dir.path.sep_str ++ "layout.zx",
+            // "app" ++ std.Io.Dir.path.sep_str ++ "pages" ++ std.Io.Dir.path.sep_str ++ "page.zx",
         },
     });
 }
@@ -472,13 +472,13 @@ fn test_cmd(options: TestCmdOptions) !void {
     }
 
     for (options.expected_stderr_strings) |expected_string| {
-        if (std.mem.indexOf(u8, result.stderr, expected_string) == null) {
+        if (std.mem.find(u8, result.stderr, expected_string) == null) {
             std.debug.print("\nExpected stderr to contain: '{s}'\nActual stderr:\n{s}\n", .{ expected_string, result.stderr });
             return error.TestExpectedEqual;
         }
     }
     for (options.expected_stdout_strings) |expected_string| {
-        if (std.mem.indexOf(u8, result.stdout, expected_string) == null) {
+        if (std.mem.find(u8, result.stdout, expected_string) == null) {
             std.debug.print("\nExpected stdout to contain: '{s}'\nActual stdout:\n{s}\n", .{ expected_string, result.stdout });
             return error.TestExpectedEqual;
         }
@@ -509,7 +509,7 @@ fn test_cmd(options: TestCmdOptions) !void {
                 try expected_file_path.append(allocator, part);
             }
         }
-        const expected_file_path_str = try std.fs.path.join(allocator, expected_file_path.items);
+        const expected_file_path_str = try std.Io.Dir.path.join(allocator, expected_file_path.items);
         defer allocator.free(expected_file_path_str);
 
         const file_stat = std.Io.Dir.cwd().statFile(std.testing.io, expected_file_path_str, .{}) catch |err| {
@@ -526,7 +526,7 @@ fn test_cmd(options: TestCmdOptions) !void {
     }
 
     for (options.unexpected_files) |unexpected| {
-        const path = try std.fs.path.join(allocator, &.{ test_dir_abs, unexpected });
+        const path = try std.Io.Dir.path.join(allocator, &.{ test_dir_abs, unexpected });
         defer allocator.free(path);
         if (std.Io.Dir.cwd().statFile(std.testing.io, path, .{})) |_| {
             std.debug.print("\nExpected file '{s}' to not exist\n", .{unexpected});
@@ -535,22 +535,22 @@ fn test_cmd(options: TestCmdOptions) !void {
     }
 
     for (options.expected_file_contains) |fc| {
-        const path = try std.fs.path.join(allocator, &.{ test_dir_abs, fc.path });
+        const path = try std.Io.Dir.path.join(allocator, &.{ test_dir_abs, fc.path });
         defer allocator.free(path);
         const data = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, allocator, .limited(64 * 1024));
         defer allocator.free(data);
-        if (std.mem.indexOf(u8, data, fc.needle) == null) {
+        if (std.mem.find(u8, data, fc.needle) == null) {
             std.debug.print("\nExpected file '{s}' to contain: '{s}'\nActual:\n{s}\n", .{ fc.path, fc.needle, data });
             return error.TestExpectedEqual;
         }
     }
 
     for (options.expected_file_excludes) |fc| {
-        const path = try std.fs.path.join(allocator, &.{ test_dir_abs, fc.path });
+        const path = try std.Io.Dir.path.join(allocator, &.{ test_dir_abs, fc.path });
         defer allocator.free(path);
         const data = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, allocator, .limited(64 * 1024));
         defer allocator.free(data);
-        if (std.mem.indexOf(u8, data, fc.needle) != null) {
+        if (std.mem.find(u8, data, fc.needle) != null) {
             std.debug.print("\nExpected file '{s}' to NOT contain: '{s}'\nActual:\n{s}\n", .{ fc.path, fc.needle, data });
             return error.TestExpectedEqual;
         }
@@ -604,7 +604,7 @@ test "tests:afterAll" {
 
 fn getZxPath() ![]u8 {
     const zx_bin_rel = if (builtin.os.tag == .windows) "zig-out/bin/zx.exe" else "zig-out/bin/zx";
-    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const n = try std.Io.Dir.cwd().realPathFile(std.testing.io, zx_bin_rel, &buffer);
     return allocator.dupe(u8, buffer[0..n]);
 }
@@ -612,7 +612,7 @@ fn getZxPath() ![]u8 {
 fn getTestDirPath() ![]const u8 {
     const cwd = try std.process.currentPathAlloc(std.testing.io, allocator);
     defer allocator.free(cwd);
-    return try std.fs.path.join(allocator, &.{ cwd, "test/tmp" });
+    return try std.Io.Dir.path.join(allocator, &.{ cwd, "test/tmp" });
 }
 
 /// Terminate `child` and, on Windows, its descendants (`taskkill /T`).
@@ -622,7 +622,7 @@ fn killChildTree(child: *std.process.Child, io: std.Io) void {
             const pid = win32.GetProcessId(handle);
             if (pid != 0) {
                 var pid_buf: [16]u8 = undefined;
-                if (std.fmt.bufPrint(&pid_buf, "{d}", .{pid})) |pid_str| {
+                if (std.mem.print(&pid_buf, "{d}", .{pid})) |pid_str| {
                     const result = std.process.run(allocator, io, .{
                         .argv = &.{ "taskkill", "/T", "/F", "/PID", pid_str },
                         .stdout_limit = .limited(4096),
@@ -712,7 +712,7 @@ const DevSession = struct {
     fn find(self: *DevSession, needle: []const u8, since: usize) ?usize {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
-        const i = std.mem.indexOfPos(u8, self.log.items, since, needle) orelse return null;
+        const i = std.mem.findPos(u8, self.log.items, since, needle) orelse return null;
         return i + needle.len;
     }
 
@@ -751,7 +751,7 @@ const DevSession = struct {
         while (true) {
             if (httpGet(port)) |body| {
                 defer allocator.free(body);
-                if (std.mem.indexOf(u8, body, needle) != null) return;
+                if (std.mem.find(u8, body, needle) != null) return;
             } else |_| {}
             if (pastDeadline(deadline)) return self.fail("page never contained", needle);
             sleepMs(250);
@@ -796,7 +796,7 @@ const DevSession = struct {
 
     fn expectLeakSummary(self: *DevSession, since: usize) !void {
         if (self.find("memory leak", since) == null) return self.fail("missing leak summary", "memory leak");
-        if (self.find("error(DebugAllocator)", since) != null) return self.fail("raw leak trace leaked through", "error(DebugAllocator)");
+        if (self.find("error(SafeAllocator)", since) != null) return self.fail("raw leak trace leaked through", "error(SafeAllocator)");
         if (self.find("no stack trace", since) != null) return self.fail("leak without stack trace", "no stack trace");
         for ([_][]const u8{ "memory leak in `Page`", "page.zx:" }) |needle| {
             if (self.find(needle, since) == null) return self.fail("missing leak location", needle);

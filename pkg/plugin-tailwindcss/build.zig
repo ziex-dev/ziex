@@ -55,9 +55,9 @@ fn innerInitSingle(b: *std.Build, build_item: Build) !Output {
     run.addArg("--name");
     run.addArg(build_item.name orelse "tailwindcss");
     run.addArg("--output");
-    const output = run.addOutputFileArg("output.css");
+    const output = run.addOutputFileArg2("output.css", .{});
     run.addArg("--dep-file");
-    _ = run.addDepFileOutputArg("output.d");
+    _ = run.addDepFileOutputArg2("output.d", .{});
 
     if (node_path) |np| {
         run.addArg("--node-path");

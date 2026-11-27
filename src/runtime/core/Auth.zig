@@ -302,13 +302,13 @@ pub fn guard(auth: Auth, ctx: anytype, login: []const u8) ?Account {
 // `url` with `next` added as a query parameter.
 pub fn withNext(arena: std.mem.Allocator, target: []const u8, next: []const u8) ![]const u8 {
     var out: std.Io.Writer.Allocating = .init(arena);
-    try out.writer.print("{s}{c}next=", .{ target, @as(u8, if (std.mem.indexOfScalar(u8, target, '?') == null) '?' else '&') });
+    try out.writer.print("{s}{c}next=", .{ target, @as(u8, if (std.mem.findScalar(u8, target, '?') == null) '?' else '&') });
     try std.Uri.Component.percentEncode(&out.writer, next, isPathChar);
     return out.toOwnedSlice();
 }
 
 fn isPathChar(c: u8) bool {
-    return std.ascii.isAlphanumeric(c) or std.mem.indexOfScalar(u8, "-._~/", c) != null;
+    return std.ascii.isAlphanumeric(c) or std.mem.findScalar(u8, "-._~/", c) != null;
 }
 
 pub fn signOut(auth: Auth) void {
@@ -460,7 +460,7 @@ fn route(auth: Auth, pathname: []const u8) ?struct { Endpoint, []const u8 } {
     if (!std.mem.startsWith(u8, pathname, base) or pathname.len <= base.len or pathname[base.len] != '/') return null;
     const rest = pathname[base.len + 1 ..];
     if (std.meta.stringToEnum(Endpoint, rest)) |e| return if (e.takesProvider()) null else .{ e, "" };
-    const slash = std.mem.lastIndexOfScalar(u8, rest, '/') orelse return null;
+    const slash = std.mem.findScalarLast(u8, rest, '/') orelse return null;
     const e = std.meta.stringToEnum(Endpoint, rest[0..slash]) orelse return null;
     const provider = rest[slash + 1 ..];
     return if (e.takesProvider() and provider.len > 0) .{ e, provider } else null;
@@ -476,7 +476,7 @@ fn failure(auth: Auth, arena: std.mem.Allocator, page: []const u8, err: anyerror
 }
 
 fn withQuery(arena: std.mem.Allocator, page: []const u8, query: []const u8) ![]const u8 {
-    const sep: []const u8 = if (std.mem.indexOfScalar(u8, page, '?') == null) "?" else "&";
+    const sep: []const u8 = if (std.mem.findScalar(u8, page, '?') == null) "?" else "&";
     return std.mem.concat(arena, u8, &.{ page, sep, query });
 }
 

@@ -21,7 +21,7 @@ pub fn POST(ctx: zx.RouteContext) !void {
 
     if (std.mem.startsWith(u8, body.model, "dall-e")) {
         const host = ctx.request.headers.get("host") orelse "";
-        const link = try std.fmt.allocPrint(ctx.arena, "http://{s}/echo?q={s}", .{ host, body.prompt });
+        const link = try ctx.arena.print("http://{s}/echo?q={s}", .{ host, body.prompt });
         return ctx.response.json(.{ .data = .{.{ .url = link }} }, .{});
     }
 

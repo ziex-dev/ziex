@@ -18,7 +18,7 @@ pub fn isActive(url: []const u8, match: []const u8) bool {
     if (std.mem.eql(u8, match, "/")) {
         return std.mem.eql(u8, url, "/") or std.mem.endsWith(u8, url, "index.html");
     }
-    return std.mem.indexOf(u8, url, match) != null;
+    return std.mem.find(u8, url, match) != null;
 }
 
 pub fn buildUrl(allocator: std.mem.Allocator, path: []const u8) []const u8 {

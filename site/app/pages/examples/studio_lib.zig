@@ -16,6 +16,8 @@ pub fn exec(database: *zx.Db, gpa: std.mem.Allocator, sql: []const u8) Result {
 
     const names = stmt.columnNames() catch |err| return .{ .err = @errorName(err) };
     if (names.len == 0) {
+        // Backends without column metadata (e.g. D1 over wasm) report no columns for any statement.
+        if (returnsRows(sql)) return execRows(&stmt, gpa);
         const res = stmt.run(.empty) catch |err| return .{ .err = @errorName(err) };
         return .{ .changes = res.changes };
     }
@@ -32,13 +34,39 @@ pub fn exec(database: *zx.Db, gpa: std.mem.Allocator, sql: []const u8) Result {
     return .{ .columns = columns, .rows = rows };
 }
 
+fn execRows(stmt: *zx.Db.Statement, gpa: std.mem.Allocator) Result {
+    const all_rows = stmt.all(gpa, .empty) catch |err| return .{ .err = @errorName(err) };
+    if (all_rows.len == 0) return .{ .columns = &.{"(no rows)"} };
+
+    const fields0 = all_rows[0].fields;
+    const columns = gpa.alloc([]const u8, fields0.len) catch return .{ .err = "OutOfMemory" };
+    for (fields0, columns) |f, *c| c.* = f.name;
+
+    const rows = gpa.alloc([]const []const u8, all_rows.len) catch return .{ .err = "OutOfMemory" };
+    for (all_rows, rows) |r, *row| {
+        const cells = gpa.alloc([]const u8, r.fields.len) catch return .{ .err = "OutOfMemory" };
+        for (r.fields, cells) |f, *cell| cell.* = format(gpa, f.value) catch return .{ .err = "OutOfMemory" };
+        row.* = cells;
+    }
+    return .{ .columns = columns, .rows = rows };
+}
+
+fn returnsRows(sql: []const u8) bool {
+    const trimmed = std.mem.trimStart(u8, sql, " \t\r\n(");
+    const keywords = [_][]const u8{ "SELECT", "WITH", "PRAGMA", "EXPLAIN", "VALUES" };
+    for (keywords) |kw| {
+        if (trimmed.len >= kw.len and std.ascii.eqlIgnoreCase(trimmed[0..kw.len], kw)) return true;
+    }
+    return containsIgnoreCase(sql, "RETURNING");
+}
+
 pub fn format(gpa: std.mem.Allocator, v: zx.Db.Value) ![]const u8 {
     return switch (v) {
         .null => "NULL",
-        .integer => |i| std.fmt.allocPrint(gpa, "{d}", .{i}),
-        .float => |f| std.fmt.allocPrint(gpa, "{d}", .{f}),
+        .integer => |i| gpa.print("{d}", .{i}),
+        .float => |f| gpa.print("{d}", .{f}),
         .text => |t| t,
-        .blob => |b| std.fmt.allocPrint(gpa, "x'{x}'", .{b}),
+        .blob => |b| gpa.print("x'{x}'", .{b}),
         .boolean => |b| if (b) "1" else "0",
     };
 }

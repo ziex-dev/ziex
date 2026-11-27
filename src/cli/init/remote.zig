@@ -110,7 +110,7 @@ fn get(
 }
 
 fn customize(io: std.Io, allocator: std.mem.Allocator, dest_dir: []const u8) !void {
-    const project_name = try sanitizeProjectName(allocator, std.fs.path.basename(dest_dir));
+    const project_name = try sanitizeProjectName(allocator, std.Io.Dir.path.basename(dest_dir));
     defer allocator.free(project_name);
 
     var dir = try std.Io.Dir.cwd().openDir(io, dest_dir, .{ .iterate = true });
@@ -136,7 +136,7 @@ fn replaceInTree(
         const data = entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(8 * 1024 * 1024)) catch continue;
         defer allocator.free(data);
 
-        if (std.mem.indexOf(u8, data, from) == null) continue;
+        if (std.mem.find(u8, data, from) == null) continue;
 
         const replaced = try std.mem.replaceOwned(u8, allocator, data, from, to);
         defer allocator.free(replaced);
@@ -151,14 +151,14 @@ fn updateFingerprint(
     dest_dir: []const u8,
     project_name: []const u8,
 ) !void {
-    const zon_path = try std.fs.path.join(allocator, &.{ dest_dir, "build.zig.zon" });
+    const zon_path = try std.Io.Dir.path.join(allocator, &.{ dest_dir, "build.zig.zon" });
     defer allocator.free(zon_path);
 
     const data = std.Io.Dir.cwd().readFileAlloc(io, zon_path, allocator, .limited(1024 * 1024)) catch return;
     defer allocator.free(data);
 
     const needle = ".fingerprint = 0x";
-    const start = std.mem.indexOf(u8, data, needle) orelse return;
+    const start = std.mem.find(u8, data, needle) orelse return;
     const hex_start = start + needle.len;
     var hex_end = hex_start;
     while (hex_end < data.len and std.ascii.isHex(data[hex_end])) hex_end += 1;

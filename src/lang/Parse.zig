@@ -179,7 +179,7 @@ pub fn renderAlloc(
             try transpiler.run();
 
             return RenderResult{
-                .source = try transpiler.output.toOwnedSlice(),
+                .source = try transpiler.output.toOwnedSlice(allocator),
                 .sourcemap = if (options.sourcemap) try transpiler.finalizeSourceMap() else null,
                 .client_components = try transpiler.client_components.toOwnedSlice(allocator),
             };

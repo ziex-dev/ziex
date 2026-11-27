@@ -565,14 +565,14 @@ fn isServerHandler(v: *Visibility, fn_node: ts.Node, is_action_attr: bool) bool 
     for ([_][]const u8{ "server.Action", "server.Action.Stateful", "server.Event", "server.Event.Stateful" }) |s| {
         if (std.mem.endsWith(u8, t, s)) return true;
     }
-    return is_action_attr and std.mem.indexOf(u8, t, "client.") == null and
+    return is_action_attr and std.mem.find(u8, t, "client.") == null and
         !std.mem.endsWith(u8, t, "Event") and !std.mem.endsWith(u8, t, "Action");
 }
 
 // `*Action.Stateful` with `const Action = zx.server.Action;` -> `zx.server.Action.Stateful`.
 fn resolveAlias(v: *Visibility, t: []const u8) []const u8 {
     const base = std.mem.trimStart(u8, t, "*");
-    const head_len = std.mem.indexOfScalar(u8, base, '.') orelse base.len;
+    const head_len = std.mem.findScalar(u8, base, '.') orelse base.len;
     const target = v.aliases.get(base[0..head_len]) orelse return t;
     const rest = base[head_len..];
     // Only the common `X` / `X.Stateful` shapes; anything else stays unresolved.

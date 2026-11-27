@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     // benchmarks default to -Doptimize=fast
-    const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Optimization mode (default fast)") orelse .fast;
+    const optimize = b.option(std.lang.Optimize, "optimize", "Optimization mode (default fast)") orelse .fast;
     // e.g. -Dmysql=$(brew --prefix mysql-client); omitted => libmysqlclient rows are skipped
     const mysql_prefix = b.option([]const u8, "mysql", "libmysqlclient install prefix containing include/ and lib/");
 

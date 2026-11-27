@@ -101,13 +101,13 @@ fn moveTo(allocator: std.mem.Allocator, d: *Builder.Diagnostic, file: []u8, line
 /// Inside the build root, excluding dependencies and build-system outputs.
 fn isProjectPath(root: []const u8, file: []const u8) bool {
     if (file.len == 0) return false;
-    const rel = if (std.fs.path.isAbsolute(file)) blk: {
+    const rel = if (std.Io.Dir.path.isAbsolute(file)) blk: {
         if (!std.mem.startsWith(u8, file, root) or file.len <= root.len) return false;
         if (file[root.len] != '/' and file[root.len] != '\\') return false;
         break :blk file[root.len + 1 ..];
     } else file;
     if (std.mem.startsWith(u8, rel, "..")) return false;
-    if (std.mem.indexOf(u8, rel, "zig-pkg") != null) return false;
+    if (std.mem.find(u8, rel, "zig-pkg") != null) return false;
     return !std.mem.startsWith(u8, rel, ".zig-cache/o/");
 }
 
@@ -116,10 +116,10 @@ const DeclLocation = struct { file: []u8, line: u32, col: u32 };
 /// Route validation names `module.Decl` in its first backticked token, e.g.
 /// `pages.about.page.Page` -> `app/pages/about/page.zx`, at the `Page` declaration.
 fn declLocation(io: std.Io, allocator: std.mem.Allocator, root: []const u8, message: []const u8) ?DeclLocation {
-    const open = std.mem.indexOfScalar(u8, message, '`') orelse return null;
-    const close = std.mem.indexOfScalarPos(u8, message, open + 1, '`') orelse return null;
+    const open = std.mem.findScalar(u8, message, '`') orelse return null;
+    const close = std.mem.findScalarPos(u8, message, open + 1, '`') orelse return null;
     const token = message[open + 1 .. close];
-    const dot = std.mem.lastIndexOfScalar(u8, token, '.') orelse return null;
+    const dot = std.mem.findScalarLast(u8, token, '.') orelse return null;
     for (token) |c| if (!std.ascii.isAlphanumeric(c) and c != '_' and c != '.' and c != '-') return null;
     const module = token[0..dot];
     const decl = token[dot + 1 ..];
@@ -128,7 +128,7 @@ fn declLocation(io: std.Io, allocator: std.mem.Allocator, root: []const u8, mess
     for ([_][]const u8{ ".zx", ".zig", ".mdzx" }) |ext| {
         const rel = std.mem.concat(allocator, u8, &.{ "app/", module, ext }) catch return null;
         std.mem.replaceScalar(u8, rel[4 .. rel.len - ext.len], '.', '/');
-        const abs = std.fs.path.join(allocator, &.{ root, rel }) catch {
+        const abs = std.Io.Dir.path.join(allocator, &.{ root, rel }) catch {
             allocator.free(rel);
             return null;
         };
@@ -151,7 +151,7 @@ fn declPosition(source: []const u8, decl: []const u8) struct { u32, u32 } {
     while (lines.next()) |text| : (line += 1) {
         for ([_][]const u8{ "fn ", "const " }) |kw| {
             var from: usize = 0;
-            while (std.mem.indexOfPos(u8, text, from, kw)) |at| {
+            while (std.mem.findPos(u8, text, from, kw)) |at| {
                 from = at + kw.len;
                 const name_at = at + kw.len;
                 if (!std.mem.startsWith(u8, text[name_at..], decl)) continue;
@@ -181,8 +181,8 @@ fn normalizePath(allocator: std.mem.Allocator, d: *Builder.Diagnostic) !void {
     const cache_pattern = ".zig-cache";
     const app_pattern = "/app/";
 
-    const cache_pos = std.mem.indexOf(u8, d.file, cache_pattern) orelse return;
-    const app_pos = std.mem.indexOfPos(u8, d.file, cache_pos + cache_pattern.len, app_pattern) orelse return;
+    const cache_pos = std.mem.find(u8, d.file, cache_pattern) orelse return;
+    const app_pos = std.mem.findPos(u8, d.file, cache_pos + cache_pattern.len, app_pattern) orelse return;
 
     const relative_path = d.file[app_pos + 1 ..]; // "app/..."
     const new_file = try allocator.dupe(u8, relative_path);
@@ -289,12 +289,12 @@ fn zigPathCandidates(allocator: std.mem.Allocator, file: []const u8, transpile_d
 
     const trimmed = std.mem.trimStart(u8, file, "./");
     if (transpile_dir.len > 0 and
-        std.mem.indexOf(u8, trimmed, ".zig-cache") == null and
+        std.mem.find(u8, trimmed, ".zig-cache") == null and
         std.mem.endsWith(u8, trimmed, ".zig"))
     {
-        try list.append(allocator, try std.fs.path.join(allocator, &.{ transpile_dir, trimmed }));
+        try list.append(allocator, try std.Io.Dir.path.join(allocator, &.{ transpile_dir, trimmed }));
         if (std.mem.startsWith(u8, trimmed, "app/")) {
-            try list.append(allocator, try std.fs.path.join(allocator, &.{ transpile_dir, trimmed["app/".len..] }));
+            try list.append(allocator, try std.Io.Dir.path.join(allocator, &.{ transpile_dir, trimmed["app/".len..] }));
         }
     }
     return try list.toOwnedSlice(allocator);
@@ -385,7 +385,7 @@ fn wrapHighlightedLines(
     var current_line = start_line;
     var line_start: usize = 0;
     while (line_start <= highlighted.len) : (current_line += 1) {
-        const rel_end = std.mem.indexOfScalarPos(u8, highlighted, line_start, '\n');
+        const rel_end = std.mem.findScalarPos(u8, highlighted, line_start, '\n');
         const line_end = rel_end orelse highlighted.len;
         const line_html = highlighted[line_start..line_end];
         const is_error_line = current_line == target_line;
@@ -394,7 +394,7 @@ fn wrapHighlightedLines(
         try out.appendSlice(allocator, "\"><span class=\"zx-code-line-no\">");
 
         var number_buf: [16]u8 = undefined;
-        const line_no = try std.fmt.bufPrint(&number_buf, "{d}", .{current_line});
+        const line_no = try std.mem.print(&number_buf, "{d}", .{current_line});
         try out.appendSlice(allocator, line_no);
         try out.appendSlice(allocator, "</span><span class=\"zx-code-line-text\">");
         if (line_html.len > 0) {
@@ -482,7 +482,7 @@ fn jsonEscapeAppend(allocator: std.mem.Allocator, list: *std.ArrayList(u8), s: [
             '\t' => try list.appendSlice(allocator, "\\t"),
             0x00...0x08, 0x0B, 0x0C, 0x0E...0x1F => {
                 var tmp: [6]u8 = undefined;
-                const encoded = try std.fmt.bufPrint(&tmp, "\\u{x:0>4}", .{c});
+                const encoded = try std.mem.print(&tmp, "\\u{x:0>4}", .{c});
                 try list.appendSlice(allocator, encoded);
             },
             else => try list.append(allocator, c),
@@ -493,7 +493,7 @@ fn jsonEscapeAppend(allocator: std.mem.Allocator, list: *std.ArrayList(u8), s: [
 /// Enhance error output with colors if not already present
 pub fn enhanceGeneric(allocator: std.mem.Allocator, output: []const u8) ![]u8 {
     // Check if output already has ANSI color codes
-    if (std.mem.indexOf(u8, output, "\x1b[") != null) {
+    if (std.mem.find(u8, output, "\x1b[") != null) {
         // Already has colors, return as-is
         return try allocator.dupe(u8, output);
     }
@@ -510,40 +510,40 @@ pub fn enhanceGeneric(allocator: std.mem.Allocator, output: []const u8) ![]u8 {
         }
 
         // Colorize based on content
-        if (std.mem.indexOf(u8, line, "error:") != null or
-            std.mem.indexOf(u8, line, "Error:") != null or
-            std.mem.indexOf(u8, line, "ERROR:") != null)
+        if (std.mem.find(u8, line, "error:") != null or
+            std.mem.find(u8, line, "Error:") != null or
+            std.mem.find(u8, line, "ERROR:") != null)
         {
             // Red for error lines, try to colorize file paths separately
             try colorizeErrorLine(allocator, &result, line);
-        } else if (std.mem.indexOf(u8, line, "warning:") != null or
-            std.mem.indexOf(u8, line, "Warning:") != null)
+        } else if (std.mem.find(u8, line, "warning:") != null or
+            std.mem.find(u8, line, "Warning:") != null)
         {
             // Yellow for warnings
             try result.appendSlice(allocator, Colors.yellow);
             try result.appendSlice(allocator, line);
             try result.appendSlice(allocator, Colors.reset);
-        } else if (std.mem.indexOf(u8, line, "note:") != null or
-            std.mem.indexOf(u8, line, "Note:") != null)
+        } else if (std.mem.find(u8, line, "note:") != null or
+            std.mem.find(u8, line, "Note:") != null)
         {
             // Cyan for notes
             try result.appendSlice(allocator, Colors.cyan);
             try result.appendSlice(allocator, line);
             try result.appendSlice(allocator, Colors.reset);
-        } else if (std.mem.indexOf(u8, line, "stderr") != null) {
+        } else if (std.mem.find(u8, line, "stderr") != null) {
             // Gray for stderr notices
             try result.appendSlice(allocator, Colors.gray);
             try result.appendSlice(allocator, line);
             try result.appendSlice(allocator, Colors.reset);
         } else if (std.mem.startsWith(u8, line, "   ") or
             std.mem.startsWith(u8, line, "  ") or
-            std.mem.indexOf(u8, line, "^") != null)
+            std.mem.find(u8, line, "^") != null)
         {
             // Dim for indented context lines and caret lines
             try result.appendSlice(allocator, Colors.gray);
             try result.appendSlice(allocator, line);
             try result.appendSlice(allocator, Colors.reset);
-        } else if (std.mem.indexOf(u8, line, "+- ") != null) {
+        } else if (std.mem.find(u8, line, "+- ") != null) {
             // Cyan for build tree structure
             try result.appendSlice(allocator, Colors.cyan);
             try result.appendSlice(allocator, line);
@@ -561,9 +561,9 @@ pub fn enhanceGeneric(allocator: std.mem.Allocator, output: []const u8) ![]u8 {
 /// Colorize an error line, highlighting file paths in cyan and errors in red
 fn colorizeErrorLine(allocator: std.mem.Allocator, result: *std.ArrayList(u8), line: []const u8) !void {
     // Look for pattern: "filepath:line:col: error: message"
-    if (std.mem.indexOf(u8, line, ":")) |first_colon| {
+    if (std.mem.find(u8, line, ":")) |first_colon| {
         // Check if this looks like a file path (before error:)
-        if (std.mem.indexOf(u8, line, " error:")) |error_pos| {
+        if (std.mem.find(u8, line, " error:")) |error_pos| {
             if (first_colon < error_pos) {
                 // File path part (cyan)
                 try result.*.appendSlice(allocator, Colors.cyan);
@@ -629,7 +629,7 @@ pub fn formatFromReader(allocator: std.mem.Allocator, reader: *std.Io.Reader, op
                     continue;
                 }
             } else if (last_diag.caret_line == null) {
-                if (std.mem.indexOfAny(u8, line, "^~") != null) {
+                if (std.mem.findAny(u8, line, "^~") != null) {
                     last_diag.caret_line = try allocator.dupe(u8, line);
                     line_writer.clearRetainingCapacity();
                     continue;

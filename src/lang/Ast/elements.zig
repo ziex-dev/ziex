@@ -125,8 +125,8 @@ pub fn isFragment(name: []const u8) bool {
 pub fn isCustomOrComponent(name: []const u8) bool {
     if (name.len == 0) return false;
     if (std.ascii.isUpper(name[0])) return true; // ZX component
-    if (std.mem.indexOfScalar(u8, name, '-') != null) return true; // custom element
-    if (std.mem.indexOfScalar(u8, name, '.') != null) return true; // namespaced component
+    if (std.mem.findScalar(u8, name, '-') != null) return true; // custom element
+    if (std.mem.findScalar(u8, name, '.') != null) return true; // namespaced component
     if (isFragment(name)) return true; // ZX fragment built-in
     return false;
 }

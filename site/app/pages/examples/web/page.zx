@@ -105,7 +105,7 @@ fn onDrop(ctx: *zx.client.Event.Stateful) void {
     const to = target.as(web.Element).id(zx.allocator) catch return;
     defer zx.allocator.free(to);
 
-    const msg = std.fmt.allocPrint(zx.allocator, "Dropped {s} on {s}", .{ from, to }) catch return;
+    const msg = zx.allocator.print("Dropped {s} on {s}", .{ from, to }) catch return;
     defer zx.allocator.free(msg);
     setText("web-dropped", msg);
 }
@@ -120,7 +120,7 @@ fn onFrames(_: *zx.client.Event.Stateful) void {
 fn onFrame(_: []const zx.client.js.Value) void {
     frames += 1;
     var buf: [32]u8 = undefined;
-    setText("web-frame-count", std.fmt.bufPrint(&buf, "{d} frames", .{frames}) catch return);
+    setText("web-frame-count", std.mem.print(&buf, "{d} frames", .{frames}) catch return);
     if (frames < 10) _ = web.window().requestAnimationFrame(.fromFn(onFrame, .{ .once = true }));
 }
 

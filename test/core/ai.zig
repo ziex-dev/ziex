@@ -12,11 +12,11 @@ fn withServer(comptime case: fn (base: []const u8) anyerror!void) !void {
     defer harness.stop();
 
     var buf: [64]u8 = undefined;
-    try case(try std.fmt.bufPrint(&buf, "http://127.0.0.1:{d}/ai", .{harness.tcp.?.port}));
+    try case(try std.mem.print(&buf, "http://127.0.0.1:{d}/ai", .{harness.tcp.?.port}));
 }
 
 fn join(buf: []u8, base: []const u8, path: []const u8) []const u8 {
-    return std.fmt.bufPrint(buf, "{s}{s}", .{ base, path }) catch unreachable;
+    return std.mem.print(buf, "{s}{s}", .{ base, path }) catch unreachable;
 }
 
 // --- Interface --- //

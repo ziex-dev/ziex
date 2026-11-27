@@ -6,19 +6,19 @@ const zx = @import("zx");
 const Auth = zx.Auth;
 
 var mutex: std.Io.Mutex = .init;
-var sessions: std.StringArrayHashMapUnmanaged(Auth.Account) = .empty;
+var sessions: std.array_hash_map.String(Auth.Account) = .empty;
 
 // Set by the test once the server is listening.
 pub var port: u16 = 0;
 
 pub fn of(ctx: anytype) !Auth {
-    const base = try std.fmt.allocPrint(ctx.arena, "http://127.0.0.1:{d}", .{port});
+    const base = try ctx.arena.print("http://127.0.0.1:{d}", .{port});
     const providers = try ctx.arena.dupe(Auth.Oauth.Provider, &.{.{
         .id = "fake",
         .name = "Fake",
-        .authorize_url = try std.fmt.allocPrint(ctx.arena, "{s}/auth/provider/authorize", .{base}),
-        .token_url = try std.fmt.allocPrint(ctx.arena, "{s}/auth/provider/token", .{base}),
-        .user_url = try std.fmt.allocPrint(ctx.arena, "{s}/auth/provider/user", .{base}),
+        .authorize_url = try ctx.arena.print("{s}/auth/provider/authorize", .{base}),
+        .token_url = try ctx.arena.print("{s}/auth/provider/token", .{base}),
+        .user_url = try ctx.arena.print("{s}/auth/provider/user", .{base}),
         .scope = "user",
         .parseUser = Auth.Oauth.providers.github.parseUser,
     }});

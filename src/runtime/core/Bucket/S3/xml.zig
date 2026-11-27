@@ -16,7 +16,7 @@ pub const Iterator = struct {
     pos: usize = 0,
 
     pub fn next(it: *Iterator) ?[]const u8 {
-        while (std.mem.indexOfScalarPos(u8, it.xml, it.pos, '<')) |lt| {
+        while (std.mem.findScalarPos(u8, it.xml, it.pos, '<')) |lt| {
             it.pos = lt + 1;
             const rest = it.xml[lt + 1 ..];
             if (!std.mem.startsWith(u8, rest, it.name)) continue;
@@ -31,7 +31,7 @@ pub const Iterator = struct {
                 ' ', '\t', '\r', '\n' => {},
                 else => continue,
             }
-            const gt = std.mem.indexOfScalarPos(u8, it.xml, lt + 1 + it.name.len, '>') orelse return null;
+            const gt = std.mem.findScalarPos(u8, it.xml, lt + 1 + it.name.len, '>') orelse return null;
             if (it.xml[gt - 1] == '/') {
                 it.pos = gt + 1;
                 return "";
@@ -48,7 +48,7 @@ pub const Iterator = struct {
 // Index of `</name>` after `start`.
 fn closing(xml: []const u8, start: usize, name: []const u8) ?usize {
     var pos = start;
-    while (std.mem.indexOfPos(u8, xml, pos, "</")) |i| {
+    while (std.mem.findPos(u8, xml, pos, "</")) |i| {
         const rest = xml[i + 2 ..];
         if (std.mem.startsWith(u8, rest, name) and rest.len > name.len and rest[name.len] == '>') return i;
         pos = i + 2;
@@ -58,7 +58,7 @@ fn closing(xml: []const u8, start: usize, name: []const u8) ?usize {
 
 // Decodes the five named entities and numeric references into a copy.
 pub fn decode(arena: std.mem.Allocator, raw: []const u8) error{OutOfMemory}![]const u8 {
-    if (std.mem.indexOfScalar(u8, raw, '&') == null) return arena.dupe(u8, raw);
+    if (std.mem.findScalar(u8, raw, '&') == null) return arena.dupe(u8, raw);
     var out: std.ArrayList(u8) = try .initCapacity(arena, raw.len);
     var i: usize = 0;
     while (i < raw.len) {
@@ -67,7 +67,7 @@ pub fn decode(arena: std.mem.Allocator, raw: []const u8) error{OutOfMemory}![]co
             i += 1;
             continue;
         }
-        const semi = std.mem.indexOfScalarPos(u8, raw, i, ';') orelse {
+        const semi = std.mem.findScalarPos(u8, raw, i, ';') orelse {
             out.appendAssumeCapacity('&');
             i += 1;
             continue;

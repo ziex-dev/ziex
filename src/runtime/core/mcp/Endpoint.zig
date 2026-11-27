@@ -320,7 +320,7 @@ fn route(ep: Endpoint, pathname: []const u8) ?Path {
 }
 
 fn url(ep: Endpoint, arena: std.mem.Allocator, suffix: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(arena, "{s}{s}{s}", .{
+    return arena.print("{s}{s}{s}", .{
         std.mem.trimEnd(u8, ep.options.origin, "/"),
         std.mem.trimEnd(u8, ep.options.path, "/"),
         suffix,
@@ -369,7 +369,7 @@ fn withQuery(arena: std.mem.Allocator, base: []const u8, pairs: []const struct {
     var aw: std.Io.Writer.Allocating = .init(arena);
     const w = &aw.writer;
     try w.writeAll(base);
-    var sep: u8 = if (std.mem.indexOfScalar(u8, base, '?') != null) '&' else '?';
+    var sep: u8 = if (std.mem.findScalar(u8, base, '?') != null) '&' else '?';
     for (pairs) |pair| {
         const value = pair[1] orelse continue;
         try w.writeByte(sep);

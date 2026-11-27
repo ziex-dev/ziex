@@ -150,7 +150,7 @@ pub fn Server(comptime Backend: type) type {
             const text = input.ref.getAlloc(js.String, zx.allocator, "value") catch return;
             const pos: usize = @intFromFloat(input.ref.get(f64, "selectionStart") catch 0);
             const before = text[0..@min(pos, text.len)];
-            const line_start = if (std.mem.lastIndexOfScalar(u8, before, '\n')) |i| i + 1 else 0;
+            const line_start = if (std.mem.findScalarLast(u8, before, '\n')) |i| i + 1 else 0;
             lines.set(std.mem.count(u8, text, "\n") + 1);
             cursor.set(.{ std.mem.count(u8, before, "\n") + 1, before.len - line_start + 1 });
         }

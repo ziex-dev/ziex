@@ -66,7 +66,7 @@ pub fn create(options: Zls.CreateOptions) Zls.CreateError!Zls.Backing {
     const global_cache_path: ?[]const u8 = blk: {
         const home = options.environ_map.get("HOME") orelse break :blk null;
         const cache_suffix = if (builtin.os.tag == .macos) "Library/Caches/zls" else ".cache/zls";
-        break :blk std.fs.path.join(allocator, &.{ home, cache_suffix }) catch null;
+        break :blk std.Io.Dir.path.join(allocator, &.{ home, cache_suffix }) catch null;
     };
     errdefer if (global_cache_path) |p| allocator.free(p);
 
@@ -153,7 +153,7 @@ fn syncModulesFor(impl: *Impl, arena: std.mem.Allocator, document_uri: []const u
 
     // Resolve `zx` from build.zig.zon so it works before (or without) the build runner.
     if (impl.zx_module_path == null) {
-        if (std.fs.path.dirname(doc_path)) |doc_dir| {
+        if (std.Io.Dir.path.dirname(doc_path)) |doc_dir| {
             if (zx_module.resolve(io, impl.allocator, impl.environ_map, doc_dir)) |path| {
                 impl.zx_module_path = path;
                 try applyModules(impl, &.{.{ .name = "zx", .path = path }});
@@ -166,9 +166,9 @@ fn syncModulesFor(impl: *Impl, arena: std.mem.Allocator, document_uri: []const u
         _ = try handle.getAssociatedBuildFile(store);
     }
 
-    var dir: ?[]const u8 = std.fs.path.dirname(doc_path);
-    while (dir) |d| : (dir = std.fs.path.dirname(d)) {
-        const build_path = try std.fs.path.join(arena, &.{ d, "build.zig" });
+    var dir: ?[]const u8 = std.Io.Dir.path.dirname(doc_path);
+    while (dir) |d| : (dir = std.Io.Dir.path.dirname(d)) {
+        const build_path = try std.Io.Dir.path.join(arena, &.{ d, "build.zig" });
         const build_uri = try zls.Uri.fromPath(arena, build_path);
         const build_file = store.getBuildFile(build_uri) orelse continue;
 

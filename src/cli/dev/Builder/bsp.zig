@@ -27,7 +27,7 @@ client: Client = undefined,
 conf_arena: std.heap.ArenaAllocator,
 configuration: ?Configuration = null,
 step_dependants: []const []const Configuration.Step.Index = &.{},
-reachable_steps: std.DynamicBitSetUnmanaged = .{},
+reachable_steps: std.bit_set.Dynamic = .{},
 step_scratch: std.ArrayList(Configuration.Step.Index) = .empty,
 pending: std.ArrayList(Event) = .empty,
 first_build_done: bool = false,
@@ -51,7 +51,7 @@ const Cycle = struct {
     running_steps: std.ArrayList(Configuration.Step.Index) = .empty,
     shown_step: ?Configuration.Step.Index = null,
     shown_step_done: bool = false,
-    expected_steps: std.DynamicBitSetUnmanaged = .{},
+    expected_steps: std.bit_set.Dynamic = .{},
     expected_count: u32 = 0,
     completed_count: u32 = 0,
 
@@ -204,7 +204,7 @@ fn handshakeAndWatch(self: *Bsp, io: Io) !void {
 }
 
 fn loadConfiguration(self: *Bsp, io: Io, path: []const u8) !void {
-    const resolved = if (self.cwd) |dir| try std.fs.path.resolve(self.allocator, &.{ dir, path }) else path;
+    const resolved = if (self.cwd) |dir| try std.Io.Dir.path.resolveAlloc(self.allocator, &.{ dir, path }) else path;
     defer if (self.cwd != null) self.allocator.free(resolved);
     var file = try Io.Dir.cwd().openFile(io, resolved, .{});
     defer file.close(io);
@@ -398,12 +398,12 @@ fn handleMessage(self: *Bsp, tag: Server.Message.Tag, body: []const u8) !?Event 
 /// hands the display over to the most recently started step still running.
 fn advanceShownStep(self: *Bsp, c: *const Configuration, finished: Configuration.Step.Index) Event {
     const running = &self.cycle.running_steps;
-    if (std.mem.indexOfScalar(Configuration.Step.Index, running.items, finished)) |i| {
+    if (std.mem.findScalar(Configuration.Step.Index, running.items, finished)) |i| {
         _ = running.orderedRemove(i);
         self.cycle.completed_count += 1;
     }
     if (self.cycle.shown_step == finished) {
-        if (running.getLastOrNull()) |next_step| {
+        if (running.last()) |next_step| {
             self.cycle.shown_step = next_step;
         } else {
             self.cycle.shown_step_done = true;
@@ -426,7 +426,7 @@ fn buildStepGraph(self: *Bsp) !void {
     const arena = self.conf_arena.allocator();
     const steps_len = c.steps.len;
 
-    var reachable = try std.DynamicBitSetUnmanaged.initEmpty(arena, steps_len);
+    var reachable = try std.bit_set.Dynamic.initEmpty(arena, steps_len);
     const dependants_len = try arena.alloc(u32, steps_len);
     @memset(dependants_len, 0);
 
@@ -460,7 +460,7 @@ fn buildStepGraph(self: *Bsp) !void {
 
     self.step_dependants = dependants;
     self.reachable_steps = reachable;
-    self.cycle.expected_steps = try std.DynamicBitSetUnmanaged.initEmpty(arena, steps_len);
+    self.cycle.expected_steps = try std.bit_set.Dynamic.initEmpty(arena, steps_len);
 }
 
 /// The build system re-runs every dependant of a dirty step, so a started
@@ -576,7 +576,7 @@ fn appendReferenceTrace(self: *Bsp, eb: *const std.zig.ErrorBundle, msg: std.zig
         const ref = eb.getSourceLocation(loc);
         const file = try self.allocator.dupe(u8, eb.nullTerminatedString(ref.src_path));
         errdefer self.allocator.free(file);
-        const message = try std.fmt.allocPrint(self.allocator, "referenced by {s}", .{eb.nullTerminatedString(decl_name)});
+        const message = try self.allocator.print("referenced by {s}", .{eb.nullTerminatedString(decl_name)});
         errdefer self.allocator.free(message);
         try self.cycle.diagnostics.append(self.allocator, .{
             .file = file,
@@ -589,11 +589,11 @@ fn appendReferenceTrace(self: *Bsp, eb: *const std.zig.ErrorBundle, msg: std.zig
 }
 
 fn isServerStep(name: []const u8) bool {
-    return std.mem.indexOf(u8, name, "server") != null;
+    return std.mem.find(u8, name, "server") != null;
 }
 
 fn isClientStep(name: []const u8) bool {
-    return std.mem.indexOf(u8, name, "client") != null;
+    return std.mem.find(u8, name, "client") != null;
 }
 
 fn isAssetStep(name: []const u8) bool {
@@ -604,8 +604,8 @@ fn isAssetStep(name: []const u8) bool {
 }
 
 fn assetWebPath(step_name: []const u8) ?[]const u8 {
-    if (std.mem.indexOf(u8, step_name, "public")) |_| return "/";
-    if (std.mem.indexOf(u8, step_name, "assets")) |_| return "/assets/";
+    if (std.mem.find(u8, step_name, "public")) |_| return "/";
+    if (std.mem.find(u8, step_name, "assets")) |_| return "/assets/";
     return null;
 }
 

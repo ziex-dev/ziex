@@ -216,15 +216,15 @@ fn zxSourceFor(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ?[]u8
 
 /// Whether `outdir_rel` still has a corresponding source under `source_root`.
 fn sourceExistsForOutRel(io: std.Io, source_root: []const u8, outdir_rel: []const u8) bool {
-    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
 
-    const direct = std.fmt.bufPrint(&buf, "{s}{s}{s}", .{ source_root, std.fs.path.sep_str, outdir_rel }) catch return false;
+    const direct = std.mem.print(&buf, "{s}{s}{s}", .{ source_root, std.Io.Dir.path.sep_str, outdir_rel }) catch return false;
     if (fileExists(io, direct)) return true;
 
     if (std.mem.endsWith(u8, outdir_rel, ".zig")) {
         const stem_rel = outdir_rel[0 .. outdir_rel.len - ".zig".len];
         for ([_][]const u8{ ".zx", ".mdzx", ".md" }) |ext| {
-            const twin = std.fmt.bufPrint(&buf, "{s}{s}{s}{s}", .{ source_root, std.fs.path.sep_str, stem_rel, ext }) catch continue;
+            const twin = std.mem.print(&buf, "{s}{s}{s}{s}", .{ source_root, std.Io.Dir.path.sep_str, stem_rel, ext }) catch continue;
             if (fileExists(io, twin)) return true;
         }
     }
@@ -248,15 +248,15 @@ fn pruneStaleOutdir(
     var walker = try out.walk(allocator);
     defer walker.deinit();
 
-    var stale_files = std.array_list.Managed([]const u8).init(allocator);
+    var stale_files: std.ArrayList([]const u8) = .empty;
     defer {
         for (stale_files.items) |p| allocator.free(p);
-        stale_files.deinit();
+        stale_files.deinit(allocator);
     }
-    var stale_dirs = std.array_list.Managed([]const u8).init(allocator);
+    var stale_dirs: std.ArrayList([]const u8) = .empty;
     defer {
         for (stale_dirs.items) |p| allocator.free(p);
-        stale_dirs.deinit();
+        stale_dirs.deinit(allocator);
     }
 
     while (try walker.next(io)) |entry| {
@@ -271,12 +271,12 @@ fn pruneStaleOutdir(
                     continue;
                 }
 
-                const full = try std.fs.path.join(allocator, &.{ outdir, entry.path });
-                try stale_files.append(full);
+                const full = try std.Io.Dir.path.join(allocator, &.{ outdir, entry.path });
+                try stale_files.append(allocator, full);
             },
             .directory => {
-                const full = try std.fs.path.join(allocator, &.{ outdir, entry.path });
-                try stale_dirs.append(full);
+                const full = try std.Io.Dir.path.join(allocator, &.{ outdir, entry.path });
+                try stale_dirs.append(allocator, full);
             },
             else => {},
         }
@@ -309,16 +309,16 @@ fn normalizeRoutePath(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     const with_wildcard = try replaceAll(allocator, path, "[..]", "*");
     defer allocator.free(with_wildcard);
 
-    var out = std.array_list.Managed(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
     for (with_wildcard) |c| {
         if (c == '[') {
-            try out.append(':');
+            try out.append(allocator, ':');
         } else if (c != ']') {
-            try out.append(c);
+            try out.append(allocator, c);
         }
     }
-    return out.toOwnedSlice();
+    return out.toOwnedSlice(allocator);
 }
 
 /// Replace every occurrence of `needle` in `haystack` with `replacement`.
@@ -409,7 +409,7 @@ fn writeSourceTreeFingerprint(
     createDirSafe(io, cache_dir) catch {};
     const body = try formatTreeFingerprint(allocator, rels);
     defer allocator.free(body);
-    const out_path = try std.fs.path.join(allocator, &.{ cache_dir, tree_fingerprint_name });
+    const out_path = try std.Io.Dir.path.join(allocator, &.{ cache_dir, tree_fingerprint_name });
     defer allocator.free(out_path);
     try writeFile(io, out_path, body);
 }
@@ -423,7 +423,7 @@ fn sourceTreeFingerprintChanged(
     const expected = try formatTreeFingerprint(allocator, rels);
     defer allocator.free(expected);
 
-    const fp_path = try std.fs.path.join(allocator, &.{ cache_dir, tree_fingerprint_name });
+    const fp_path = try std.Io.Dir.path.join(allocator, &.{ cache_dir, tree_fingerprint_name });
     defer allocator.free(fp_path);
     const prev = std.Io.Dir.cwd().readFileAlloc(io, fp_path, allocator, .limited(4 * 1024 * 1024)) catch return true;
     defer allocator.free(prev);
@@ -443,7 +443,7 @@ fn invalidateZxCaches(io: std.Io, allocator: std.mem.Allocator, cache_dir: []con
     while (try walker.next(io)) |entry| {
         if (entry.kind != .file) continue;
         if (!std.mem.endsWith(u8, entry.path, ".zxcache")) continue;
-        const full = try std.fs.path.join(allocator, &.{ cache_dir, entry.path });
+        const full = try std.Io.Dir.path.join(allocator, &.{ cache_dir, entry.path });
         defer allocator.free(full);
         std.Io.Dir.cwd().deleteFile(io, full) catch continue;
         if (verbose) std.debug.print("Invalidated cache: {s}\n", .{full});
@@ -457,7 +457,7 @@ fn invalidateZxCaches(io: std.Io, allocator: std.mem.Allocator, cache_dir: []con
 fn collectEmbedFiles(
     io: std.Io,
     allocator: std.mem.Allocator,
-    input_files: *std.array_list.Managed([]const u8),
+    input_files: *std.ArrayList([]const u8),
     ast: *const std.zig.Ast,
     source_dir: []const u8,
     out_dir: []const u8,
@@ -476,24 +476,24 @@ fn collectEmbedFiles(
         const embed_path = std.zig.string_literal.parseAlloc(allocator, raw) catch continue;
         defer allocator.free(embed_path);
 
-        const src = std.fs.path.join(allocator, &.{ source_dir, embed_path }) catch continue;
+        const src = std.Io.Dir.path.join(allocator, &.{ source_dir, embed_path }) catch continue;
         defer allocator.free(src);
 
         // Only act on embeds that exist as real source files on disk.
         if (std.Io.Dir.cwd().statFile(io, src, .{})) |_| {} else |_| continue;
 
         // Copy into the output dir at the embed's relative spelling.
-        const dst = std.fs.path.join(allocator, &.{ out_dir, embed_path }) catch continue;
+        const dst = std.Io.Dir.path.join(allocator, &.{ out_dir, embed_path }) catch continue;
         defer allocator.free(dst);
-        if (std.fs.path.dirname(dst)) |parent| {
+        if (std.Io.Dir.path.dirname(dst)) |parent| {
             createDirSafe(io, parent) catch {};
         }
         copyFileSafe(io, src, dst) catch |err| {
             std.debug.print("Warning: Could not copy embedded file {s}: {}\n", .{ src, err });
         };
 
-        const abs = std.fs.path.resolve(allocator, &.{src}) catch continue;
-        input_files.append(abs) catch allocator.free(abs);
+        const abs = std.Io.Dir.path.resolveAlloc(allocator, &.{src}) catch continue;
+        input_files.append(allocator, abs) catch allocator.free(abs);
     }
 }
 
@@ -502,9 +502,9 @@ fn collectEmbedFiles(
 fn copyCompanionsForCached(
     io: std.Io,
     allocator: std.mem.Allocator,
-    input_files: *std.array_list.Managed([]const u8),
+    input_files: *std.ArrayList([]const u8),
     companions_visited: *std.StringHashMap(void),
-    zx_sources: ?*std.array_list.Managed([]const u8),
+    zx_sources: ?*std.ArrayList([]const u8),
     zig_path: []const u8,
     source_dir: []const u8,
     out_dir: []const u8,
@@ -528,9 +528,9 @@ fn copyCompanionsForCached(
 fn collectAndCopyCompanions(
     io: std.Io,
     allocator: std.mem.Allocator,
-    input_files: *std.array_list.Managed([]const u8),
+    input_files: *std.ArrayList([]const u8),
     companions_visited: *std.StringHashMap(void),
-    zx_sources: ?*std.array_list.Managed([]const u8),
+    zx_sources: ?*std.ArrayList([]const u8),
     ast: *const std.zig.Ast,
     source_dir: []const u8,
     out_dir: []const u8,
@@ -551,18 +551,18 @@ fn collectAndCopyCompanions(
         defer allocator.free(import_path);
 
         // Module imports (`std`, `zx`, …) have no extension - skip.
-        if (std.fs.path.extension(import_path).len == 0) continue;
+        if (std.Io.Dir.path.extension(import_path).len == 0) continue;
 
-        const src = std.fs.path.join(allocator, &.{ source_dir, import_path }) catch continue;
+        const src = std.Io.Dir.path.join(allocator, &.{ source_dir, import_path }) catch continue;
         defer allocator.free(src);
         // `.zx` sources (incl. the twin behind a `.zig` import) are transpiled, not copied.
         if (zxSourceFor(io, allocator, src)) |zx_src| {
-            if (zx_sources) |out| out.append(zx_src) catch allocator.free(zx_src) else allocator.free(zx_src);
+            if (zx_sources) |out| out.append(allocator, zx_src) catch allocator.free(zx_src) else allocator.free(zx_src);
             continue;
         }
         std.Io.Dir.cwd().access(io, src, .{}) catch continue;
 
-        const dst = std.fs.path.join(allocator, &.{ out_dir, import_path }) catch continue;
+        const dst = std.Io.Dir.path.join(allocator, &.{ out_dir, import_path }) catch continue;
         defer allocator.free(dst);
 
         copyCompanionRecursive(io, allocator, input_files, companions_visited, zx_sources, src, dst, verbose) catch |err| {
@@ -576,23 +576,23 @@ fn collectAndCopyCompanions(
 fn copyCompanionRecursive(
     io: std.Io,
     allocator: std.mem.Allocator,
-    input_files: *std.array_list.Managed([]const u8),
+    input_files: *std.ArrayList([]const u8),
     companions_visited: *std.StringHashMap(void),
-    zx_sources: ?*std.array_list.Managed([]const u8),
+    zx_sources: ?*std.ArrayList([]const u8),
     source_path: []const u8,
     output_path: []const u8,
     verbose: bool,
 ) anyerror!void {
-    const abs_source = std.fs.path.resolve(allocator, &.{source_path}) catch
+    const abs_source = std.Io.Dir.path.resolveAlloc(allocator, &.{source_path}) catch
         try allocator.dupe(u8, source_path);
     if (companions_visited.contains(abs_source)) {
         allocator.free(abs_source);
         return;
     }
     try companions_visited.put(abs_source, {});
-    try input_files.append(try allocator.dupe(u8, abs_source));
+    try input_files.append(allocator, try allocator.dupe(u8, abs_source));
 
-    if (std.fs.path.dirname(output_path)) |parent| {
+    if (std.Io.Dir.path.dirname(output_path)) |parent| {
         try createDirSafe(io, parent);
     }
     try copyFileSafe(io, source_path, output_path);
@@ -608,8 +608,8 @@ fn copyCompanionRecursive(
     var ast = try std.zig.Ast.parse(allocator, zig_src_z, .{ .mode = .zig });
     defer ast.deinit(allocator);
 
-    const source_dir = std.fs.path.dirname(source_path) orelse ".";
-    const out_dir = std.fs.path.dirname(output_path) orelse ".";
+    const source_dir = std.Io.Dir.path.dirname(source_path) orelse ".";
+    const out_dir = std.Io.Dir.path.dirname(output_path) orelse ".";
     try collectEmbedFiles(io, allocator, input_files, &ast, source_dir, out_dir);
     try collectAndCopyCompanions(io, allocator, input_files, companions_visited, zx_sources, &ast, source_dir, out_dir, verbose);
 }
@@ -620,7 +620,7 @@ fn copyCompanionRecursive(
 fn collectZxImports(
     io: std.Io,
     allocator: std.mem.Allocator,
-    out: *std.array_list.Managed([]const u8),
+    out: *std.ArrayList([]const u8),
     ast: *const std.zig.Ast,
     source_dir: []const u8,
 ) !void {
@@ -656,14 +656,14 @@ fn collectZxImports(
 
         for ([_][]const u8{ ".zx", ".mdzx", ".md" }) |ext| {
             const cand = allocator.print("{s}{s}", .{ stem, ext }) catch continue;
-            const resolved = std.fs.path.join(allocator, &.{ source_dir, cand }) catch {
+            const resolved = std.Io.Dir.path.join(allocator, &.{ source_dir, cand }) catch {
                 allocator.free(cand);
                 continue;
             };
             defer allocator.free(resolved);
             if (std.Io.Dir.cwd().statFile(io, resolved, .{})) |_| {
                 // Return the import spelling relative to source_dir (e.g. `icon.zx`).
-                out.append(cand) catch allocator.free(cand);
+                out.append(allocator, cand) catch allocator.free(cand);
                 break;
             } else |_| allocator.free(cand);
         }
@@ -676,16 +676,16 @@ fn collectZxImports(
 fn transpileFileRecursive(
     io: std.Io,
     allocator: std.mem.Allocator,
-    global_components: *std.array_list.Managed(ClientComponentSerializable),
+    global_components: *std.ArrayList(ClientComponentSerializable),
     opts: TranspileOptions,
     source_path: []const u8,
     output_path: []const u8,
     visited: *std.StringHashMap(void),
-    input_files: *std.array_list.Managed([]const u8),
+    input_files: *std.ArrayList([]const u8),
     companions_visited: *std.StringHashMap(void),
-    pub_imports: *std.array_list.Managed(PubImport),
+    pub_imports: *std.ArrayList(PubImport),
 ) !void {
-    const abs_source = std.fs.path.resolve(allocator, &.{source_path}) catch
+    const abs_source = std.Io.Dir.path.resolveAlloc(allocator, &.{source_path}) catch
         try allocator.dupe(u8, source_path);
     if (visited.contains(abs_source)) {
         allocator.free(abs_source);
@@ -693,28 +693,28 @@ fn transpileFileRecursive(
     }
     // `visited` owns abs_source; also record it as a dep file input.
     try visited.put(abs_source, {});
-    try input_files.append(try allocator.dupe(u8, abs_source));
+    try input_files.append(allocator, try allocator.dupe(u8, abs_source));
 
     // Transpile this file, collecting its `.zx` imports from the parsed AST.
-    var imports = std.array_list.Managed([]const u8).init(allocator);
+    var imports: std.ArrayList([]const u8) = .empty;
     defer {
         for (imports.items) |p| allocator.free(p);
-        imports.deinit();
+        imports.deinit(allocator);
     }
     try transpileFile(io, allocator, global_components, opts, source_path, output_path, &imports, input_files, companions_visited, null, pub_imports);
 
-    const source_dir = std.fs.path.dirname(source_path) orelse ".";
-    const out_dir = std.fs.path.dirname(output_path) orelse opts.outdir;
+    const source_dir = std.Io.Dir.path.dirname(source_path) orelse ".";
+    const out_dir = std.Io.Dir.path.dirname(output_path) orelse opts.outdir;
 
     for (imports.items) |rel| {
-        const dep_source = try std.fs.path.join(allocator, &.{ source_dir, rel });
+        const dep_source = try std.Io.Dir.path.join(allocator, &.{ source_dir, rel });
         defer allocator.free(dep_source);
 
         const ext_len = zxExtLen(rel) orelse continue;
         const out_rel = try std.mem.concat(allocator, u8, &.{ rel[0 .. rel.len - ext_len], ".zig" });
         defer allocator.free(out_rel);
 
-        const dep_output = try std.fs.path.join(allocator, &.{ out_dir, out_rel });
+        const dep_output = try std.Io.Dir.path.join(allocator, &.{ out_dir, out_rel });
         defer allocator.free(dep_output);
 
         try transpileFileRecursive(io, allocator, global_components, opts, dep_source, dep_output, visited, input_files, companions_visited, pub_imports);
@@ -747,7 +747,7 @@ fn readComponentCache(
     io: std.Io,
     allocator: std.mem.Allocator,
     cache_path: []const u8,
-    global_components: *std.array_list.Managed(ClientComponentSerializable),
+    global_components: *std.ArrayList(ClientComponentSerializable),
 ) !void {
     const json = try std.Io.Dir.cwd().readFileAlloc(io, cache_path, allocator, std.Io.Limit.limited(4 * 1024 * 1024));
     defer allocator.free(json);
@@ -760,7 +760,7 @@ fn readComponentCache(
     defer parsed.deinit();
     if (!std.mem.eql(u8, parsed.value.shape, lang.Transpile.shape)) return error.TranspileShapeMismatch;
     for (parsed.value.components) |component| {
-        try global_components.append(.{
+        try global_components.append(allocator, .{
             .type = component.type,
             .id = try allocator.dupe(u8, component.id),
             .name = try allocator.dupe(u8, component.name),
@@ -789,12 +789,12 @@ fn extractRouteFromPath(allocator: std.mem.Allocator, source_path: []const u8) !
     const pages_sep = "pages/";
 
     // Check if source_path contains "pages" directory
-    if (std.mem.indexOf(u8, source_path, pages_sep)) |pages_index| {
+    if (std.mem.find(u8, source_path, pages_sep)) |pages_index| {
         // Get the path after "pages/"
         const after_pages = source_path[pages_index + pages_sep.len ..];
 
         // Find the directory containing the file (remove filename)
-        const dir_path = std.fs.path.dirname(after_pages) orelse "";
+        const dir_path = std.Io.Dir.path.dirname(after_pages) orelse "";
 
         // Convert directory path to route
         if (dir_path.len == 0) {
@@ -802,11 +802,11 @@ fn extractRouteFromPath(allocator: std.mem.Allocator, source_path: []const u8) !
         }
 
         // [id]→:id and [..]→*
-        var with_slashes = std.array_list.Managed(u8).init(allocator);
-        defer with_slashes.deinit();
-        try with_slashes.append('/');
+        var with_slashes: std.ArrayList(u8) = .empty;
+        defer with_slashes.deinit(allocator);
+        try with_slashes.append(allocator, '/');
 
-        try with_slashes.appendSlice(dir_path);
+        try with_slashes.appendSlice(allocator, dir_path);
 
         return try normalizeRoutePath(allocator, with_slashes.items);
     }
@@ -816,7 +816,7 @@ fn extractRouteFromPath(allocator: std.mem.Allocator, source_path: []const u8) !
 }
 
 fn getBasename(path: []const u8) []const u8 {
-    return std.fs.path.basename(path);
+    return std.Io.Dir.path.basename(path);
 }
 
 /// Escapes backslashes in a path string for use in Zig string literals.
@@ -840,34 +840,34 @@ fn escapePathForZigString(allocator: std.mem.Allocator, path: []const u8) ![]con
 
 /// Resolve a relative path against a base directory
 fn resolvePath(allocator: std.mem.Allocator, base_dir: []const u8, relative_path: []const u8) ![]const u8 {
-    if (std.fs.path.isAbsolute(relative_path)) {
+    if (std.Io.Dir.path.isAbsolute(relative_path)) {
         return try allocator.dupe(u8, relative_path);
     }
 
     var base = base_dir;
-    const sep = std.fs.path.sep_str;
+    const sep = std.Io.Dir.path.sep_str;
     if (std.mem.endsWith(u8, base_dir, sep)) {
         base = base_dir[0 .. base_dir.len - sep.len];
     }
 
-    const joined = try std.fs.path.join(allocator, &.{ base, relative_path });
+    const joined = try std.Io.Dir.path.join(allocator, &.{ base, relative_path });
     defer allocator.free(joined);
 
-    return try std.fs.path.resolve(allocator, &.{joined});
+    return try std.Io.Dir.path.resolveAlloc(allocator, &.{joined});
 }
 
 /// Relative path from `base` to `target`, always '/'-separated.
 fn relativePath(io: std.Io, allocator: std.mem.Allocator, base: []const u8, target: []const u8) ![]u8 {
     const cwd = try std.process.currentPathAlloc(io, allocator);
     defer allocator.free(cwd);
-    const rel = try std.fs.path.relativeAlloc(allocator, cwd, null, base, target);
+    const rel = try std.Io.Dir.path.relativeAlloc(allocator, cwd, null, base, target);
     std.mem.replaceScalar(u8, rel, '\\', '/');
     return rel;
 }
 
 /// Check if output_dir is a subdirectory of dir_path and return the relative path if so
 fn getOutputDirRelativePath(allocator: std.mem.Allocator, dir_path: []const u8, output_dir: []const u8) !?[]const u8 {
-    const sep = std.fs.path.sep_str;
+    const sep = std.Io.Dir.path.sep_str;
 
     var normalized_dir = dir_path;
     if (std.mem.endsWith(u8, dir_path, sep)) {
@@ -916,7 +916,7 @@ fn copyFileToDir(
 ) !void {
     _ = allocator;
     try createDirSafe(io, dest_dir);
-    try copyFileSafe(io, source_file, std.fs.path.basename(source_file));
+    try copyFileSafe(io, source_file, std.Io.Dir.path.basename(source_file));
 }
 
 /// Copy a directory recursively from source to destination
@@ -938,15 +938,15 @@ fn copyDirectory(
     defer walker.deinit();
 
     while (try walker.next(io)) |entry| {
-        const dst_path = try std.fs.path.join(allocator, &.{ dest_dir, entry.path });
+        const dst_path = try std.Io.Dir.path.join(allocator, &.{ dest_dir, entry.path });
         defer allocator.free(dst_path);
 
         switch (entry.kind) {
             .file => {
-                if (std.fs.path.dirname(dst_path)) |parent| {
+                if (std.Io.Dir.path.dirname(dst_path)) |parent| {
                     createDirSafe(io, parent) catch {};
                 }
-                const src_path = try std.fs.path.join(allocator, &.{ source_dir, entry.path });
+                const src_path = try std.Io.Dir.path.join(allocator, &.{ source_dir, entry.path });
                 defer allocator.free(src_path);
                 try copyFileSafe(io, src_path, dst_path);
             },
@@ -1006,7 +1006,7 @@ const PubImport = struct {
 fn collectPubImports(
     io: std.Io,
     allocator: std.mem.Allocator,
-    out: *std.array_list.Managed(PubImport),
+    out: *std.ArrayList(PubImport),
     ast: *const std.zig.Ast,
     source_dir: []const u8,
     from: []const u8,
@@ -1022,13 +1022,13 @@ fn collectPubImports(
         defer allocator.free(rel);
         const ext_len = zxExtLen(rel) orelse continue;
 
-        const from_dir = std.fs.path.dirname(from) orelse "";
+        const from_dir = std.Io.Dir.path.dirname(from) orelse "";
         const to_rel = try std.mem.concat(allocator, u8, &.{ rel[0 .. rel.len - ext_len], ".zig" });
         defer allocator.free(to_rel);
-        try out.append(.{
+        try out.append(allocator, .{
             .from = try allocator.dupe(u8, from),
             .name = try allocator.dupe(u8, ast.tokenSlice(var_decl.ast.mut_token + 1)),
-            .to = try std.fs.path.resolveAllocPosix(allocator, &.{ from_dir, to_rel }),
+            .to = try std.Io.Dir.path.resolveAllocPosix(allocator, &.{ from_dir, to_rel }),
         });
     }
 }
@@ -1054,7 +1054,7 @@ fn resolveZx(io: std.Io, allocator: std.mem.Allocator, source_dir: []const u8, i
 
     for ([_][]const u8{ ".zx", ".mdzx", ".md" }) |ext| {
         const cand = allocator.print("{s}{s}", .{ stem, ext }) catch return null;
-        const resolved = std.fs.path.join(allocator, &.{ source_dir, cand }) catch {
+        const resolved = std.Io.Dir.path.join(allocator, &.{ source_dir, cand }) catch {
             allocator.free(cand);
             return null;
         };
@@ -1075,9 +1075,9 @@ fn writeClientZon(
     var prefixes = std.StringHashMap([]const u8).init(allocator);
     defer prefixes.deinit();
     try prefixes.put(root_rel, "");
-    var queue = std.array_list.Managed([]const u8).init(allocator);
-    defer queue.deinit();
-    try queue.append(root_rel);
+    var queue: std.ArrayList([]const u8) = .empty;
+    defer queue.deinit(allocator);
+    try queue.append(allocator, root_rel);
     var head: usize = 0;
     while (head < queue.items.len) : (head += 1) {
         const file = queue.items[head];
@@ -1085,12 +1085,12 @@ fn writeClientZon(
         for (pub_imports) |imp| {
             if (!std.mem.eql(u8, imp.from, file) or prefixes.contains(imp.to)) continue;
             try prefixes.put(imp.to, try joinDecl(allocator, prefix, imp.name));
-            try queue.append(imp.to);
+            try queue.append(allocator, imp.to);
         }
     }
 
-    var entries = std.array_list.Managed(ModuleClient).init(allocator);
-    defer entries.deinit();
+    var entries: std.ArrayList(ModuleClient) = .empty;
+    defer entries.deinit(allocator);
     for (components) |component| {
         const prefix = prefixes.get(component.path) orelse {
             std.debug.print(
@@ -1099,7 +1099,7 @@ fn writeClientZon(
             );
             continue;
         };
-        try entries.append(.{
+        try entries.append(allocator, .{
             .id = component.id,
             .name = component.name,
             .path = component.path,
@@ -1111,7 +1111,7 @@ fn writeClientZon(
     var aw = std.Io.Writer.Allocating.init(allocator);
     defer aw.deinit();
     try std.zon.stringify.serialize(entries.items, .{ .whitespace = true }, &aw.writer);
-    const out_path = try std.fs.path.join(allocator, &.{ outdir, client_zon });
+    const out_path = try std.Io.Dir.path.join(allocator, &.{ outdir, client_zon });
     defer allocator.free(out_path);
     try writeFile(io, out_path, aw.written());
 }
@@ -1125,18 +1125,18 @@ fn readClientZons(
     io: std.Io,
     allocator: std.mem.Allocator,
     dir_path: []const u8,
-    out: *std.array_list.Managed(ClientComponentSerializable),
-    modules: *std.array_list.Managed(HandlerModule),
+    out: *std.ArrayList(ClientComponentSerializable),
+    modules: *std.ArrayList(HandlerModule),
 ) !void {
     var dir = try std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true });
     defer dir.close(io);
 
-    var names = std.array_list.Managed([]const u8).init(allocator);
-    defer names.deinit();
+    var names: std.ArrayList([]const u8) = .empty;
+    defer names.deinit(allocator);
     var it = dir.iterate();
     while (try it.next(io)) |entry| {
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".zon")) continue;
-        try names.append(try allocator.dupe(u8, entry.name));
+        try names.append(allocator, try allocator.dupe(u8, entry.name));
     }
     std.mem.sort([]const u8, names.items, {}, struct {
         fn less(_: void, a: []const u8, b: []const u8) bool {
@@ -1146,7 +1146,7 @@ fn readClientZons(
 
     for (names.items) |file_name| {
         const module = file_name[0 .. file_name.len - ".zon".len];
-        const path = try std.fs.path.join(allocator, &.{ dir_path, file_name });
+        const path = try std.Io.Dir.path.join(allocator, &.{ dir_path, file_name });
         const raw = try readFile(io, allocator, path);
         const source = try allocator.dupeSentinel(u8, raw, 0);
         var diagnostics: std.zon.parse.Diagnostics = undefined;
@@ -1156,9 +1156,9 @@ fn readClientZons(
             .source = source,
             .diagnostics = &diagnostics,
         });
-        try modules.append(.{ .path = try allocator.dupe(u8, module), .client = parsed.len > 0 });
+        try modules.append(allocator, .{ .path = try allocator.dupe(u8, module), .client = parsed.len > 0 });
         for (parsed) |component| {
-            try out.append(.{
+            try out.append(allocator, .{
                 .type = .client,
                 .id = try allocator.dupe(u8, component.id),
                 .name = try allocator.dupe(u8, component.name),
@@ -1220,29 +1220,29 @@ fn mergeBuildInjectionsFromFile(
 }
 
 fn genRoutes(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8, _: ?[]const u8, client_components: []const ClientComponentSerializable, modules: []const HandlerModule, manifest: ?*Manifest, verbose: bool) !void {
-    var routes = std.array_list.Managed(Route).init(allocator);
+    var routes: std.ArrayList(Route) = .empty;
     defer {
         for (routes.items) |*route| route.deinit(allocator);
-        routes.deinit();
+        routes.deinit(allocator);
     }
 
     // Scan pages directory
-    const pages_dir = try std.fs.path.join(allocator, &.{ output_dir, "pages" });
+    const pages_dir = try std.Io.Dir.path.join(allocator, &.{ output_dir, "pages" });
     defer allocator.free(pages_dir);
 
     const has_pages = fileExists(io, pages_dir);
     if (has_pages) {
         if (verbose) std.debug.print("Scanning pages directory: {s}\n", .{pages_dir});
-        var layout_stack = std.array_list.Managed([]const u8).init(allocator);
+        var layout_stack: std.ArrayList([]const u8) = .empty;
         defer {
             for (layout_stack.items) |layout| allocator.free(layout);
-            layout_stack.deinit();
+            layout_stack.deinit(allocator);
         }
         try scanPagesRecursive(io, allocator, pages_dir, "", &layout_stack, "pages", &routes);
     }
 
     // Scan routes directory for API routes
-    const routes_dir = try std.fs.path.join(allocator, &.{ output_dir, "routes" });
+    const routes_dir = try std.Io.Dir.path.join(allocator, &.{ output_dir, "routes" });
     defer allocator.free(routes_dir);
 
     const has_routes = fileExists(io, routes_dir);
@@ -1306,7 +1306,7 @@ fn genRoutes(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8, _
 
     try writer.writeAll("const zx = @import(\"zx\");\n");
 
-    const meta_path = try std.fs.path.join(allocator, &.{ output_dir, "app.zig" });
+    const meta_path = try std.Io.Dir.path.join(allocator, &.{ output_dir, "app.zig" });
     defer allocator.free(meta_path);
 
     const content_z = try allocator.dupeSentinel(u8, content.written(), 0);
@@ -1332,7 +1332,7 @@ fn writeWorkers(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.Writer
         rels.deinit(allocator);
     }
     for (CliConstant.route_dirnames) |dirname| {
-        const sub = try std.fs.path.join(allocator, &.{ output_dir, dirname });
+        const sub = try std.Io.Dir.path.join(allocator, &.{ output_dir, dirname });
         defer allocator.free(sub);
         var dir = std.Io.Dir.cwd().openDir(io, sub, .{ .iterate = true }) catch continue;
         defer dir.close(io);
@@ -1340,7 +1340,7 @@ fn writeWorkers(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.Writer
         defer walker.deinit();
         while (try walker.next(io)) |entry| {
             if (entry.kind != .file or !std.mem.eql(u8, entry.basename, "worker.zig")) continue;
-            const rel = try std.fs.path.join(allocator, &.{ dirname, entry.path });
+            const rel = try std.Io.Dir.path.join(allocator, &.{ dirname, entry.path });
             std.mem.replaceScalar(u8, rel, '\\', '/');
             try rels.append(allocator, rel);
         }
@@ -1353,7 +1353,7 @@ fn writeWorkers(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.Writer
 
     try writer.writeAll("pub const workers = struct {\n");
     for (rels.items) |rel| {
-        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        var buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
         try writer.print("    pub const @\"{s}\" = @import(\"{s}\");\n", .{ WorkerName.typeNameFromPath(&buf, rel), rel });
     }
     try writer.writeAll("};\n\n");
@@ -1400,21 +1400,21 @@ fn scanPagesRecursive(
     allocator: std.mem.Allocator,
     current_dir: []const u8,
     current_path: []const u8,
-    layout_stack: *std.array_list.Managed([]const u8),
+    layout_stack: *std.ArrayList([]const u8),
     import_prefix: []const u8,
-    routes: *std.array_list.Managed(Route),
+    routes: *std.ArrayList(Route),
 ) !void {
-    const has_page = fileExists(io, try std.fs.path.join(allocator, &.{ current_dir, "page.zig" }));
-    const has_route = fileExists(io, try std.fs.path.join(allocator, &.{ current_dir, "route.zig" }));
-    const has_proxy = fileExists(io, try std.fs.path.join(allocator, &.{ current_dir, "proxy.zig" }));
-    const has_layout = fileExists(io, try std.fs.path.join(allocator, &.{ current_dir, "layout.zig" }));
-    const has_notfound = fileExists(io, try std.fs.path.join(allocator, &.{ current_dir, "notfound.zig" }));
-    const has_error = fileExists(io, try std.fs.path.join(allocator, &.{ current_dir, "error.zig" }));
+    const has_page = fileExists(io, try std.Io.Dir.path.join(allocator, &.{ current_dir, "page.zig" }));
+    const has_route = fileExists(io, try std.Io.Dir.path.join(allocator, &.{ current_dir, "route.zig" }));
+    const has_proxy = fileExists(io, try std.Io.Dir.path.join(allocator, &.{ current_dir, "proxy.zig" }));
+    const has_layout = fileExists(io, try std.Io.Dir.path.join(allocator, &.{ current_dir, "layout.zig" }));
+    const has_notfound = fileExists(io, try std.Io.Dir.path.join(allocator, &.{ current_dir, "notfound.zig" }));
+    const has_error = fileExists(io, try std.Io.Dir.path.join(allocator, &.{ current_dir, "error.zig" }));
 
     var current_layout_import: ?[]const u8 = null;
     if (has_layout) {
         current_layout_import = try std.mem.concat(allocator, u8, &.{ import_prefix, "/layout.zig" });
-        try layout_stack.append(current_layout_import.?);
+        try layout_stack.append(allocator, current_layout_import.?);
     }
 
     if (has_page or has_route or has_proxy) {
@@ -1435,7 +1435,7 @@ fn scanPagesRecursive(
 
         // Only add route if it has a page or route handler (not just proxy)
         if (has_page or has_route) {
-            try routes.append(.{
+            try routes.append(allocator, .{
                 .path = normalized_route_path,
                 .page_import = page_import,
                 .route_import = route_import,
@@ -1463,7 +1463,7 @@ fn scanPagesRecursive(
         if (entry.kind != .directory) continue;
         if (std.mem.eql(u8, entry.name, ".zx")) continue;
 
-        const child_dir = try std.fs.path.join(allocator, &.{ current_dir, entry.name });
+        const child_dir = try std.Io.Dir.path.join(allocator, &.{ current_dir, entry.name });
         defer allocator.free(child_dir);
 
         const child_path = if (current_path.len == 0 or std.mem.eql(u8, current_path, "/"))
@@ -1491,10 +1491,10 @@ fn scanRoutesRecursive(
     current_dir: []const u8,
     current_path: []const u8,
     import_prefix: []const u8,
-    routes: *std.array_list.Managed(Route),
+    routes: *std.ArrayList(Route),
 ) !void {
-    const has_route = fileExists(io, try std.fs.path.join(allocator, &.{ current_dir, "route.zig" }));
-    const has_proxy = fileExists(io, try std.fs.path.join(allocator, &.{ current_dir, "proxy.zig" }));
+    const has_route = fileExists(io, try std.Io.Dir.path.join(allocator, &.{ current_dir, "route.zig" }));
+    const has_proxy = fileExists(io, try std.Io.Dir.path.join(allocator, &.{ current_dir, "proxy.zig" }));
 
     if (has_route) {
         const route_import = try std.mem.concat(allocator, u8, &.{ import_prefix, "/route.zig" });
@@ -1508,7 +1508,7 @@ fn scanRoutesRecursive(
 
         const normalized_route_path = try normalizeRoutePath(allocator, route_path);
 
-        try routes.append(.{
+        try routes.append(allocator, .{
             .path = normalized_route_path,
             .route_import = route_import,
             .proxy_import = proxy_import,
@@ -1523,7 +1523,7 @@ fn scanRoutesRecursive(
         if (entry.kind != .directory) continue;
         if (std.mem.eql(u8, entry.name, ".zx")) continue;
 
-        const child_dir = try std.fs.path.join(allocator, &.{ current_dir, entry.name });
+        const child_dir = try std.Io.Dir.path.join(allocator, &.{ current_dir, entry.name });
         defer allocator.free(child_dir);
 
         const child_path = if (current_path.len == 0 or std.mem.eql(u8, current_path, "/"))
@@ -1542,15 +1542,15 @@ fn scanRoutesRecursive(
 fn transpileFile(
     io: std.Io,
     allocator: std.mem.Allocator,
-    global_components: *std.array_list.Managed(ClientComponentSerializable),
+    global_components: *std.ArrayList(ClientComponentSerializable),
     opts: TranspileOptions,
     source_path: []const u8,
     output_path: []const u8,
-    imports_out: ?*std.array_list.Managed([]const u8),
-    input_files: *std.array_list.Managed([]const u8),
+    imports_out: ?*std.ArrayList([]const u8),
+    input_files: *std.ArrayList([]const u8),
     companions_visited: *std.StringHashMap(void),
-    zx_sources: ?*std.array_list.Managed([]const u8),
-    pub_imports: ?*std.array_list.Managed(PubImport),
+    zx_sources: ?*std.ArrayList([]const u8),
+    pub_imports: ?*std.ArrayList(PubImport),
 ) !void {
     const source = try readFile(io, allocator, source_path);
     defer allocator.free(source);
@@ -1569,7 +1569,7 @@ fn transpileFile(
     });
     defer result.deinit(allocator);
 
-    const ast_source_dir = std.fs.path.dirname(source_path) orelse ".";
+    const ast_source_dir = std.Io.Dir.path.dirname(source_path) orelse ".";
     if (imports_out) |out| {
         try collectZxImports(io, allocator, out, &result.zig_ast, ast_source_dir);
     }
@@ -1580,7 +1580,7 @@ fn transpileFile(
     }
     // Copy only companions reachable via `@embedFile` / relative `@import`.
     {
-        const ast_out_dir = std.fs.path.dirname(output_path) orelse opts.outdir;
+        const ast_out_dir = std.Io.Dir.path.dirname(output_path) orelse opts.outdir;
         try collectEmbedFiles(io, allocator, input_files, &result.zig_ast, ast_source_dir, ast_out_dir);
         try collectAndCopyCompanions(io, allocator, input_files, companions_visited, zx_sources, &result.zig_ast, ast_source_dir, ast_out_dir, opts.verbose);
     }
@@ -1622,7 +1622,7 @@ fn transpileFile(
             },
         }
 
-        try global_components.append(.{
+        try global_components.append(allocator, .{
             .type = component.type,
             .id = cloned_id,
             .name = cloned_name,
@@ -1632,7 +1632,7 @@ fn transpileFile(
         });
     }
 
-    if (std.fs.path.dirname(output_path)) |dir| try createDirSafe(io, dir);
+    if (std.Io.Dir.path.dirname(output_path)) |dir| try createDirSafe(io, dir);
     try writeFile(io, output_path, result.zig_source);
 
     // Handle position map based on config
@@ -1662,21 +1662,21 @@ fn transpileFile(
 /// else the route files under `pages/` and `routes/`, else (no routing dirs)
 /// every `.zx`/`.mdzx`/`.md` in the tree.
 fn collectRoots(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOptions) ![][]const u8 {
-    var rels = std.array_list.Managed([]const u8).init(allocator);
+    var rels: std.ArrayList([]const u8) = .empty;
     errdefer {
         for (rels.items) |r| allocator.free(r);
-        rels.deinit();
+        rels.deinit(allocator);
     }
 
     if (opts.roots) |roots_path| {
         const body = try readFile(io, allocator, roots_path);
         defer allocator.free(body);
         var lines = std.mem.tokenizeAny(u8, body, "\r\n");
-        while (lines.next()) |line| try rels.append(try allocator.dupe(u8, line));
+        while (lines.next()) |line| try rels.append(allocator, try allocator.dupe(u8, line));
     } else {
         var has_route_dirs = false;
         for (CliConstant.route_dirnames) |dirname| {
-            const sub = try std.fs.path.join(allocator, &.{ opts.path, dirname });
+            const sub = try std.Io.Dir.path.join(allocator, &.{ opts.path, dirname });
             defer allocator.free(sub);
             if (!fileExists(io, sub)) continue;
             has_route_dirs = true;
@@ -1690,7 +1690,7 @@ fn collectRoots(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOptions
             return std.mem.order(u8, a, b) == .lt;
         }
     }.less);
-    return try rels.toOwnedSlice();
+    return try rels.toOwnedSlice(allocator);
 }
 
 fn isZxSource(basename: []const u8) bool {
@@ -1701,7 +1701,7 @@ fn isZxSource(basename: []const u8) bool {
 fn appendSources(
     io: std.Io,
     allocator: std.mem.Allocator,
-    out: *std.array_list.Managed([]const u8),
+    out: *std.ArrayList([]const u8),
     dir_path: []const u8,
     prefix: []const u8,
     outdir: []const u8,
@@ -1717,11 +1717,11 @@ fn appendSources(
     defer walker.deinit();
     while (try walker.next(io)) |entry| {
         if (outdir_rel) |rel| if (std.mem.startsWith(u8, entry.path, rel) and
-            (entry.path.len == rel.len or entry.path[rel.len] == std.fs.path.sep)) continue;
+            (entry.path.len == rel.len or entry.path[rel.len] == std.Io.Dir.path.sep)) continue;
         if (!filter(entry.basename)) continue;
         const kind = if (entry.kind == .sym_link) (dir.statFile(io, entry.path, .{}) catch continue).kind else entry.kind;
         if (kind != .file) continue;
-        try out.append(try std.fs.path.join(allocator, &.{ prefix, entry.path }));
+        try out.append(allocator, try std.Io.Dir.path.join(allocator, &.{ prefix, entry.path }));
     }
 }
 
@@ -1730,9 +1730,9 @@ fn appendSources(
 fn transpileDirectory(
     io: std.Io,
     allocator: std.mem.Allocator,
-    global_components: *std.array_list.Managed(ClientComponentSerializable),
-    modules: *std.array_list.Managed([]const u8),
-    input_files: *std.array_list.Managed([]const u8),
+    global_components: *std.ArrayList(ClientComponentSerializable),
+    modules: *std.ArrayList([]const u8),
+    input_files: *std.ArrayList([]const u8),
     companions_visited: *std.StringHashMap(void),
     opts: TranspileOptions,
     progress: std.Progress.Node,
@@ -1756,10 +1756,10 @@ fn transpileDirectory(
         }
     }
 
-    var pending = std.array_list.Managed([]const u8).init(allocator);
+    var pending: std.ArrayList([]const u8) = .empty;
     defer {
         for (pending.items) |p| allocator.free(p);
-        pending.deinit();
+        pending.deinit(allocator);
     }
     var seen = std.StringHashMap(void).init(allocator);
     defer {
@@ -1772,17 +1772,17 @@ fn transpileDirectory(
     var i = roots.len;
     while (i > 0) {
         i -= 1;
-        try pending.append(try std.fs.path.join(allocator, &.{ opts.path, roots[i] }));
+        try pending.append(allocator, try std.Io.Dir.path.join(allocator, &.{ opts.path, roots[i] }));
     }
 
-    const abs_root = try std.fs.path.resolve(allocator, &.{opts.path});
+    const abs_root = try std.Io.Dir.path.resolveAlloc(allocator, &.{opts.path});
     defer allocator.free(abs_root);
 
     while (pending.pop()) |input_path| {
         defer allocator.free(input_path);
         task.completeOne();
 
-        const abs_input = std.fs.path.resolve(allocator, &.{input_path}) catch continue;
+        const abs_input = std.Io.Dir.path.resolveAlloc(allocator, &.{input_path}) catch continue;
         if (seen.contains(abs_input)) {
             allocator.free(abs_input);
             continue;
@@ -1793,7 +1793,7 @@ fn transpileDirectory(
         const rel = try relativePath(io, allocator, abs_root, abs_input);
         defer allocator.free(rel);
         // Different drive on Windows yields an absolute path
-        if (std.mem.eql(u8, rel, "..") or std.mem.startsWith(u8, rel, "../") or std.fs.path.isAbsolute(rel)) continue;
+        if (std.mem.eql(u8, rel, "..") or std.mem.startsWith(u8, rel, "../") or std.Io.Dir.path.isAbsolute(rel)) continue;
 
         try transpileSource(io, allocator, global_components, modules, input_files, companions_visited, &pending, opts, input_path, abs_input, rel);
     }
@@ -1810,21 +1810,21 @@ fn transpileDirectory(
 fn transpileSource(
     io: std.Io,
     allocator: std.mem.Allocator,
-    global_components: *std.array_list.Managed(ClientComponentSerializable),
-    modules: *std.array_list.Managed([]const u8),
-    input_files: *std.array_list.Managed([]const u8),
+    global_components: *std.ArrayList(ClientComponentSerializable),
+    modules: *std.ArrayList([]const u8),
+    input_files: *std.ArrayList([]const u8),
     companions_visited: *std.StringHashMap(void),
-    pending: *std.array_list.Managed([]const u8),
+    pending: *std.ArrayList([]const u8),
     opts: TranspileOptions,
     input_path: []const u8,
     abs_input: []const u8,
     rel: []const u8,
 ) !void {
     const ext_len = zxExtLen(rel) orelse {
-        if (zxSourceFor(io, allocator, input_path)) |zx_src| return pending.append(zx_src);
+        if (zxSourceFor(io, allocator, input_path)) |zx_src| return pending.append(allocator, zx_src);
 
         // Hand-written route `.zig` - copy and follow its import/embed graph.
-        const output_path = try std.fs.path.join(allocator, &.{ opts.outdir, rel });
+        const output_path = try std.Io.Dir.path.join(allocator, &.{ opts.outdir, rel });
         defer allocator.free(output_path);
         copyCompanionRecursive(io, allocator, input_files, companions_visited, pending, input_path, output_path, opts.verbose) catch |err| {
             std.debug.print("Warning: Failed to copy route root {s}: {}\n", .{ input_path, err });
@@ -1835,15 +1835,15 @@ fn transpileSource(
     const output_rel_path = try std.mem.concat(allocator, u8, &.{ rel[0 .. rel.len - ext_len], ".zig" });
     defer allocator.free(output_rel_path);
 
-    const output_path = try std.fs.path.join(allocator, &.{ opts.outdir, output_rel_path });
+    const output_path = try std.Io.Dir.path.join(allocator, &.{ opts.outdir, output_rel_path });
     defer allocator.free(output_path);
 
     // Track this input for the dep file (absolute path for Make format).
     // Embedded-file deps are collected by `transpileFile` via the AST.
-    try input_files.append(try allocator.dupe(u8, abs_input));
+    try input_files.append(allocator, try allocator.dupe(u8, abs_input));
 
     const cache_base = opts.cache_dir orelse opts.outdir;
-    const cache_out_path = try std.fs.path.join(allocator, &.{ cache_base, output_rel_path });
+    const cache_out_path = try std.Io.Dir.path.join(allocator, &.{ cache_base, output_rel_path });
     defer allocator.free(cache_out_path);
 
     // Cache file alongside the .zig output (not .zig extension so compiler ignores it)
@@ -1865,7 +1865,7 @@ fn transpileSource(
 
     if (should_skip) {
         if (opts.cache_dir != null and !cache_is_output) {
-            if (std.fs.path.dirname(output_path)) |parent_dir| {
+            if (std.Io.Dir.path.dirname(output_path)) |parent_dir| {
                 std.Io.Dir.cwd().createDirPath(io, parent_dir) catch {};
             }
             std.Io.Dir.cwd().copyFile(cache_out_path, std.Io.Dir.cwd(), output_path, io, .{}) catch |err| {
@@ -1875,8 +1875,8 @@ fn transpileSource(
         // Transpilation was skipped - replay companion copies and `.zx` imports
         // from the cached `.zig` (`@embedFile` + relative `@import`s).
         {
-            const embed_src_dir = std.fs.path.dirname(input_path) orelse ".";
-            const embed_out_dir = std.fs.path.dirname(output_path) orelse opts.outdir;
+            const embed_src_dir = std.Io.Dir.path.dirname(input_path) orelse ".";
+            const embed_out_dir = std.Io.Dir.path.dirname(output_path) orelse opts.outdir;
             copyCompanionsForCached(io, allocator, input_files, companions_visited, pending, cache_out_path, embed_src_dir, embed_out_dir, opts.verbose) catch |err| {
                 std.debug.print("Warning: Failed to copy companions for cached {s}: {}\n", .{ input_path, err });
             };
@@ -1893,7 +1893,7 @@ fn transpileSource(
     };
 
     if (opts.cache_dir != null and !cache_is_output) {
-        if (std.fs.path.dirname(cache_out_path)) |parent_dir| {
+        if (std.Io.Dir.path.dirname(cache_out_path)) |parent_dir| {
             std.Io.Dir.cwd().createDirPath(io, parent_dir) catch {};
         }
         std.Io.Dir.cwd().copyFile(output_path, std.Io.Dir.cwd(), cache_out_path, io, .{}) catch |err| {
@@ -1908,8 +1908,8 @@ fn transpileSource(
 }
 
 /// Lists a transpiled module in `app.zig` so its `pub` server handlers are registered.
-fn addModule(allocator: std.mem.Allocator, modules: *std.array_list.Managed([]const u8), output_rel_path: []const u8) !void {
-    try modules.append(try allocator.dupe(u8, output_rel_path));
+fn addModule(allocator: std.mem.Allocator, modules: *std.ArrayList([]const u8), output_rel_path: []const u8) !void {
+    try modules.append(allocator, try allocator.dupe(u8, output_rel_path));
 }
 
 const TranspileOptions = struct {
@@ -1957,7 +1957,7 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
     var progress = std.Progress.start(io, .{ .root_name = "Transpile" });
     defer progress.end();
 
-    var all_client_cmps = std.array_list.Managed(ClientComponentSerializable).init(allocator);
+    var all_client_cmps: std.ArrayList(ClientComponentSerializable) = .empty;
     defer {
         for (all_client_cmps.items) |*component| {
             allocator.free(component.id);
@@ -1966,19 +1966,19 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
             allocator.free(component.import);
             allocator.free(component.route);
         }
-        all_client_cmps.deinit();
+        all_client_cmps.deinit(allocator);
     }
 
-    var input_files = std.array_list.Managed([]const u8).init(allocator);
+    var input_files: std.ArrayList([]const u8) = .empty;
     defer {
         for (input_files.items) |f| allocator.free(f);
-        input_files.deinit();
+        input_files.deinit(allocator);
     }
 
-    var modules = std.array_list.Managed([]const u8).init(allocator);
+    var modules: std.ArrayList([]const u8) = .empty;
     defer {
         for (modules.items) |m| allocator.free(m);
-        modules.deinit();
+        modules.deinit(allocator);
     }
 
     var companions_visited = std.StringHashMap(void).init(allocator);
@@ -2027,7 +2027,7 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
             const ext_len = zxExtLen(opts.path).?;
             const output_rel_path = try std.mem.concat(allocator, u8, &.{ basename[0 .. basename.len - ext_len], ".zig" });
             defer allocator.free(output_rel_path);
-            const outpath = try std.fs.path.join(allocator, &.{ opts.outdir, output_rel_path });
+            const outpath = try std.Io.Dir.path.join(allocator, &.{ opts.outdir, output_rel_path });
             defer allocator.free(outpath);
 
             var visited = std.StringHashMap(void).init(allocator);
@@ -2036,8 +2036,8 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
                 while (it.next()) |k| allocator.free(k.*);
                 visited.deinit();
             }
-            var pub_imports = std.array_list.Managed(PubImport).init(allocator);
-            defer pub_imports.deinit();
+            var pub_imports: std.ArrayList(PubImport) = .empty;
+            defer pub_imports.deinit(allocator);
             try transpileFileRecursive(io, allocator, &all_client_cmps, opts, opts.path, outpath, &visited, &input_files, &companions_visited, &pub_imports);
             try writeClientZon(io, allocator, opts.outdir, output_rel_path, all_client_cmps.items, pub_imports.items);
             task.completeOne();
@@ -2062,19 +2062,19 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
     }
 
     // --- @client -> Client Side Rendering Related Files Generation --- //
-    var client_cmps = std.array_list.Managed(ClientComponentSerializable).init(allocator);
-    defer client_cmps.deinit();
+    var client_cmps: std.ArrayList(ClientComponentSerializable) = .empty;
+    defer client_cmps.deinit(allocator);
 
     for (all_client_cmps.items) |component| {
         switch (component.type) {
-            .client => try client_cmps.append(component),
+            .client => try client_cmps.append(allocator, component),
         }
     }
 
-    var handler_modules = std.array_list.Managed(HandlerModule).init(allocator);
+    var handler_modules: std.ArrayList(HandlerModule) = .empty;
     defer {
         for (handler_modules.items) |m| allocator.free(m.path);
-        handler_modules.deinit();
+        handler_modules.deinit(allocator);
     }
     std.mem.sort([]const u8, modules.items, {}, struct {
         fn less(_: void, a: []const u8, b: []const u8) bool {
@@ -2085,7 +2085,7 @@ fn transpileCommand(io: std.Io, allocator: std.mem.Allocator, opts: TranspileOpt
         if (i > 0 and std.mem.eql(u8, module, modules.items[i - 1])) continue;
         var client = false;
         for (client_cmps.items) |c| client = client or std.mem.eql(u8, c.path, module);
-        try handler_modules.append(.{ .path = try allocator.dupe(u8, module), .client = client });
+        try handler_modules.append(allocator, .{ .path = try allocator.dupe(u8, module), .client = client });
     }
 
     // Generate app.zig with routes and client components

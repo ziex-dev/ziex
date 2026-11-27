@@ -9,6 +9,13 @@ const ServerBackend = enum {
     dusty,
 };
 
+const WranglerCommand = enum {
+    dev,
+    deploy,
+    build,
+    @"-",
+};
+
 pub fn build(b: *std.Build) !void {
     // --- Target and Optimize from `zig build` arguments ---
     const target = b.standardTargetOptions(.{});
@@ -62,7 +69,7 @@ pub fn build(b: *std.Build) !void {
     // --- Playground Assets --- //
     {
         const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
-        const wasm_optimize: std.builtin.Optimize = .small;
+        const wasm_optimize: std.lang.Optimize = .small;
 
         const zx_wasm_dep = b.dependency("ziex", .{ .target = wasm_target, .optimize = wasm_optimize, .lsp = true });
         const zx_exe = zx_wasm_dep.artifact("zx");
@@ -71,7 +78,7 @@ pub fn build(b: *std.Build) !void {
         const run_zx_tar = b.addSystemCommand(&.{ "tar", "-czf" });
         run_zx_tar.setName("pack zx sources (playground)");
         run_zx_tar.has_side_effects = true;
-        const zx_tar_gz = run_zx_tar.addOutputFileArg("zx.tar.gz");
+        const zx_tar_gz = run_zx_tar.addOutputFileArg2("zx.tar.gz", .{});
         run_zx_tar.addArgs(&.{
             "--exclude",
             "src/cli",
@@ -85,7 +92,7 @@ pub fn build(b: *std.Build) !void {
             "src/main.zig",
         });
         run_zx_tar.addArg("-C");
-        run_zx_tar.addDirectoryArg(zx_wasm_dep.path("."));
+        run_zx_tar.addDirectoryArg2(zx_wasm_dep.path("."), .{});
         run_zx_tar.addArg("src");
 
         const ziex_js_files = ziex_js_dep.namedWriteFiles("ziex_js");
@@ -119,9 +126,9 @@ pub fn build(b: *std.Build) !void {
             // -- zig.tar.gz
             const run_tar = b.addSystemCommand(&.{ "tar", "-czf" });
             run_tar.setName("pack zig stdlib (playground)");
-            const zig_tar_gz = run_tar.addOutputFileArg("zig.tar.gz");
+            const zig_tar_gz = run_tar.addOutputFileArg2("zig.tar.gz", .{});
             run_tar.addArg("-C");
-            run_tar.addDirectoryArg(zig_dep.path("."));
+            run_tar.addDirectoryArg2(zig_dep.path("."), .{});
             run_tar.addArgs(&.{ "lib/std", "lib/ubsan_rt.zig", "lib/compiler_rt.zig", "lib/compiler_rt", "lib/c.zig", "lib/fuzzer.zig", "lib/zig.h", "lib/compiler/test_runner.zig" });
 
             _ = playground_assets.addCopyFile(zig_exe.getEmittedBin(), b.fmt("zig-{s}.wasm", .{playground_zig_version}));
@@ -153,9 +160,9 @@ pub fn build(b: *std.Build) !void {
 
             const run_tar = b.addSystemCommand(&.{ "tar", "-czf" });
             run_tar.setName("pack zig stdlib (playground)");
-            const zig_tar_gz = run_tar.addOutputFileArg("zig.tar.gz");
+            const zig_tar_gz = run_tar.addOutputFileArg2("zig.tar.gz", .{});
             run_tar.addArg("-C");
-            run_tar.addDirectoryArg(lib_stage.getDirectory());
+            run_tar.addDirectoryArg2(lib_stage.getDirectory(), .{});
             run_tar.addArg("lib");
 
             _ = playground_assets.addCopyFile(
@@ -183,13 +190,18 @@ pub fn build(b: *std.Build) !void {
         pg_step.dependOn(&install_pg.step);
     }
 
+    const wrangler_cmd = std.meta.stringToEnum(
+        WranglerCommand,
+        b.graph.environ_map.get("WRANGLER_COMMAND") orelse "-",
+    ) orelse .@"-";
+
     // --- Ziex App Executable --- //
     const app_exe = b.addExecutable(.{
         .name = "ziex_dev",
         .root_module = b.createModule(.{
             .root_source_file = b.path("app/main.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = if (wrangler_cmd == .dev) .debug else optimize,
         }),
     });
     app_exe.root_module.addImport("initoptions", b.createModule(.{
@@ -200,8 +212,7 @@ pub fn build(b: *std.Build) !void {
     app_exe.root_module.addImport("tree_sitter", tree_sitter_dep.module("tree_sitter"));
     app_exe.root_module.addImport("tree_sitter_zx", tree_sitter_zx_dep.module("tree_sitter_zx"));
     if (target.result.os.tag != .freestanding)
-        if (b.lazyDependency("lunasvg", .{ .optimize = optimize, .target = target })) |lunasvg|
-            app_exe.root_module.addImport("lunasvg", lunasvg.module("lunasvg"));
+        app_exe.root_module.addImport("lunasvg", b.dependency("lunasvg", .{ .optimize = optimize, .target = target }).module("lunasvg"));
     app_exe.root_module.addImport("geist_fonts", addGeistFontsModule(b));
     app_exe.root_module.addImport("branding", addBrandingModule(b));
 
@@ -239,15 +250,11 @@ pub fn build(b: *std.Build) !void {
     });
     zx.addImport("cli_args", ziex_dep.module("cli_args"));
     if (!target.result.cpu.arch.isWasm() and server_backend == .dusty) {
-        if (b.lazyDependency("dusty", .{ .target = target, .optimize = optimize, .use_tls = false })) |dusty_dep| {
-            const dusty_mod = dusty_dep.module("dusty");
-            if (b.lazyDependency("zio", .{ .target = target, .optimize = optimize })) |zio_dep| {
-                const zio_mod = zio_dep.module("zio");
-                dusty_mod.addImport("zio", zio_mod);
-                zx.addImport("zio", zio_mod);
-            }
-            zx.addImport("dusty", dusty_mod);
-        }
+        const dusty_mod = b.dependency("dusty", .{ .target = target, .optimize = optimize, .use_tls = false }).module("dusty");
+        const zio_mod = b.dependency("zio", .{ .target = target, .optimize = optimize }).module("zio");
+        dusty_mod.addImport("zio", zio_mod);
+        zx.addImport("zio", zio_mod);
+        zx.addImport("dusty", dusty_mod);
     }
 
     // --- ZX Components --- //
@@ -381,7 +388,7 @@ pub fn build(b: *std.Build) !void {
 }
 
 // Cache-busting id: hash of the sources packed into / compiled for the playground and client assets
-fn assetId(b: *std.Build, _: std.builtin.Optimize) []const u8 {
+fn assetId(b: *std.Build, _: std.lang.Optimize) []const u8 {
     const io = b.graph.io;
     const dirs = [_][]const u8{ "../src", "../pkg/ziex/src" };
     var hasher = std.hash.Wyhash.init(0);
@@ -396,7 +403,7 @@ fn assetId(b: *std.Build, _: std.builtin.Optimize) []const u8 {
         defer walker.deinit();
         while (walker.next(io) catch |err| std.debug.panic("unable to walk {s}: {t}", .{ sub, err })) |entry| switch (entry.kind) {
             .directory => b.dependOnDirectoryContents(b.path(b.pathJoin(&.{ sub, entry.path }))),
-            .file => files.append(b.allocator, b.dupe(entry.path)) catch @panic("OOM"),
+            .file => files.append(b.allocator, b.graph.dupeString(entry.path)) catch @panic("OOM"),
             else => {},
         };
         // Walk order is fs-dependent

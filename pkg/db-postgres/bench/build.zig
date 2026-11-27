@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     // benchmarks default to -Doptimize=fast
-    const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Optimization mode (default fast)") orelse .fast;
+    const optimize = b.option(std.lang.Optimize, "optimize", "Optimization mode (default fast)") orelse .fast;
     // e.g. -Dlibpq=$(brew --prefix libpq); omitted => libpq driver is skipped
     const libpq_prefix = b.option([]const u8, "libpq", "libpq install prefix containing include/ and lib/");
     // e.g. -Dopenssl=$(brew --prefix openssl@3); needed for pg.zig over TLS (it uses OpenSSL)
@@ -70,7 +70,7 @@ pub fn build(b: *std.Build) void {
     b.step("run", "Run the benchmark (pass the URL after --)").dependOn(&run.step);
 }
 
-fn pgModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, openssl_prefix: ?[]const u8) *std.Build.Module {
+fn pgModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.Optimize, openssl_prefix: ?[]const u8) *std.Build.Module {
     const prefix = openssl_prefix orelse return b.dependency("pg", .{ .target = target, .optimize = optimize }).module("pg");
     return b.dependency("pg", .{
         .target = target,

@@ -166,10 +166,10 @@ fn testJson(backend: Backend) !void {
         fn run(h: *Harness, arena: Allocator) !void {
             const res = try h.fetch(arena, .{ .path = "/json" });
             try std.testing.expectEqual(@as(u16, 200), res.status);
-            try std.testing.expect(std.mem.indexOf(u8, res.body, "\"ok\":true") != null or std.mem.indexOf(u8, res.body, "\"ok\": true") != null);
-            try std.testing.expect(std.mem.indexOf(u8, res.body, "42") != null);
+            try std.testing.expect(std.mem.find(u8, res.body, "\"ok\":true") != null or std.mem.find(u8, res.body, "\"ok\": true") != null);
+            try std.testing.expect(std.mem.find(u8, res.body, "42") != null);
             if (res.header("content-type")) |ct| {
-                try std.testing.expect(std.mem.indexOf(u8, ct, "application/json") != null);
+                try std.testing.expect(std.mem.find(u8, ct, "application/json") != null);
             }
         }
     }.run);

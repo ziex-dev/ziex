@@ -516,7 +516,7 @@ pub fn simpleQuery(self: *Conn, sql: []const u8) !u64 {
 // --- Statement cache --- //
 
 fn stmtName(buf: *[16]u8, id: u32) []const u8 {
-    return std.fmt.bufPrint(buf, "zx_{d}", .{id}) catch unreachable;
+    return std.mem.print(buf, "zx_{d}", .{id}) catch unreachable;
 }
 
 /// Key = param count, param OIDs, SQL; built in a reused buffer.

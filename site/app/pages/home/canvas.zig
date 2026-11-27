@@ -36,7 +36,7 @@ var ring_i: usize = 0;
 fn fmt(comptime f: []const u8, args: anytype) []const u8 {
     const b = &ring[ring_i % ring.len];
     ring_i +%= 1;
-    return std.fmt.bufPrint(b, f, args) catch b[0..0];
+    return std.mem.print(b, f, args) catch b[0..0];
 }
 
 /// `#rrggbb` → `rgba(r, g, b, a)`; like the original, non-hex input yields black.
@@ -1027,7 +1027,7 @@ fn drawTooling(c: C, t: f64) void {
     rr(c, 54, 4, 120, 22, 5);
     c.setFillStyle("rgba(255,255,255,0.05)");
     c.fill(null);
-    const base = if (std.mem.lastIndexOfScalar(u8, tl.file, '/')) |i| tl.file[i + 1 ..] else tl.file;
+    const base = if (std.mem.findScalarLast(u8, tl.file, '/')) |i| tl.file[i + 1 ..] else tl.file;
     text(c, base, 66, 19, .{ .font = "11px " ++ MONO, .color = TEXT });
     c.setFillStyle(GREEN);
     c.fillRect(54, 24, 120, 1.5);
@@ -1036,9 +1036,9 @@ fn drawTooling(c: C, t: f64) void {
     const lh: f64 = 20.0;
     const code_top: f64 = 48.0;
     const type_line: ?usize = for (tl.code, 0..) |l, i| {
-        if (std.mem.indexOf(u8, l, "@client") != null) break i;
+        if (std.mem.find(u8, l, "@client") != null) break i;
     } else null;
-    const type_at: usize = if (type_line) |i| std.mem.indexOf(u8, tl.code[i], "@client").? else 0;
+    const type_at: usize = if (type_line) |i| std.mem.find(u8, tl.code[i], "@client").? else 0;
     const typed: usize = if (type_line != null) floorUsize(clamp((local - 0.4) / 1.0) * 4) else 0;
     const accepted = local > 2.6;
 

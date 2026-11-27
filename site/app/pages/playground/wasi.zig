@@ -19,7 +19,7 @@ pub const Node = struct {
     mtime: u64 = 0,
     kind: Kind,
     data: std.ArrayList(u8) = .empty,
-    children: std.StringArrayHashMapUnmanaged(*Node) = .empty,
+    children: std.array_hash_map.String(*Node) = .empty,
 
     pub const Kind = enum { file, dir };
 
@@ -323,7 +323,7 @@ fn buildImports(module: js.Value, extra: Extra) !js.Object {
 
         var export_buf: [96]u8 = undefined;
         const export_name: []const u8 = if (std.mem.eql(u8, mod, "wasi_snapshot_preview1"))
-            std.fmt.bufPrint(&export_buf, "pgwasi_{s}", .{name}) catch return error.MissingImport
+            std.mem.print(&export_buf, "pgwasi_{s}", .{name}) catch return error.MissingImport
         else for (extra.imports) |imp| {
             if (std.mem.eql(u8, imp.module, mod) and std.mem.eql(u8, imp.name, name)) break imp.@"export";
         } else {

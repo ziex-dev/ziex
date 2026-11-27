@@ -157,7 +157,7 @@ fn putHeaders(s: *const S3, arena: std.mem.Allocator, opts: Bucket.PutOptions) B
     if (opts.content_encoding) |v| try headers.append(arena, .{ .name = "content-encoding", .value = v });
     if (opts.cache_control) |v| try headers.append(arena, .{ .name = "cache-control", .value = v });
     for (opts.metadata) |m| {
-        const name = try std.fmt.allocPrint(arena, "x-amz-meta-{s}", .{m.name});
+        const name = try arena.print("x-amz-meta-{s}", .{m.name});
         _ = std.ascii.lowerString(name, name);
         try headers.append(arena, .{ .name = name, .value = m.value });
     }
@@ -169,9 +169,9 @@ fn putHeaders(s: *const S3, arena: std.mem.Allocator, opts: Bucket.PutOptions) B
 fn rangeHeader(arena: std.mem.Allocator, range: ?Bucket.Range) Bucket.Error![]const Header {
     const r = range orelse return &.{};
     const value = if (r.length) |len|
-        try std.fmt.allocPrint(arena, "bytes={d}-{d}", .{ r.offset, r.offset + len - 1 })
+        try arena.print("bytes={d}-{d}", .{ r.offset, r.offset + len - 1 })
     else
-        try std.fmt.allocPrint(arena, "bytes={d}-", .{r.offset});
+        try arena.print("bytes={d}-", .{r.offset});
     return arena.dupe(Header, &.{.{ .name = "range", .value = value }});
 }
 
@@ -188,7 +188,7 @@ fn metaFromHeaders(arena: std.mem.Allocator, key: []const u8, headers: []const H
             meta.size = std.fmt.parseInt(u64, value, 10) catch 0;
         } else if (std.ascii.eqlIgnoreCase(h.name, "content-range")) {
             // `bytes 0-9/100`: the object's full size.
-            if (std.mem.lastIndexOfScalar(u8, value, '/')) |i| meta.size = std.fmt.parseInt(u64, value[i + 1 ..], 10) catch meta.size;
+            if (std.mem.findScalarLast(u8, value, '/')) |i| meta.size = std.fmt.parseInt(u64, value[i + 1 ..], 10) catch meta.size;
         } else if (std.ascii.eqlIgnoreCase(h.name, "etag")) {
             meta.etag = unquote(value);
         } else if (std.ascii.eqlIgnoreCase(h.name, "last-modified")) {
@@ -292,7 +292,7 @@ fn list(userdata: ?*anyopaque, gpa: std.mem.Allocator, opts: Bucket.ListOptions)
 
     var query: std.ArrayList(sign.Param) = .empty;
     try query.append(a, .{ .name = "list-type", .value = "2" });
-    try query.append(a, .{ .name = "max-keys", .value = try std.fmt.allocPrint(a, "{d}", .{opts.limit}) });
+    try query.append(a, .{ .name = "max-keys", .value = try a.print("{d}", .{opts.limit}) });
     if (opts.prefix.len > 0) try query.append(a, .{ .name = "prefix", .value = opts.prefix });
     if (opts.delimiter) |d| try query.append(a, .{ .name = "delimiter", .value = d });
     if (opts.cursor) |c| try query.append(a, .{ .name = "continuation-token", .value = c });
@@ -466,7 +466,7 @@ const Upload = struct {
             up.upload_id = try up.arena().dupe(u8, id);
         }
         var number_buf: [8]u8 = undefined;
-        const number = std.fmt.bufPrint(&number_buf, "{d}", .{up.etags.items.len + 1}) catch unreachable;
+        const number = std.mem.print(&number_buf, "{d}", .{up.etags.items.len + 1}) catch unreachable;
         const res = try up.request(.{
             .method = .PUT,
             .key = up.key,

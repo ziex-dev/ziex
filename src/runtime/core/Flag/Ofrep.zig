@@ -30,7 +30,7 @@ pub fn flag(o: *Ofrep) Flag {
 
 fn resolve(userdata: ?*anyopaque, arena: std.mem.Allocator, key: []const u8, _: Flag.Kind, context: Flag.Context) Flag.Error!Flag.Resolution {
     const o: *Ofrep = @ptrCast(@alignCast(userdata));
-    const url = std.fmt.allocPrint(arena, "{s}/ofrep/v1/evaluate/flags/{f}", .{
+    const url = arena.print("{s}/ofrep/v1/evaluate/flags/{f}", .{
         std.mem.trimEnd(u8, o.base_url, "/"),
         std.fmt.alt(std.Uri.Component{ .raw = key }, .formatPath),
     }) catch return error.General;
@@ -38,7 +38,7 @@ fn resolve(userdata: ?*anyopaque, arena: std.mem.Allocator, key: []const u8, _: 
     var headers: [2]http.Header = .{ .{ .name = "content-type", .value = "application/json" }, undefined };
     var n: usize = 1;
     if (o.api_key) |k| {
-        headers[1] = .{ .name = "authorization", .value = std.fmt.allocPrint(arena, "Bearer {s}", .{k}) catch return error.General };
+        headers[1] = .{ .name = "authorization", .value = arena.print("Bearer {s}", .{k}) catch return error.General };
         n = 2;
     }
 

@@ -25,12 +25,12 @@ const ComponentSubKey = struct {
     };
 };
 
-var component_subscriptions = std.HashMapUnmanaged(
+var component_subscriptions: std.HashMapUnmanaged(
     ComponentSubKey,
     void,
     ComponentSubKey.Context,
     std.hash_map.default_max_load_percentage,
-){};
+) = .empty;
 
 pub var active_component_id: ?[]const u8 = null;
 
@@ -69,12 +69,12 @@ const StateEntry = struct {
     fn noopApplyJson(_: *anyopaque, _: []const u8) void {}
 };
 
-var state_store = std.HashMapUnmanaged(
+var state_store: std.HashMapUnmanaged(
     StateKey,
     StateEntry,
     StateKey.Context,
     std.hash_map.default_max_load_percentage,
-){};
+) = .empty;
 
 /// Slot base for `ctx.action` pending flags. Kept out of the normal
 /// `(1 << 20) + state_idx` range so pending is never round-tripped to the server.

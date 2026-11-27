@@ -515,7 +515,7 @@ test "process > killTree" {
 const LeakReport = builder.LeakReport;
 
 const leak_sample =
-    \\error(DebugAllocator): memory address 0x10a4803f0 leaked: 
+    \\error(SafeAllocator): leaked [addr: 10a4803f0, len: 16 (0x10) align: 1] allocated at: 
     \\.zig-cache/ziex/tnsn/pages/page.zig:19:27: 0x104fa170b in Page (ziex_app)
     \\    _ = zx.allocator.alloc(u8, 16) catch {};
     \\                          ^
@@ -524,7 +524,7 @@ const leak_sample =
     \\                                                                                 ^
     \\???:?:?: 0x195c91cff in __pthread_exit (/usr/lib/system/libsystem_pthread.dylib)
     \\???:?:?: 0x195c8cceb in _pthread_cond_broadcast (/usr/lib/system/libsystem_pthread.dylib)
-    \\error(DebugAllocator): memory address 0x10a480400 leaked: 
+    \\error(SafeAllocator): leaked [addr: 10a480400, len: 16 (0x10) align: 1] allocated at: 
     \\C:\proj\app\main.zig:7:5: 0x1400 in main (ziex_app.exe)
     \\
     \\info: after the report
@@ -572,7 +572,7 @@ test "leak report > ansi" {
     defer report.deinit();
 
     const colored = [_][]const u8{
-        "\x1b[31m\x1b[1merror\x1b[0m\x1b[2m\x1b[1m(DebugAllocator): \x1b[0mmemory address 0x109620180 leaked: ",
+        "\x1b[31m\x1b[1merror\x1b[0m\x1b[2m\x1b[1m(SafeAllocator): \x1b[0mleaked [addr: 109620180, len: 16 (0x10) align: 1] allocated at: ",
         "\x1b[1m/proj/src/x.zig:353:43\x1b[0m: \x1b[2m0x1046ae68b in attrs__func_1608 (ziex_app)\x1b[0m",
         "            const result = allocator.alloc(Element.Attribute, count) catch @panic(\"OOM\");",
         "\x1b[32m                                          ^\x1b[0m",
@@ -589,8 +589,8 @@ test "leak report > no stack trace" {
     var report = LeakReport.init(std.testing.allocator);
     defer report.deinit();
 
-    try std.testing.expectEqual(LeakReport.Feed.consumed, try report.feed("error(DebugAllocator): memory address 0x7f0000001000 leaked: "));
-    try std.testing.expectEqual(LeakReport.Feed.consumed, try report.feed("error(DebugAllocator): memory address 0x7f0000002000 leaked: "));
+    try std.testing.expectEqual(LeakReport.Feed.consumed, try report.feed("error(SafeAllocator): leaked [addr: 7f0000001000, len: 16 (0x10) align: 1] allocated at "));
+    try std.testing.expectEqual(LeakReport.Feed.consumed, try report.feed("error(SafeAllocator): leaked [addr: 7f0000002000, len: 16 (0x10) align: 1] allocated at "));
     try std.testing.expectEqual(LeakReport.Feed.pass, try report.feed("info: next"));
 
     try std.testing.expectEqual(@as(usize, 2), report.leaks.items.len);

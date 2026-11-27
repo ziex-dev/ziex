@@ -90,7 +90,7 @@ fn filterUsers(allocator: std.mem.Allocator, users: *std.ArrayList(User), search
 
     for (users.items) |user| {
         if (search_opt) |search| {
-            if (std.mem.indexOf(u8, user.name, search) == null) {
+            if (std.mem.find(u8, user.name, search) == null) {
                 continue;
             }
         }

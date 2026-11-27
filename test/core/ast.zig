@@ -1,5 +1,5 @@
 test "tests:beforeAll" {
-    gpa_state = std.heap.DebugAllocator(.{}){};
+    gpa_state = .init(std.heap.page_allocator, .{});
     const gpa = gpa_state.?.allocator();
     test_file_cache = try TestFileCache.init(gpa);
 }
@@ -658,7 +658,7 @@ fn expectLessThan(expected: f64, actual: f64) !void {
 }
 
 var test_file_cache: ?TestFileCache = null;
-var gpa_state: ?std.heap.DebugAllocator(.{}) = null;
+var gpa_state: ?std.heap.SafeAllocator = null;
 
 const native_os = @import("builtin").os.tag;
 const test_util = @import("./../util.zig");

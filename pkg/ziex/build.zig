@@ -31,9 +31,8 @@ pub fn build(b: *std.Build) !void {
 
     if (!from_source) {
         // --- Prebuilt npm package --- //
-        if (b.lazyDependency("prebuilt", .{})) |prebuilt| {
-            _ = dist_files.addCopyDirectory(prebuilt.path("."), "", .{});
-        }
+        const prebuilt = b.dependency("prebuilt", .{});
+        _ = dist_files.addCopyDirectory(prebuilt.path("."), "", .{});
     } else {
         try buildFromSource(b, dist_files, .{
             .is_release = is_release,

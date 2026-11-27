@@ -52,7 +52,7 @@ pub fn rewrite(gpa: std.mem.Allocator, sql: []const u8) !?Rewritten {
             '\'' => i = skipQuoted(sql, i, '\'', isEscapeString(sql, i)),
             '"' => i = skipQuoted(sql, i, '"', false),
             '-' => if (i + 1 < sql.len and sql[i + 1] == '-') {
-                i = std.mem.indexOfScalarPos(u8, sql, i, '\n') orelse sql.len;
+                i = std.mem.findScalarPos(u8, sql, i, '\n') orelse sql.len;
             } else {
                 i += 1;
             },
@@ -148,7 +148,7 @@ fn dollarQuoteEnd(sql: []const u8, start: usize) ?usize {
     while (j < sql.len and isIdent(sql[j])) j += 1;
     if (j >= sql.len or sql[j] != '$') return null;
     const tag = sql[start .. j + 1];
-    const close = std.mem.indexOfPos(u8, sql, j + 1, tag) orelse return sql.len;
+    const close = std.mem.findPos(u8, sql, j + 1, tag) orelse return sql.len;
     return close + tag.len;
 }
 

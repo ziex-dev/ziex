@@ -105,18 +105,18 @@ pub const PositionMap = struct {
 
     /// Parse embed comments from generated Zig source. Returns null if absent.
     pub fn parseEmbed(allocator: std.mem.Allocator, zig_source: []const u8) !?PositionMap {
-        const data_pos = std.mem.lastIndexOf(u8, zig_source, MAP_DATA_PREFIX) orelse return null;
+        const data_pos = std.mem.findLast(u8, zig_source, MAP_DATA_PREFIX) orelse return null;
         const data_start = data_pos + MAP_DATA_PREFIX.len;
-        const data_end = std.mem.indexOfScalarPos(u8, zig_source, data_start, '\n') orelse zig_source.len;
+        const data_end = std.mem.findScalarPos(u8, zig_source, data_start, '\n') orelse zig_source.len;
         const b64 = std.mem.trim(u8, zig_source[data_start..data_end], " \t\r");
 
         var map = try deserializeData(allocator, b64);
         errdefer map.deinit();
 
         // Find source path from the preceding //# ziex-map line.
-        if (std.mem.lastIndexOf(u8, zig_source[0..data_pos], MAP_PREFIX)) |src_pos| {
+        if (std.mem.findLast(u8, zig_source[0..data_pos], MAP_PREFIX)) |src_pos| {
             const src_start = src_pos + MAP_PREFIX.len;
-            const src_end = std.mem.indexOfScalarPos(u8, zig_source, src_start, '\n') orelse data_pos;
+            const src_end = std.mem.findScalarPos(u8, zig_source, src_start, '\n') orelse data_pos;
             const src = std.mem.trim(u8, zig_source[src_start..src_end], " \t\r");
             if (src.len > 0) {
                 map.source = try allocator.dupe(u8, src);
@@ -259,28 +259,28 @@ pub const DecodedMap = struct {
 
 /// Builder for creating position maps from mappings.
 pub const Builder = struct {
-    mappings: std.array_list.Managed(Mapping),
+    mappings: std.ArrayList(Mapping),
     allocator: std.mem.Allocator,
     source: []const u8 = "",
 
     pub fn init(allocator: std.mem.Allocator) Builder {
         return .{
-            .mappings = std.array_list.Managed(Mapping).init(allocator),
+            .mappings = .empty,
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Builder) void {
-        self.mappings.deinit();
+        self.mappings.deinit(self.allocator);
     }
 
     pub fn addMapping(self: *Builder, mapping: Mapping) !void {
-        try self.mappings.append(mapping);
+        try self.mappings.append(self.allocator, mapping);
     }
 
     /// Finalize into an owned PositionMap. Entries are already in generated order.
     pub fn build(self: *Builder) !PositionMap {
-        const entries = try self.mappings.toOwnedSlice();
+        const entries = try self.mappings.toOwnedSlice(self.allocator);
         errdefer self.allocator.free(entries);
         const source = if (self.source.len > 0) try self.allocator.dupe(u8, self.source) else "";
         return .{

@@ -33,10 +33,10 @@ fn formatImageSrc(ctx: zx.PageContext) ?[]const u8 {
     const pic_src = if (pic_data) |pd| b: {
         if (pd.len > max_file_bytes) break :b null;
         const mime = if (pic_file) |f| m: {
-            if (std.ascii.eqlIgnoreCase(std.fs.path.extension(f), ".jpg") or std.ascii.eqlIgnoreCase(std.fs.path.extension(f), ".jpeg")) break :m "image/jpeg";
-            if (std.ascii.eqlIgnoreCase(std.fs.path.extension(f), ".gif")) break :m "image/gif";
-            if (std.ascii.eqlIgnoreCase(std.fs.path.extension(f), ".webp")) break :m "image/webp";
-            if (std.ascii.eqlIgnoreCase(std.fs.path.extension(f), ".svg")) break :m "image/svg+xml";
+            if (std.ascii.eqlIgnoreCase(std.Io.Dir.path.extension(f), ".jpg") or std.ascii.eqlIgnoreCase(std.Io.Dir.path.extension(f), ".jpeg")) break :m "image/jpeg";
+            if (std.ascii.eqlIgnoreCase(std.Io.Dir.path.extension(f), ".gif")) break :m "image/gif";
+            if (std.ascii.eqlIgnoreCase(std.Io.Dir.path.extension(f), ".webp")) break :m "image/webp";
+            if (std.ascii.eqlIgnoreCase(std.Io.Dir.path.extension(f), ".svg")) break :m "image/svg+xml";
             break :m "image/png";
         } else "image/png";
 

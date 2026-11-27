@@ -43,9 +43,9 @@ pub fn load(e: *Env, io: std.Io, opts: LoadOptions) !void {
     var bufs: [2][128]u8 = undefined;
     const names = [_]?[]const u8{
         ".env",
-        if (opts.mode) |m| try std.fmt.bufPrint(&bufs[0], ".env.{s}", .{m}) else null,
+        if (opts.mode) |m| try std.mem.print(&bufs[0], ".env.{s}", .{m}) else null,
         if (is_test) null else ".env.local",
-        if (opts.mode) |m| try std.fmt.bufPrint(&bufs[1], ".env.{s}.local", .{m}) else null,
+        if (opts.mode) |m| try std.mem.print(&bufs[1], ".env.{s}.local", .{m}) else null,
     };
 
     var files: Map = .init(gpa);

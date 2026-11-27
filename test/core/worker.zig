@@ -13,7 +13,7 @@ const M = struct {
         const out = try gpa.alloc(Note, n);
         for (out, 0..) |*note, i| note.* = .{
             .id = @intCast(i),
-            .body = try std.fmt.allocPrint(gpa, "{s}-{d}", .{ prefix, i }),
+            .body = try gpa.print("{s}-{d}", .{ prefix, i }),
             .tags = &.{ "a", "b" },
         };
         return out;

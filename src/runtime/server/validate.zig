@@ -88,7 +88,7 @@ fn socket(
 
 const Return = enum { component, component_or_error, void, void_or_error };
 
-fn required(comptime path: []const u8, comptime M: type, comptime name: []const u8, comptime sig: []const u8) std.builtin.Type.Fn {
+fn required(comptime path: []const u8, comptime M: type, comptime name: []const u8, comptime sig: []const u8) std.lang.Type.Fn {
     if (!@hasDecl(M, name)) {
         // `pub fn page(...)` instead of `Page` is almost always a casing slip.
         const lower: []const u8 = &([_]u8{std.ascii.toLower(name[0])} ++ name[1..].*);
@@ -97,7 +97,7 @@ fn required(comptime path: []const u8, comptime M: type, comptime name: []const 
     return fnInfo(@TypeOf(@field(M, name))) orelse fail(path, M, name, sig, "must be a function");
 }
 
-fn optional(comptime path: []const u8, comptime M: type, comptime name: []const u8, comptime sig: []const u8) ?std.builtin.Type.Fn {
+fn optional(comptime path: []const u8, comptime M: type, comptime name: []const u8, comptime sig: []const u8) ?std.lang.Type.Fn {
     if (!@hasDecl(M, name)) return null;
     return fnInfo(@TypeOf(@field(M, name))) orelse fail(path, M, name, sig, "must be a function");
 }
@@ -107,7 +107,7 @@ fn params(
     comptime M: type,
     comptime name: []const u8,
     comptime sig: []const u8,
-    comptime f: std.builtin.Type.Fn,
+    comptime f: std.lang.Type.Fn,
     comptime min: usize,
     comptime max: usize,
 ) void {
@@ -126,7 +126,7 @@ fn first(
     comptime M: type,
     comptime name: []const u8,
     comptime sig: []const u8,
-    comptime f: std.builtin.Type.Fn,
+    comptime f: std.lang.Type.Fn,
     comptime T: type,
     comptime t_name: []const u8,
 ) void {
@@ -139,7 +139,7 @@ fn returns(
     comptime M: type,
     comptime name: []const u8,
     comptime sig: []const u8,
-    comptime f: std.builtin.Type.Fn,
+    comptime f: std.lang.Type.Fn,
     comptime ret: Return,
 ) void {
     const R = f.return_type orelse fail(path, M, name, sig, "must not have a generic return type");
@@ -177,7 +177,7 @@ fn label(comptime T: type) []const u8 {
     return @typeName(T);
 }
 
-fn fnInfo(comptime T: type) ?std.builtin.Type.Fn {
+fn fnInfo(comptime T: type) ?std.lang.Type.Fn {
     return switch (@typeInfo(T)) {
         .@"fn" => |f| f,
         else => null,

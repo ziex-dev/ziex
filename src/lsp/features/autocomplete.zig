@@ -118,7 +118,7 @@ fn detectFromParse(arena: std.mem.Allocator, source: []const u8, offset: u32) ?C
 /// classified - and that is enough to tell markup apart from a Zig `<`.
 fn parseSaysMarkupLt(root: anytype, source: []const u8, offset: u32) bool {
     if (offset == 0 or offset > source.len) return false;
-    const lt = std.mem.lastIndexOfScalar(u8, source[0..offset], '<') orelse return false;
+    const lt = std.mem.findScalarLast(u8, source[0..offset], '<') orelse return false;
     if (lt == 0) return false;
     const prev = root.descendantForByteRange(@intCast(lt - 1), @intCast(lt)) orelse return false;
     return inZxMarkup(prev);
@@ -128,10 +128,10 @@ fn detectFromText(source: []const u8, offset: u32, in_markup: bool) ?Context {
     if (offset == 0) return null;
     const before = source[0..offset];
 
-    const lt = std.mem.lastIndexOfScalar(u8, before, '<') orelse return null;
+    const lt = std.mem.findScalarLast(u8, before, '<') orelse return null;
     const after_lt = before[lt + 1 ..];
     if (!in_markup and !looksLikeMarkupLt(source, lt)) return null;
-    if (std.mem.indexOfScalar(u8, after_lt, '>') != null) return null;
+    if (std.mem.findScalar(u8, after_lt, '>') != null) return null;
 
     const closing = after_lt.len > 0 and after_lt[0] == '/';
     const name_start: usize = if (closing) 1 else 0;

@@ -1010,7 +1010,7 @@ fn Handler(comptime Ctx: type) type {
 
         pub fn static(self: *Self, req: *httpz.Request, res: *httpz.Response) !void {
             const staticdir = self.config.staticdir orelse Pipeline.defaults.staticdir;
-            const assets_path = try std.fs.path.join(res.arena, &.{ staticdir, req.url.path });
+            const assets_path = try std.Io.Dir.path.join(res.arena, &.{ staticdir, req.url.path });
 
             const body = std.Io.Dir.cwd().readFileAlloc(self.io, assets_path, res.arena, .unlimited) catch |err| {
                 switch (err) {

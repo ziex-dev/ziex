@@ -378,7 +378,7 @@ fn renderBlock(
         const elem_start = elem.startByte();
         const elem_end = elem.endByte();
         const is_multiline = if (elem_start < elem_end and elem_end <= self.ast.source.len)
-            std.mem.indexOf(u8, self.ast.source[elem_start..elem_end], "\n") != null
+            std.mem.find(u8, self.ast.source[elem_start..elem_end], "\n") != null
         else
             false;
 
@@ -442,7 +442,7 @@ fn renderFragment(
         const elem_start = node.startByte();
         const elem_end = node.endByte();
         if (elem_start < elem_end and elem_end <= self.ast.source.len) {
-            if (std.mem.indexOf(u8, self.ast.source[elem_start..elem_end], "\n") != null) {
+            if (std.mem.find(u8, self.ast.source[elem_start..elem_end], "\n") != null) {
                 break :blk true;
             }
         }
@@ -563,7 +563,7 @@ fn renderElement(
         const start_tag_end = if (start_tag_node) |st| st.endByte() else node.startByte();
         const end_tag_start = if (end_tag_node) |et| et.startByte() else node.endByte();
         if (start_tag_end < end_tag_start and end_tag_start <= self.ast.source.len) {
-            if (std.mem.indexOf(u8, self.ast.source[start_tag_end..end_tag_start], "\n") != null) {
+            if (std.mem.find(u8, self.ast.source[start_tag_end..end_tag_start], "\n") != null) {
                 break :blk true;
             }
         }
@@ -738,7 +738,7 @@ fn renderText(
     if (trimmed.len == 0) {
         // If text is only spaces (no newlines/tabs), collapse to single space
         // If it contains newlines or tabs, skip it (layout whitespace)
-        const has_newline_or_tab = std.mem.indexOfAny(u8, text, "\n\r\t") != null;
+        const has_newline_or_tab = std.mem.findAny(u8, text, "\n\r\t") != null;
         if (!has_newline_or_tab and text.len > 0 and !self.suppress_leading_space) try w.writeAll(" ");
         self.suppress_leading_space = false;
         return;
@@ -757,7 +757,7 @@ fn renderText(
             // or if it contains explicit spaces beyond the expected indentation.
 
             // Find the last newline in leading whitespace
-            const last_nl = std.mem.lastIndexOfScalar(u8, leading_ws, '\n');
+            const last_nl = std.mem.findScalarLast(u8, leading_ws, '\n');
 
             var spaces_after_nl: usize = 0;
             if (last_nl) |nl_idx| {
@@ -887,7 +887,7 @@ fn hasInlineSpacesOnly(self: *Render, node: ts.Node) bool {
     if (trimmed.len > 0) return false; // Has content, not spaces-only
 
     // Check if text contains newlines or tabs (vertical/layout spaces)
-    const has_newline_or_tab = std.mem.indexOfAny(u8, text, "\n\r\t") != null;
+    const has_newline_or_tab = std.mem.findAny(u8, text, "\n\r\t") != null;
     return !has_newline_or_tab and text.len > 0;
 }
 
@@ -1029,7 +1029,7 @@ fn renderIfExpression(
             const then_start = then_b.startByte();
             if (prev_end < then_start and then_start <= self.ast.source.len) {
                 const between = self.ast.source[prev_end..then_start];
-                if (std.mem.indexOf(u8, between, "\n") != null) {
+                if (std.mem.find(u8, between, "\n") != null) {
                     break :blk true;
                 }
             }
@@ -1378,12 +1378,12 @@ fn renderParenthesizedBody(
     const block_end = node.endByte();
 
     const has_preceding_newline = if (block_start < content_start and content_start <= self.ast.source.len)
-        std.mem.indexOf(u8, self.ast.source[block_start..content_start], "\n") != null
+        std.mem.find(u8, self.ast.source[block_start..content_start], "\n") != null
     else
         false;
 
     const has_trailing_newline = if (content_end < block_end and block_end <= self.ast.source.len)
-        std.mem.indexOf(u8, self.ast.source[content_end..block_end], "\n") != null
+        std.mem.find(u8, self.ast.source[content_end..block_end], "\n") != null
     else
         false;
 
@@ -1733,7 +1733,7 @@ fn detectIfMultiline(self: *Render, node: ts.Node) bool {
         const then_start = then_b.startByte();
         if (prev_end < then_start and then_start <= self.ast.source.len) {
             const between = self.ast.source[prev_end..then_start];
-            if (std.mem.indexOf(u8, between, "\n") != null) {
+            if (std.mem.find(u8, between, "\n") != null) {
                 return true;
             }
         }
@@ -2097,17 +2097,17 @@ fn renderBlockInlineWithMultiline(
         const block_end = node.endByte();
 
         const content_is_multiline = if (content_start < content_end and content_end <= self.ast.source.len)
-            std.mem.indexOf(u8, self.ast.source[content_start..content_end], "\n") != null
+            std.mem.find(u8, self.ast.source[content_start..content_end], "\n") != null
         else
             false;
 
         const has_preceding_newline = if (block_start < content_start and content_start <= self.ast.source.len)
-            std.mem.indexOf(u8, self.ast.source[block_start..content_start], "\n") != null
+            std.mem.find(u8, self.ast.source[block_start..content_start], "\n") != null
         else
             false;
 
         const has_trailing_newline = if (content_end < block_end and block_end <= self.ast.source.len)
-            std.mem.indexOf(u8, self.ast.source[content_end..block_end], "\n") != null
+            std.mem.find(u8, self.ast.source[content_end..block_end], "\n") != null
         else
             false;
 

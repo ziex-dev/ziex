@@ -76,13 +76,13 @@ fn rebase(allocator: std.mem.Allocator, diagnostics: []Builder.Diagnostic, root:
     for (diagnostics) |*d| {
         if (d.file.len == 0) continue;
         const new: []u8 = switch (to) {
-            .absolute => if (std.fs.path.isAbsolute(d.file))
+            .absolute => if (std.Io.Dir.path.isAbsolute(d.file))
                 continue
             else
-                std.fs.path.resolve(allocator, &.{ root, d.file }) catch continue,
+                std.Io.Dir.path.resolveAlloc(allocator, &.{ root, d.file }) catch continue,
             .relative => blk: {
                 if (!std.mem.startsWith(u8, d.file, root) or d.file.len <= root.len + 1) continue;
-                if (!std.fs.path.isSep(d.file[root.len])) continue;
+                if (!std.Io.Dir.path.isSep(d.file[root.len])) continue;
                 break :blk allocator.dupe(u8, d.file[root.len + 1 ..]) catch continue;
             },
         };

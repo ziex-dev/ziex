@@ -14,7 +14,7 @@ pub fn contentTag(content: []const u8) [tag_len]u8 {
     hasher.final(&hash);
 
     var out: [tag_len]u8 = undefined;
-    _ = std.fmt.bufPrint(&out, "{x:0>8}", .{std.mem.readInt(u32, hash[0..4], .little)}) catch unreachable;
+    _ = std.mem.print(&out, "{x:0>8}", .{std.mem.readInt(u32, hash[0..4], .little)}) catch unreachable;
     return out;
 }
 
@@ -26,10 +26,10 @@ pub fn hashInput(allocator: std.mem.Allocator, wasm: []const u8) ![]u8 {
         return try allocator.dupe(u8, wasm);
     }
 
-    var out = std.array_list.Managed(u8).init(allocator);
-    errdefer out.deinit();
-    try out.appendSlice(&magic);
-    try writeU32(&out, version);
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try out.appendSlice(allocator, &magic);
+    try writeU32(allocator, &out, version);
 
     var offset: usize = 8;
     while (offset < wasm.len) {
@@ -39,15 +39,15 @@ pub fn hashInput(allocator: std.mem.Allocator, wasm: []const u8) ![]u8 {
         if (section_end > wasm.len) return error.InvalidWasm;
 
         if (section_id != 0) {
-            try writeVarUint7(&out, section_id);
-            try writeVarUint32(&out, @intCast(section_size));
-            try out.appendSlice(wasm[offset..section_end]);
+            try writeVarUint7(allocator, &out, section_id);
+            try writeVarUint32(allocator, &out, @intCast(section_size));
+            try out.appendSlice(allocator, wasm[offset..section_end]);
         }
 
         offset = section_end;
     }
 
-    return out.toOwnedSlice();
+    return out.toOwnedSlice(allocator);
 }
 
 fn readVarUint7(wasm: []const u8, offset: *usize) !u8 {
@@ -70,23 +70,23 @@ fn readVarUint32(wasm: []const u8, offset: *usize) !u32 {
     }
 }
 
-fn writeVarUint7(out: *std.array_list.Managed(u8), value: u8) !void {
-    try writeVarUint32(out, value);
+fn writeVarUint7(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u8) !void {
+    try writeVarUint32(allocator, out, value);
 }
 
-fn writeVarUint32(out: *std.array_list.Managed(u8), value: u32) !void {
+fn writeVarUint32(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u32) !void {
     var remaining = value;
     while (true) {
         var byte: u8 = @truncate(remaining & 0x7f);
         remaining >>= 7;
         if (remaining != 0) byte |= 0x80;
-        try out.append(byte);
+        try out.append(allocator, byte);
         if (remaining == 0) break;
     }
 }
 
-fn writeU32(out: *std.array_list.Managed(u8), value: u32) !void {
+fn writeU32(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u32) !void {
     var buf: [4]u8 = undefined;
     std.mem.writeInt(u32, &buf, value, .little);
-    try out.appendSlice(&buf);
+    try out.appendSlice(allocator, &buf);
 }

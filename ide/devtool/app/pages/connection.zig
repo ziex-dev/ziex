@@ -142,7 +142,7 @@ pub fn mixedContentHint(allocator: std.mem.Allocator) ?[]const u8 {
     if (!std.mem.eql(u8, protocol, "https:")) return null;
 
     const host = data.host;
-    const is_local = std.mem.indexOf(u8, host, "localhost") != null or std.mem.indexOf(u8, host, "127.0.0.1") != null;
+    const is_local = std.mem.find(u8, host, "localhost") != null or std.mem.find(u8, host, "127.0.0.1") != null;
     const is_http = !std.mem.startsWith(u8, host, "https://");
     if (is_local and is_http) {
         return "Safari and some browsers block HTTPS pages from reaching http://localhost. Use the Chrome extension, or open this UI over HTTP.";

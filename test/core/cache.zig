@@ -5,7 +5,7 @@ const allocator = std.testing.allocator;
 
 var cache_fs = zx.Kv.Fs{
     .io = std.testing.io,
-    .subdir = "zig-out" ++ std.fs.path.sep_str ++ "test-data" ++ std.fs.path.sep_str ++ "cache",
+    .subdir = "zig-out" ++ std.Io.Dir.path.sep_str ++ "test-data" ++ std.Io.Dir.path.sep_str ++ "cache",
 };
 var cache: zx.Cache = .failing;
 
@@ -53,7 +53,7 @@ fn cleanupCache() void {
 fn uniqueLabel(comptime prefix: []const u8, buf: []u8) ![]const u8 {
     var source: std.Random.IoSource = .{ .io = std.testing.io };
     const value = source.interface().int(u64);
-    return std.fmt.bufPrint(buf, "{s}-{x}", .{ prefix, value });
+    return std.mem.print(buf, "{s}-{x}", .{ prefix, value });
 }
 
 fn freeProfile(profile: Profile) void {
@@ -125,8 +125,8 @@ test "stress many entries without expiration" {
     var value_buf: [128]u8 = undefined;
 
     for (0..512) |i| {
-        const key = try std.fmt.bufPrint(&key_buf, "stress-key-{d}", .{i});
-        const value = try std.fmt.bufPrint(&value_buf, "stress-value-{d}", .{i});
+        const key = try std.mem.print(&key_buf, "stress-key-{d}", .{i});
+        const value = try std.mem.print(&value_buf, "stress-value-{d}", .{i});
         try scoped.put(key, value, .{});
 
         const found = (try scoped.get(allocator, key)).?;
@@ -154,8 +154,8 @@ test "list and del prefix work for live entries" {
     var key2_buf: [128]u8 = undefined;
     var other_key_buf: [128]u8 = undefined;
 
-    const key1 = try std.fmt.bufPrint(&key1_buf, "{s}-a", .{prefix});
-    const key2 = try std.fmt.bufPrint(&key2_buf, "{s}-b", .{prefix});
+    const key1 = try std.mem.print(&key1_buf, "{s}-a", .{prefix});
+    const key2 = try std.mem.print(&key2_buf, "{s}-b", .{prefix});
     const other_key = try uniqueLabel("cache-other", &other_key_buf);
 
     defer _ = cache.deletePrefix(prefix) catch 0;
@@ -290,8 +290,8 @@ test "expired entries are filtered from get and list" {
     var expired_key_buf: [128]u8 = undefined;
     var live_key_buf: [128]u8 = undefined;
 
-    const expired_key = try std.fmt.bufPrint(&expired_key_buf, "{s}-expired", .{prefix});
-    const live_key = try std.fmt.bufPrint(&live_key_buf, "{s}-live", .{prefix});
+    const expired_key = try std.mem.print(&expired_key_buf, "{s}-expired", .{prefix});
+    const live_key = try std.mem.print(&live_key_buf, "{s}-live", .{prefix});
 
     defer _ = cache.deletePrefix(prefix) catch 0;
 
@@ -317,11 +317,11 @@ fn runConcurrentWorker(ctx: *WorkerContext) void {
     var value_buf: [96]u8 = undefined;
 
     for (0..worker_iterations) |i| {
-        const key = std.fmt.bufPrint(&key_buf, "worker-{d}-key-{d}", .{ ctx.worker_id, i }) catch {
+        const key = std.mem.print(&key_buf, "worker-{d}-key-{d}", .{ ctx.worker_id, i }) catch {
             ctx.err = error.Unexpected;
             return;
         };
-        const value = std.fmt.bufPrint(&value_buf, "value-{d}-{d}", .{ ctx.worker_id, i }) catch {
+        const value = std.mem.print(&value_buf, "value-{d}-{d}", .{ ctx.worker_id, i }) catch {
             ctx.err = error.Unexpected;
             return;
         };

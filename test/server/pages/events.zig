@@ -11,16 +11,16 @@ pub const src = struct {
     pub const dec = decSrc();
     pub const label = labelSrc();
 
-    fn pingSrc() std.builtin.SourceLocation {
+    fn pingSrc() std.lang.SourceLocation {
         return @src();
     }
-    fn incSrc() std.builtin.SourceLocation {
+    fn incSrc() std.lang.SourceLocation {
         return @src();
     }
-    fn decSrc() std.builtin.SourceLocation {
+    fn decSrc() std.lang.SourceLocation {
         return @src();
     }
-    fn labelSrc() std.builtin.SourceLocation {
+    fn labelSrc() std.lang.SourceLocation {
         return @src();
     }
 };

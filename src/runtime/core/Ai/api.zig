@@ -7,7 +7,7 @@ pub fn model(explicit: ?[]const u8, default: ?[]const u8) Ai.Error![]const u8 {
 }
 
 pub fn endpoint(arena: std.mem.Allocator, base: []const u8, path: []const u8) Ai.Error![]const u8 {
-    return std.fmt.allocPrint(arena, "{s}{s}", .{ std.mem.trimEnd(u8, base, "/"), path });
+    return arena.print("{s}{s}", .{ std.mem.trimEnd(u8, base, "/"), path });
 }
 
 pub fn json(gpa: std.mem.Allocator, payload: anytype) Ai.Error![]u8 {

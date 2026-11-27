@@ -6,7 +6,7 @@ pub fn toc(comptime categories: []const Category) []const Link {
         var out: []const Link = &.{};
         for (categories) |category| {
             for (category.sections) |section| {
-                if (std.mem.indexOfScalar(u8, section.href, '#') != null) {
+                if (std.mem.findScalar(u8, section.href, '#') != null) {
                     out = out ++ [_]Link{.{ .href = section.href, .text = section.title }};
                 } else if (section.href.len == 0) {
                     out = out ++ section.items;

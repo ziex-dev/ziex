@@ -182,11 +182,11 @@ fn readSlice(comptime Child: type, allocator: std.mem.Allocator, d: []const u8, 
         return try allocator.alloc(Child, 0);
     }
 
-    var list = std.array_list.Managed(Child).init(allocator);
-    errdefer list.deinit();
+    var list: std.ArrayList(Child) = .empty;
+    errdefer list.deinit(allocator);
 
     while (p.* < d.len) {
-        try list.append(try readValue(Child, allocator, d, p));
+        try list.append(allocator, try readValue(Child, allocator, d, p));
         skip(d, p);
 
         if (peek(d, p) == ',') {
@@ -194,7 +194,7 @@ fn readSlice(comptime Child: type, allocator: std.mem.Allocator, d: []const u8, 
             skip(d, p);
         } else if (peek(d, p) == ']') {
             p.* += 1;
-            return list.toOwnedSlice();
+            return list.toOwnedSlice(allocator);
         } else {
             return error.ExpectedArrayEnd;
         }

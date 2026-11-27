@@ -57,8 +57,8 @@ pub fn guessRegion(endpoint: []const u8) []const u8 {
     if (endpoint.len == 0) return "us-east-1";
     const host = Endpoint.parse(endpoint).host;
     if (std.mem.endsWith(u8, host, ".r2.cloudflarestorage.com")) return "auto";
-    if (std.mem.indexOf(u8, host, ".amazonaws.com")) |end| {
-        if (std.mem.indexOf(u8, host, "s3.")) |start| {
+    if (std.mem.find(u8, host, ".amazonaws.com")) |end| {
+        if (std.mem.find(u8, host, "s3.")) |start| {
             if (start + 3 < end) return host[start + 3 .. end];
         }
     }
@@ -82,7 +82,7 @@ pub const Endpoint = struct {
             insecure = true;
         }
         rest = std.mem.trimEnd(u8, rest, "/");
-        const slash = std.mem.indexOfScalar(u8, rest, '/') orelse rest.len;
+        const slash = std.mem.findScalar(u8, rest, '/') orelse rest.len;
         var host = rest[0..slash];
         // Hosts drop the default port from `Host`, which must match the signed one.
         const default_port = if (insecure) ":80" else ":443";
@@ -117,7 +117,7 @@ pub const Date = struct {
         const month_day = year_day.calculateMonthDay();
         const time = epoch_secs.getDaySeconds();
         var d: Date = undefined;
-        _ = std.fmt.bufPrint(&d.buf, "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z", .{
+        _ = std.mem.print(&d.buf, "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z", .{
             year_day.year,
             month_day.month.numeric(),
             @as(u32, month_day.day_index) + 1,
@@ -158,7 +158,7 @@ fn hmac(key: []const u8, msg: []const u8) [Hmac.mac_length]u8 {
 
 fn signingKey(secret: []const u8, day: []const u8, region: []const u8) [Hmac.mac_length]u8 {
     var key_buf: [4 + max_secret_len]u8 = undefined;
-    const k_secret = std.fmt.bufPrint(&key_buf, "AWS4{s}", .{secret}) catch unreachable;
+    const k_secret = std.mem.print(&key_buf, "AWS4{s}", .{secret}) catch unreachable;
     const k_date = hmac(k_secret, day);
     const k_region = hmac(&k_date, region);
     const k_service = hmac(&k_region, service);
@@ -179,9 +179,9 @@ fn target(c: Credentials, arena: std.mem.Allocator, key: []const u8) Error!Targe
     const host = if (ep.host.len > 0)
         ep.host
     else if (c.virtual_hosted_style)
-        try std.fmt.allocPrint(arena, "{s}.s3.{s}.amazonaws.com", .{ c.bucket, region })
+        try arena.print("{s}.s3.{s}.amazonaws.com", .{ c.bucket, region })
     else
-        try std.fmt.allocPrint(arena, "s3.{s}.amazonaws.com", .{region});
+        try arena.print("s3.{s}.amazonaws.com", .{region});
 
     var path: std.Io.Writer.Allocating = .init(arena);
     const w = &path.writer;
@@ -224,11 +224,11 @@ fn lessHeader(_: void, a: Header, b: Header) bool {
 }
 
 fn checkValue(v: []const u8) Error!void {
-    if (std.mem.indexOfAny(u8, v, "\r\n") != null) return error.InvalidOptions;
+    if (std.mem.findAny(u8, v, "\r\n") != null) return error.InvalidOptions;
 }
 
 fn stringToSign(arena: std.mem.Allocator, date: *const Date, region: []const u8, canonical: []const u8) Error![]const u8 {
-    return std.fmt.allocPrint(arena, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{
+    return arena.print("AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{
         date.full(), date.day(), region, service, &sha256Hex(canonical),
     });
 }
@@ -271,7 +271,7 @@ pub fn sign(c: Credentials, arena: std.mem.Allocator, unix_seconds: i64, req: Re
     }
 
     const sig = signature(c, &date, region, try stringToSign(arena, &date, region, canonical.written()));
-    const authorization = try std.fmt.allocPrint(arena, "AWS4-HMAC-SHA256 Credential={s}/{s}/{s}/{s}/aws4_request, SignedHeaders={s}, Signature={s}", .{
+    const authorization = try arena.print("AWS4-HMAC-SHA256 Credential={s}/{s}/{s}/{s}/aws4_request, SignedHeaders={s}, Signature={s}", .{
         c.access_key_id, date.day(), region, service, signed_names.written(), &sig,
     });
 
@@ -280,7 +280,7 @@ pub fn sign(c: Credentials, arena: std.mem.Allocator, unix_seconds: i64, req: Re
     try send.append(arena, .{ .name = "authorization", .value = authorization });
 
     return .{
-        .url = try std.fmt.allocPrint(arena, "{s}://{s}{s}{s}{s}", .{
+        .url = try arena.print("{s}://{s}{s}{s}{s}", .{
             if (t.endpoint.insecure) "http" else "https", t.host, t.path, if (query.len > 0) "?" else "", query,
         }),
         .headers = send.items,
@@ -298,20 +298,20 @@ pub fn presign(c: Credentials, arena: std.mem.Allocator, unix_seconds: i64, req:
     try params.appendSlice(arena, req.query);
     try params.appendSlice(arena, &.{
         .{ .name = "X-Amz-Algorithm", .value = "AWS4-HMAC-SHA256" },
-        .{ .name = "X-Amz-Credential", .value = try std.fmt.allocPrint(arena, "{s}/{s}/{s}/{s}/aws4_request", .{ c.access_key_id, date.day(), region, service }) },
+        .{ .name = "X-Amz-Credential", .value = try arena.print("{s}/{s}/{s}/{s}/aws4_request", .{ c.access_key_id, date.day(), region, service }) },
         .{ .name = "X-Amz-Date", .value = try arena.dupe(u8, date.full()) },
-        .{ .name = "X-Amz-Expires", .value = try std.fmt.allocPrint(arena, "{d}", .{expires}) },
+        .{ .name = "X-Amz-Expires", .value = try arena.print("{d}", .{expires}) },
         .{ .name = "X-Amz-SignedHeaders", .value = "host" },
     });
     if (c.session_token.len > 0) try params.append(arena, .{ .name = "X-Amz-Security-Token", .value = c.session_token });
     for (req.query) |p| try checkValue(p.value);
 
     const query = try canonicalQuery(arena, params.items);
-    const canonical = try std.fmt.allocPrint(arena, "{s}\n{s}\n{s}\nhost:{s}\n\nhost\n{s}", .{
+    const canonical = try arena.print("{s}\n{s}\n{s}\nhost:{s}\n\nhost\n{s}", .{
         req.method, t.path, query, t.host, unsigned_payload,
     });
     const sig = signature(c, &date, region, try stringToSign(arena, &date, region, canonical));
-    return std.fmt.allocPrint(arena, "{s}://{s}{s}?{s}&X-Amz-Signature={s}", .{
+    return arena.print("{s}://{s}{s}?{s}&X-Amz-Signature={s}", .{
         if (t.endpoint.insecure) "http" else "https", t.host, t.path, query, &sig,
     });
 }

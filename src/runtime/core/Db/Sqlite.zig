@@ -795,13 +795,13 @@ fn resolveNamedParam(stmt: Stmt, name: []const u8) !c_int {
     var buf: [256]u8 = undefined;
 
     if (name.len > 0 and (name[0] == ':' or name[0] == '@' or name[0] == '$')) {
-        const name_z = std.fmt.bufPrintSentinel(&buf, "{s}", .{name}, 0) catch
+        const name_z = std.mem.printSentinel(&buf, "{s}", .{name}, 0) catch
             return Db.Error.InvalidBindings;
         return c.sqlite3_bind_parameter_index(stmt.ptr, name_z.ptr);
     }
 
     for ([_]u8{ ':', '@', '$' }) |sigil| {
-        const candidate = std.fmt.bufPrintSentinel(&buf, "{c}{s}", .{ sigil, name }, 0) catch
+        const candidate = std.mem.printSentinel(&buf, "{c}{s}", .{ sigil, name }, 0) catch
             return Db.Error.InvalidBindings;
         const index = c.sqlite3_bind_parameter_index(stmt.ptr, candidate.ptr);
         if (index != 0) return index;
@@ -904,14 +904,14 @@ fn mapDeclaredColumnType(declared: []const u8) Db.ColumnType {
     for (declared[0..len], 0..) |byte, index| buf[index] = std.ascii.toUpper(byte);
     const upper = buf[0..len];
 
-    if (std.mem.indexOf(u8, upper, "INT") != null) return .integer;
-    if (std.mem.indexOf(u8, upper, "CHAR") != null) return .text;
-    if (std.mem.indexOf(u8, upper, "CLOB") != null) return .text;
-    if (std.mem.indexOf(u8, upper, "TEXT") != null) return .text;
-    if (std.mem.indexOf(u8, upper, "BLOB") != null) return .blob;
-    if (std.mem.indexOf(u8, upper, "REAL") != null) return .float;
-    if (std.mem.indexOf(u8, upper, "FLOA") != null) return .float;
-    if (std.mem.indexOf(u8, upper, "DOUB") != null) return .float;
+    if (std.mem.find(u8, upper, "INT") != null) return .integer;
+    if (std.mem.find(u8, upper, "CHAR") != null) return .text;
+    if (std.mem.find(u8, upper, "CLOB") != null) return .text;
+    if (std.mem.find(u8, upper, "TEXT") != null) return .text;
+    if (std.mem.find(u8, upper, "BLOB") != null) return .blob;
+    if (std.mem.find(u8, upper, "REAL") != null) return .float;
+    if (std.mem.find(u8, upper, "FLOA") != null) return .float;
+    if (std.mem.find(u8, upper, "DOUB") != null) return .float;
     return .unknown;
 }
 
@@ -949,7 +949,7 @@ fn trimOrMemory(value: []const u8) []const u8 {
 
 fn ensureParentDir(io: std.Io, path: []const u8) !void {
     if (isMemoryPath(path) or isUriPath(path)) return;
-    const parent = std.fs.path.dirname(path) orelse return;
+    const parent = std.Io.Dir.path.dirname(path) orelse return;
     if (parent.len == 0) return;
     if (std.Io.Dir.cwd().statFile(io, parent, .{ .follow_symlinks = true })) |st| {
         if (st.kind == .directory) return;
@@ -961,10 +961,10 @@ fn ensureParentDir(io: std.Io, path: []const u8) !void {
 }
 
 fn isUriPath(path: []const u8) bool {
-    return std.mem.indexOfScalar(u8, path, ':') != null and
+    return std.mem.findScalar(u8, path, ':') != null and
         !std.mem.startsWith(u8, path, "./") and
         !std.mem.startsWith(u8, path, "../") and
-        !std.fs.path.isAbsolute(path);
+        !std.Io.Dir.path.isAbsolute(path);
 }
 
 fn configureConnection(conn: Conn, busy_timeout_ms: c_int) !void {

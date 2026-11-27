@@ -85,7 +85,7 @@ pub fn addOptionalDependencyFetches(
 fn depNameForNpmPackage(b: *std.Build, npm_name: []const u8) []const u8 {
     const raw = blk: {
         if (std.mem.startsWith(u8, npm_name, "@")) {
-            if (std.mem.indexOfScalar(u8, npm_name, '/')) |slash| {
+            if (std.mem.findScalar(u8, npm_name, '/')) |slash| {
                 const scope = npm_name[1..slash];
                 const pkg = npm_name[slash + 1 ..];
                 const scope_dash = b.fmt("{s}-", .{scope});
@@ -110,7 +110,7 @@ fn depNameForNpmPackage(b: *std.Build, npm_name: []const u8) []const u8 {
 }
 
 fn npmTarballUrl(b: *std.Build, npm_name: []const u8, version: []const u8) []const u8 {
-    const basename = if (std.mem.lastIndexOfScalar(u8, npm_name, '/')) |i|
+    const basename = if (std.mem.findScalarLast(u8, npm_name, '/')) |i|
         npm_name[i + 1 ..]
     else
         npm_name;

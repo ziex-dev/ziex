@@ -8,7 +8,7 @@ pub const module_name = "__zx_web";
 /// of `wasm`. Always defines it (`false` without imports) so init() knows
 /// not to fetch the glue separately.
 pub fn generate(allocator: std.mem.Allocator, wasm: []const u8) ![]u8 {
-    var names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var names: std.ArrayList([]const u8) = .empty;
     defer names.deinit(allocator);
     try importNames(allocator, wasm, module_name, &names);
     if (names.items.len == 0) return allocator.dupe(u8, "globalThis.__zx_web=false;\n");
@@ -18,12 +18,12 @@ pub fn generate(allocator: std.mem.Allocator, wasm: []const u8) ![]u8 {
     const w = &out.writer;
 
     // Enum tables referenced as `E_<Name>` by the selected shims.
-    var enums: std.StringArrayHashMapUnmanaged(void) = .empty;
+    var enums: std.array_hash_map.String(void) = .empty;
     defer enums.deinit(allocator);
     for (names.items) |n| {
         const src = lookup(&shims.shims, n) orelse continue;
         var i: usize = 0;
-        while (std.mem.indexOfPos(u8, src, i, "E_")) |at| {
+        while (std.mem.findPos(u8, src, i, "E_")) |at| {
             var end = at + 2;
             while (end < src.len and (std.ascii.isAlphanumeric(src[end]) or src[end] == '_')) end += 1;
             try enums.put(allocator, src[at + 2 .. end], {});
@@ -63,7 +63,7 @@ fn lookup(table: []const shims.Entry, name: []const u8) ?[]const u8 {
 }
 
 /// Appends the field names of `module`'s imports (sorted, deduped).
-pub fn importNames(allocator: std.mem.Allocator, wasm: []const u8, module: []const u8, out: *std.ArrayListUnmanaged([]const u8)) !void {
+pub fn importNames(allocator: std.mem.Allocator, wasm: []const u8, module: []const u8, out: *std.ArrayList([]const u8)) !void {
     var r: Reader = .{ .bytes = wasm };
     if (wasm.len < 8 or !std.mem.eql(u8, wasm[0..4], "\x00asm")) return error.InvalidWasm;
     r.pos = 8;

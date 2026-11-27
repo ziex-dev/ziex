@@ -22,7 +22,7 @@ pub fn POST(ctx: zx.RouteContext) !void {
     var roles: std.ArrayList(u8) = .empty;
     for (body.messages) |m| try roles.append(ctx.arena, m.role[0]);
 
-    const head = try std.fmt.allocPrint(ctx.arena, "{s}|{s}|{s}|", .{ body.model, body.system orelse "-", roles.items });
+    const head = try ctx.arena.print("{s}|{s}|{s}|", .{ body.model, body.system orelse "-", roles.items });
     const last = body.messages[body.messages.len - 1].content;
     const stop = if (body.max_tokens == 4096) "end_turn" else "max_tokens";
 

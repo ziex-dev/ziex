@@ -107,10 +107,10 @@ fn files(a: std.mem.Allocator, items: []const File) ![]const File {
 /// A `// --- name ---` section of the feature examples, with the imports it needs.
 fn section(a: std.mem.Allocator, name: []const u8) ![]const u8 {
     const body = std.mem.trim(u8, util.extractSection(a, examples_source, name), " \t\n\r");
-    if (std.mem.indexOf(u8, body, "@import(\"zx\")") != null) return body;
-    if (std.mem.indexOf(u8, body, "std.") != null)
-        return std.fmt.allocPrint(a, "{s}\n\nconst std = @import(\"std\");\nconst zx = @import(\"zx\");\n", .{body});
-    return std.fmt.allocPrint(a, "{s}\n\nconst zx = @import(\"zx\");\n", .{body});
+    if (std.mem.find(u8, body, "@import(\"zx\")") != null) return body;
+    if (std.mem.find(u8, body, "std.") != null)
+        return a.print("{s}\n\nconst std = @import(\"std\");\nconst zx = @import(\"zx\");\n", .{body});
+    return a.print("{s}\n\nconst zx = @import(\"zx\");\n", .{body});
 }
 
 const examples_source = @embedFile("../examples/feature_examples.zx");

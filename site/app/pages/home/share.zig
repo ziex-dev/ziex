@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 
 pub const Entry = struct { code: []const u8, filename: []const u8 };
 
-pub const Files = std.StringArrayHashMapUnmanaged([]const u8);
+pub const Files = std.array_hash_map.String([]const u8);
 
 const zx_import = "const zx = @import(\"zx\");";
 const std_import = "const std = @import(\"std\");";
@@ -37,14 +37,14 @@ pub fn url(gpa: Allocator, entries: []const Entry) !?[]const u8 {
     defer arena.deinit();
     const a = arena.allocator();
 
-    var open: std.ArrayListUnmanaged(Entry) = .empty;
+    var open: std.ArrayList(Entry) = .empty;
     for (entries) |e| {
         if (isPlaygroundOpenable(e.filename, e.code)) try open.append(a, e);
     }
     if (open.items.len == 0) return null;
 
     const files = try filesFromEntries(a, open.items);
-    return try std.fmt.allocPrint(gpa, "/playground#data={s}", .{try encode(a, files)});
+    return try gpa.print("/playground#data={s}", .{try encode(a, files)});
 }
 
 // --- Encoding ---
@@ -108,7 +108,7 @@ fn isWord(c: u8) bool {
 /// `\b<needle>\b` (boundaries only where `needle` starts/ends with a word char).
 fn hasWord(hay: []const u8, needle: []const u8) bool {
     var i: usize = 0;
-    while (std.mem.indexOfPos(u8, hay, i, needle)) |at| : (i = at + 1) {
+    while (std.mem.findPos(u8, hay, i, needle)) |at| : (i = at + 1) {
         const before_ok = !isWord(needle[0]) or at == 0 or !isWord(hay[at - 1]);
         const end = at + needle.len;
         const after_ok = !isWord(needle[needle.len - 1]) or end == hay.len or !isWord(hay[end]);
@@ -126,7 +126,7 @@ fn skipWs(s: []const u8, i: usize) usize {
 /// Each `\bpub\s+fn\s+NAME\s*(` in `code`, calling `f(name, index_after_paren)`.
 fn pubFns(code: []const u8, ctx: anytype, comptime f: fn (@TypeOf(ctx), []const u8, usize) bool) void {
     var i: usize = 0;
-    while (std.mem.indexOfPos(u8, code, i, "pub")) |at| : (i = at + 3) {
+    while (std.mem.findPos(u8, code, i, "pub")) |at| : (i = at + 3) {
         if (at > 0 and isWord(code[at - 1])) continue;
         var j = at + 3;
         if (j >= code.len or !std.ascii.isWhitespace(code[j])) continue;
@@ -166,12 +166,12 @@ fn hasLayoutExport(code: []const u8) bool {
 }
 
 fn basename(path: []const u8) []const u8 {
-    const i = std.mem.lastIndexOfAny(u8, path, "/\\") orelse return path;
+    const i = std.mem.findLastAny(u8, path, "/\\") orelse return path;
     return if (i + 1 < path.len) path[i + 1 ..] else path;
 }
 
 fn dirname(path: []const u8) []const u8 {
-    const i = std.mem.lastIndexOfScalar(u8, path, '/') orelse return "";
+    const i = std.mem.findScalarLast(u8, path, '/') orelse return "";
     return path[0..i];
 }
 
@@ -190,7 +190,7 @@ fn looksLikeRoute(code: []const u8, filename: []const u8) bool {
     const handler = for ([_][]const u8{ "GET", "POST", "PUT", "DELETE", "PATCH", "Socket", "SocketOpen" }) |m| {
         if (hasPubFn(code, m)) break true;
     } else false;
-    const ctx_type = std.mem.indexOf(u8, code, "RouteContext") != null or std.mem.indexOf(u8, code, "SocketContext") != null;
+    const ctx_type = std.mem.find(u8, code, "RouteContext") != null or std.mem.find(u8, code, "SocketContext") != null;
     return handler and ctx_type;
 }
 
@@ -203,8 +203,8 @@ fn needsAppMode(code: []const u8, filename: []const u8) bool {
     if (hasWord(code, "zx.client.")) return true;
     if (hasWord(code, "zx.server.Action")) return true;
     if (hasWord(code, "zx.PageContext") or hasWord(code, "zx.LayoutContext")) return true;
-    if (std.mem.indexOfScalar(u8, filename, '[')) |open| {
-        if (std.mem.indexOfScalarPos(u8, filename, open + 2, ']') != null) return true;
+    if (std.mem.findScalar(u8, filename, '[')) |open| {
+        if (std.mem.findScalarPos(u8, filename, open + 2, ']') != null) return true;
     }
     return false;
 }
@@ -221,7 +221,7 @@ pub fn isPlaygroundOpenable(filename: []const u8, code: []const u8) bool {
     if (needsAppMode(trimmed, filename)) return true;
     // `<[A-Za-z/!]`
     var i: usize = 0;
-    while (std.mem.indexOfScalarPos(u8, trimmed, i, '<')) |at| : (i = at + 1) {
+    while (std.mem.findScalarPos(u8, trimmed, i, '<')) |at| : (i = at + 1) {
         if (at + 1 < trimmed.len and (std.ascii.isAlphabetic(trimmed[at + 1]) or trimmed[at + 1] == '/' or trimmed[at + 1] == '!')) return true;
     }
     return false;
@@ -243,7 +243,7 @@ fn hasImportLine(code: []const u8, name: []const u8) bool {
         if (j >= l.len or l[j] != '=') continue;
         j = skipWs(l, j + 1);
         var want: [32]u8 = undefined;
-        const tail = std.fmt.bufPrint(&want, "@import(\"{s}\");", .{name}) catch continue;
+        const tail = std.mem.print(&want, "@import(\"{s}\");", .{name}) catch continue;
         if (std.mem.eql(u8, l[j..], tail)) return true;
     }
     return false;
@@ -251,7 +251,7 @@ fn hasImportLine(code: []const u8, name: []const u8) bool {
 
 fn usesStd(code: []const u8) bool {
     var i: usize = 0;
-    while (std.mem.indexOfPos(u8, code, i, "std.")) |at| : (i = at + 1) {
+    while (std.mem.findPos(u8, code, i, "std.")) |at| : (i = at + 1) {
         if (at + 4 < code.len and isWord(code[at + 4])) return true;
     }
     return false;
@@ -259,7 +259,7 @@ fn usesStd(code: []const u8) bool {
 
 fn appendImport(a: Allocator, code: []const u8, line: []const u8) ![]const u8 {
     const normalized = std.mem.trimEnd(u8, code, &std.ascii.whitespace);
-    return std.fmt.allocPrint(a, "{s}\n\n{s}", .{ normalized, line });
+    return a.print("{s}\n\n{s}", .{ normalized, line });
 }
 
 fn processSnippetCode(a: Allocator, code: []const u8) ![]const u8 {
@@ -302,7 +302,7 @@ fn wrapComponentAsPage(a: Allocator, code: []const u8) ![]const u8 {
     if (hasPageExport(code)) return code;
     const name = findPrimaryComponentName(code) orelse return code;
     const wants_client = hasWord(code, "@client") or hasWord(code, "zx.client.");
-    return std.fmt.allocPrint(a,
+    return a.print(
         \\pub fn Page(ctx: zx.PageContext) !zx.Component {{
         \\    return (
         \\        <main @allocator={{ctx.arena}}>
@@ -333,7 +333,7 @@ fn normalizePath(a: Allocator, raw: []const u8) ![]const u8 {
 
 fn firstRouteParam(code: []const u8) ?[]const u8 {
     var i: usize = 0;
-    while (std.mem.indexOfPos(u8, code, i, "params.get(")) |at| : (i = at + 1) {
+    while (std.mem.findPos(u8, code, i, "params.get(")) |at| : (i = at + 1) {
         var j = skipWs(code, at + "params.get(".len);
         if (j >= code.len or (code[j] != '"' and code[j] != '\'')) continue;
         j += 1;
@@ -351,30 +351,30 @@ fn normalizeRouteAppPath(a: Allocator, raw: []const u8) ![]const u8 {
     var path = stripAppPrefix(try normalizePath(a, raw));
     // Playground serves API/WebSocket handlers from app/routes/...
     if (std.mem.startsWith(u8, path, "pages/")) {
-        path = try std.fmt.allocPrint(a, "routes/{s}", .{path["pages/".len..]});
+        path = try a.print("routes/{s}", .{path["pages/".len..]});
     } else if (!std.mem.startsWith(u8, path, "routes/")) {
-        path = if (std.mem.indexOfScalar(u8, path, '/') == null or std.mem.eql(u8, path, "route.zig"))
+        path = if (std.mem.findScalar(u8, path, '/') == null or std.mem.eql(u8, path, "route.zig"))
             "routes/api/route.zig"
         else
-            try std.fmt.allocPrint(a, "routes/{s}", .{path});
+            try a.print("routes/{s}", .{path});
     }
     if (!std.mem.endsWith(u8, path, "/route.zig") and !std.mem.eql(u8, path, "routes/route.zig")) {
         const dir = dirname(path);
-        path = if (dir.len > 0) try std.fmt.allocPrint(a, "{s}/route.zig", .{dir}) else "routes/api/route.zig";
+        path = if (dir.len > 0) try a.print("{s}/route.zig", .{dir}) else "routes/api/route.zig";
     }
-    return std.fmt.allocPrint(a, "app/{s}", .{path});
+    return a.print("app/{s}", .{path});
 }
 
 fn normalizePageAppPath(a: Allocator, raw: []const u8, code: []const u8) ![]const u8 {
     var path = stripAppPrefix(try normalizePath(a, raw));
     if (std.mem.startsWith(u8, path, "pages/")) path = path["pages/".len..];
-    if (std.mem.indexOfScalar(u8, path, '/') == null) {
-        if (firstRouteParam(code)) |param| return std.fmt.allocPrint(a, "app/pages/[{s}]/page.zx", .{param});
+    if (std.mem.findScalar(u8, path, '/') == null) {
+        if (firstRouteParam(code)) |param| return a.print("app/pages/[{s}]/page.zx", .{param});
         return "app/pages/page.zx";
     }
     // Any *.zx under a route folder becomes that folder's page.zx.
-    if (lowerEndsWith(basename(path), ".zx")) return std.fmt.allocPrint(a, "app/pages/{s}/page.zx", .{dirname(path)});
-    return std.fmt.allocPrint(a, "app/pages/{s}", .{path});
+    if (lowerEndsWith(basename(path), ".zx")) return a.print("app/pages/{s}/page.zx", .{dirname(path)});
+    return a.print("app/pages/{s}", .{path});
 }
 
 fn mapEntryToAppPath(a: Allocator, filename: []const u8, code: []const u8) ![]const u8 {
@@ -382,8 +382,8 @@ fn mapEntryToAppPath(a: Allocator, filename: []const u8, code: []const u8) ![]co
     if (lowerEql(basename(raw), "layout.zx") or hasLayoutExport(code)) {
         var path = stripAppPrefix(raw);
         if (std.mem.startsWith(u8, path, "pages/")) path = path["pages/".len..];
-        if (std.mem.indexOfScalar(u8, path, '/') == null) return "app/pages/layout.zx";
-        return std.fmt.allocPrint(a, "app/pages/{s}/layout.zx", .{dirname(path)});
+        if (std.mem.findScalar(u8, path, '/') == null) return "app/pages/layout.zx";
+        return a.print("app/pages/{s}/layout.zx", .{dirname(path)});
     }
     if (looksLikeRoute(code, filename)) return normalizeRouteAppPath(a, raw);
     return normalizePageAppPath(a, raw, code);
@@ -400,7 +400,7 @@ fn urlFromAppPath(a: Allocator, path: []const u8) !?[]const u8 {
         const rest = if (std.mem.startsWith(u8, path, "app/pages/")) path["app/pages/".len..] else path;
         const route = if (std.mem.endsWith(u8, rest, "/page.zx")) rest[0 .. rest.len - "/page.zx".len] else "";
         if (route.len == 0) return "/";
-        return try std.fmt.allocPrint(a, "/{s}", .{route});
+        return try a.print("/{s}", .{route});
     }
     if (std.mem.endsWith(u8, path, "route.zig")) {
         var route = path;
@@ -409,7 +409,7 @@ fn urlFromAppPath(a: Allocator, path: []const u8) !?[]const u8 {
         }
         if (std.mem.endsWith(u8, route, "/route.zig")) route = route[0 .. route.len - "/route.zig".len] else if (std.mem.endsWith(u8, route, "route.zig")) route = route[0 .. route.len - "route.zig".len];
         if (route.len == 0) return "/api";
-        return try std.fmt.allocPrint(a, "/{s}", .{route});
+        return try a.print("/{s}", .{route});
     }
     return null;
 }
@@ -421,10 +421,10 @@ fn exampleValueForParam(param: []const u8) []const u8 {
 }
 
 fn concreteExampleHref(a: Allocator, pattern: []const u8) ![]const u8 {
-    var out: std.ArrayListUnmanaged(u8) = .empty;
+    var out: std.ArrayList(u8) = .empty;
     var i: usize = 0;
     while (i < pattern.len) {
-        if (pattern[i] == '[') if (std.mem.indexOfScalarPos(u8, pattern, i + 1, ']')) |close| {
+        if (pattern[i] == '[') if (std.mem.findScalarPos(u8, pattern, i + 1, ']')) |close| {
             if (close > i + 1) {
                 try out.appendSlice(a, exampleValueForParam(pattern[i + 1 .. close]));
                 i = close + 1;
@@ -444,7 +444,7 @@ fn lessStr(_: void, x: []const u8, y: []const u8) bool {
 fn collectExampleLinks(a: Allocator, files: Files) ![]Link {
     const paths = try a.dupe([]const u8, files.keys());
     std.mem.sort([]const u8, paths, {}, lessStr);
-    var links: std.ArrayListUnmanaged(Link) = .empty;
+    var links: std.ArrayList(Link) = .empty;
     outer: for (paths) |path| {
         const pattern = (try urlFromAppPath(a, path)) orelse continue;
         if (std.mem.eql(u8, pattern, "/")) continue;
@@ -459,29 +459,29 @@ const Unsupported = struct { caching: bool, websocket: bool, non_get: []const []
 
 fn containsAfter(hay: []const u8, word: []const u8, then: []const u8) bool {
     var i: usize = 0;
-    while (std.mem.indexOfPos(u8, hay, i, word)) |at| : (i = at + 1) {
+    while (std.mem.findPos(u8, hay, i, word)) |at| : (i = at + 1) {
         const before_ok = at == 0 or !isWord(hay[at - 1]);
         const end = at + word.len;
         const after_ok = end == hay.len or !isWord(hay[end]);
-        if (before_ok and after_ok and std.mem.indexOfPos(u8, hay, end, then) != null) return true;
+        if (before_ok and after_ok and std.mem.findPos(u8, hay, end, then) != null) return true;
     }
     return false;
 }
 
 fn detectUnsupported(a: Allocator, files: Files) !Unsupported {
-    var all: std.ArrayListUnmanaged(u8) = .empty;
+    var all: std.ArrayList(u8) = .empty;
     for (files.values(), 0..) |v, i| {
         if (i > 0) try all.append(a, '\n');
         try all.appendSlice(a, v);
     }
     const code = all.items;
-    var non_get: std.ArrayListUnmanaged([]const u8) = .empty;
+    var non_get: std.ArrayList([]const u8) = .empty;
     for ([_][]const u8{ "POST", "PUT", "DELETE", "PATCH" }) |m| {
         if (hasPubFn(code, m)) try non_get.append(a, m);
     }
     var dot_caching = false;
     var i: usize = 0;
-    while (std.mem.indexOfPos(u8, code, i, ".caching")) |at| : (i = at + 1) {
+    while (std.mem.findPos(u8, code, i, ".caching")) |at| : (i = at + 1) {
         const j = skipWs(code, at + ".caching".len);
         if (j < code.len and code[j] == '=') dot_caching = true;
     }
@@ -526,12 +526,12 @@ fn buildSampleHomePage(a: Allocator, files: Files) ![]const u8 {
         try out.writeAll("\n            <p>Edit files under <code>app/</code> and run to preview.</p>\n");
     }
 
-    var notices: std.ArrayListUnmanaged([]const u8) = .empty;
+    var notices: std.ArrayList([]const u8) = .empty;
     if (unsupported.caching) try notices.append(a, "Caching is not supported in the playground.");
     if (unsupported.websocket) try notices.append(a, "WebSockets are not supported in the playground.");
     if (unsupported.non_get.len > 0) {
         const methods = try std.mem.join(a, "/", unsupported.non_get);
-        try notices.append(a, try std.fmt.allocPrint(a, "{s} route handlers are not supported in the playground (GET only).", .{methods}));
+        try notices.append(a, try a.print("{s} route handlers are not supported in the playground (GET only).", .{methods}));
     }
     if (notices.items.len > 0) {
         try out.writeAll("\n            <div>\n                <h2>Not supported here</h2>\n                <ul>\n");
@@ -563,7 +563,7 @@ fn ensureMinimalAppShell(a: Allocator, files: *Files) !void {
 
 fn filesFromEntries(a: Allocator, entries: []const Entry) !Files {
     var files: Files = .empty;
-    var cleaned: std.ArrayListUnmanaged(Entry) = .empty;
+    var cleaned: std.ArrayList(Entry) = .empty;
     for (entries) |e| {
         const code = std.mem.trim(u8, e.code, &std.ascii.whitespace);
         if (code.len == 0) continue;
@@ -600,21 +600,21 @@ fn filesFromEntries(a: Allocator, entries: []const Entry) !Files {
 
 pub fn filenameFromSection(a: Allocator, section: []const u8, label: []const u8) ![]const u8 {
     const lower = try std.ascii.allocLowerString(a, section);
-    const fallback = try std.fmt.allocPrint(a, "{s}.zx", .{try std.mem.replaceOwned(u8, a, try std.ascii.allocLowerString(a, label), " ", "-")});
+    const fallback = try a.print("{s}.zx", .{try std.mem.replaceOwned(u8, a, try std.ascii.allocLowerString(a, label), " ", "-")});
     if (section.len == 0) return fallback;
-    if (std.mem.indexOf(u8, lower, "layout") != null) return "layout.zx";
-    if (std.mem.indexOf(u8, lower, "websocket") != null) return "routes/ws/route.zig";
-    if (std.mem.indexOf(u8, lower, "api route") != null or isRouteWord(lower)) return "route.zig";
-    if (std.mem.indexOf(u8, lower, "dynamic path") != null) return "pages/[id]/page.zx";
-    if (std.mem.endsWith(u8, lower, ": page") or std.mem.indexOf(u8, lower, "routing: page") != null) return "page.zx";
-    if (std.mem.indexOf(u8, lower, "client-side") != null) return "page.zx";
+    if (std.mem.find(u8, lower, "layout") != null) return "layout.zx";
+    if (std.mem.find(u8, lower, "websocket") != null) return "routes/ws/route.zig";
+    if (std.mem.find(u8, lower, "api route") != null or isRouteWord(lower)) return "route.zig";
+    if (std.mem.find(u8, lower, "dynamic path") != null) return "pages/[id]/page.zx";
+    if (std.mem.endsWith(u8, lower, ": page") or std.mem.find(u8, lower, "routing: page") != null) return "page.zx";
+    if (std.mem.find(u8, lower, "client-side") != null) return "page.zx";
     return fallback;
 }
 
 // `(^|:\s*)route\b`
 fn isRouteWord(lower: []const u8) bool {
     var i: usize = 0;
-    while (std.mem.indexOfPos(u8, lower, i, "route")) |at| : (i = at + 1) {
+    while (std.mem.findPos(u8, lower, i, "route")) |at| : (i = at + 1) {
         const end = at + 5;
         if (end < lower.len and isWord(lower[end])) continue;
         var j = at;

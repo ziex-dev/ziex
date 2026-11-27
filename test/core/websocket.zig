@@ -102,7 +102,7 @@ fn echo(backend: Backend) !void {
     defer harness.stop();
 
     var url_buf: [64]u8 = undefined;
-    const url = try std.fmt.bufPrint(&url_buf, "ws://127.0.0.1:{d}/ws", .{harness.tcp.?.port});
+    const url = try std.mem.print(&url_buf, "ws://127.0.0.1:{d}/ws", .{harness.tcp.?.port});
 
     var recorder: Recorder = .{ .io = io };
     var ws: Client = .{ .io = io, .allocator = gpa, .onmessage = &Recorder.onMessage, .onclose = &Recorder.onClose };
@@ -165,7 +165,7 @@ fn large(backend: Backend) !void {
     defer harness.stop();
 
     var url_buf: [64]u8 = undefined;
-    const url = try std.fmt.bufPrint(&url_buf, "ws://127.0.0.1:{d}/ws", .{harness.tcp.?.port});
+    const url = try std.mem.print(&url_buf, "ws://127.0.0.1:{d}/ws", .{harness.tcp.?.port});
 
     var state: Large = .{ .io = io };
     var ws: Client = .{ .io = io, .allocator = gpa, .onmessage = &Large.onMessage };

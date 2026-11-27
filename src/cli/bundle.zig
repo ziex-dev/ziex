@@ -26,7 +26,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     };
     defer ctx.allocator.free(program_path);
 
-    const staticdir = try std.fs.path.join(ctx.allocator, &.{ install_prefix, "static" });
+    const staticdir = try std.Io.Dir.path.join(ctx.allocator, &.{ install_prefix, "static" });
     defer ctx.allocator.free(staticdir);
 
     var printer = tui.Printer.init(ctx.allocator, .{ .file_path_mode = .flat, .file_tree_max_depth = 1 });
@@ -38,8 +38,8 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     log.debug("Bundling app! binpath={s} staticdir={s}", .{ program_path, staticdir });
     log.debug("Outdir: {s}", .{outdir});
 
-    const bin_name = std.fs.path.basename(program_path);
-    const dest_binpath = try std.fs.path.join(ctx.allocator, &.{ outdir, bin_name });
+    const bin_name = std.Io.Dir.path.basename(program_path);
+    const dest_binpath = try std.Io.Dir.path.join(ctx.allocator, &.{ outdir, bin_name });
     defer ctx.allocator.free(dest_binpath);
     log.debug("Copying bin from {s} to outdir {s}", .{ program_path, dest_binpath });
 
@@ -50,7 +50,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     try std.Io.Dir.copyFile(std.Io.Dir.cwd(), program_path, std.Io.Dir.cwd(), dest_binpath, io, .{});
     printer.filepath(bin_name);
 
-    const static_outdir = try std.fs.path.join(ctx.allocator, &.{ outdir, "static" });
+    const static_outdir = try std.Io.Dir.path.join(ctx.allocator, &.{ outdir, "static" });
     defer ctx.allocator.free(static_outdir);
     log.debug("Copying static directory! {s}", .{staticdir});
     util.copydirs(io, ctx.allocator, staticdir, &.{"."}, static_outdir, false, &printer) catch |err| {

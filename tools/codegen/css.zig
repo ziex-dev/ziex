@@ -232,7 +232,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir) ![
     defer selector_tags.deinit(a);
     for (selectors.items) |sel| {
         const name = sel.object.get("name").?.string;
-        if (std.mem.indexOf(u8, name, "(") != null) continue;
+        if (std.mem.find(u8, name, "(") != null) continue;
         const clean_s = try cleanName(a, name, .snake);
         if (clean_s.len == 0) continue;
         if (selector_tags.contains(clean_s)) continue;
@@ -259,7 +259,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir) ![
     try style_struct.addField(fa, "", "extra", "?[]const u8", "null");
 
     _ = try style_struct.addMethod(fa, "", "format", "(self: Style, w: anytype) std.Io.Writer.Error!void",
-        \\inline for (std.meta.fieldNames(Style)) |field_name| {
+        \\inline for (@typeInfo(Style).@"struct".field_names) |field_name| {
         \\    try @import("core.zig").formatProperty(field_name, @field(self, field_name), w);
         \\}
     );
@@ -315,21 +315,21 @@ fn cleanName(allocator: std.mem.Allocator, name: []const u8, case: enum { pascal
 fn resolveMetaEnriched(allocator: std.mem.Allocator, syntax: []const u8, type_map: *TypeMap, keywords: *std.array_hash_map.String([]const u8), units: *UnitSupport, depth: usize, kprose: ?std.StringHashMap([]const u8)) !void {
     if (depth > 10) return;
 
-    const is_shorthand = std.mem.indexOf(u8, syntax, "{1,4}") != null or std.mem.indexOf(u8, syntax, "{1,2}") != null;
+    const is_shorthand = std.mem.find(u8, syntax, "{1,4}") != null or std.mem.find(u8, syntax, "{1,2}") != null;
     if (is_shorthand) units.shorthand = true;
 
     var it = std.mem.tokenizeAny(u8, syntax, " |[]\t\r\n&");
     while (it.next()) |token| {
         if (token.len == 0) continue;
         var cleaned = token;
-        if (std.mem.indexOfAny(u8, cleaned, "+*?#{")) |idx| cleaned = cleaned[0..idx];
+        if (std.mem.findAny(u8, cleaned, "+*?#{")) |idx| cleaned = cleaned[0..idx];
         if (cleaned.len == 0) continue;
 
         if (std.mem.startsWith(u8, cleaned, "<'")) {
             const ref_name = cleaned[2 .. cleaned.len - 2];
-            if (std.mem.indexOf(u8, ref_name, "padding") != null or
-                std.mem.indexOf(u8, ref_name, "margin") != null or
-                std.mem.indexOf(u8, ref_name, "border") != null)
+            if (std.mem.find(u8, ref_name, "padding") != null or
+                std.mem.find(u8, ref_name, "margin") != null or
+                std.mem.find(u8, ref_name, "border") != null)
             {
                 units.length = true;
             }
@@ -338,17 +338,17 @@ fn resolveMetaEnriched(allocator: std.mem.Allocator, syntax: []const u8, type_ma
 
         if (std.mem.startsWith(u8, cleaned, "<")) {
             var type_name = cleaned[1..];
-            if (std.mem.indexOfAny(u8, type_name, ">[ ")) |idx| type_name = type_name[0..idx];
+            if (std.mem.findAny(u8, type_name, ">[ ")) |idx| type_name = type_name[0..idx];
             if (std.mem.endsWith(u8, type_name, ">")) type_name = type_name[0 .. type_name.len - 1];
 
-            const is_length = std.mem.indexOf(u8, type_name, "length") != null;
-            const is_percent = std.mem.indexOf(u8, type_name, "percentage") != null;
+            const is_length = std.mem.find(u8, type_name, "length") != null;
+            const is_percent = std.mem.find(u8, type_name, "percentage") != null;
 
             if (is_length) units.length = true;
             if (is_percent) units.percentage = true;
-            if (std.mem.indexOf(u8, type_name, "angle") != null) units.angle = true;
-            if (std.mem.indexOf(u8, type_name, "time") != null) units.time = true;
-            if (std.mem.indexOf(u8, type_name, "color") != null) units.color = true;
+            if (std.mem.find(u8, type_name, "angle") != null) units.angle = true;
+            if (std.mem.find(u8, type_name, "time") != null) units.time = true;
+            if (std.mem.find(u8, type_name, "color") != null) units.color = true;
 
             if (type_map.get(type_name)) |sub_syntax| try resolveMetaEnriched(allocator, sub_syntax, type_map, keywords, units, depth + 1, kprose);
             continue;

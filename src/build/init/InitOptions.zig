@@ -68,7 +68,7 @@ pub const CliOptions = struct {
     steps: ?Steps = .default,
 
     /// Optimize mode for the Ziex CLI executable.
-    optimize: ?std.builtin.Optimize = .fast,
+    optimize: ?std.lang.Optimize = .fast,
 
     /// Log level for the Ziex CLI executable.
     log_level: ?std.log.Level = null,
@@ -85,7 +85,7 @@ pub const AppOptions = struct {
         pub const Backend = enum {
             /// Debug builds use `std`; release builds use `httpz`.
             auto,
-            /// `std.http.Server` + fixed worker pool (better DebugAllocator / leak reports).
+            /// `std.http.Server` + fixed worker pool (better SafeAllocator / leak reports).
             std,
             /// httpz (production throughput).
             httpz,
@@ -265,7 +265,7 @@ pub const ClientOptions = struct {
         /// Optimize mode for the client wasm module and executable.
         ///
         /// When `null`, inherits the app executable's optimize mode.
-        optimize: ?std.builtin.Optimize = null,
+        optimize: ?std.lang.Optimize = null,
         link: bool = true,
     };
     /// Client-side JS bindings (`ziex` / wasm init script).

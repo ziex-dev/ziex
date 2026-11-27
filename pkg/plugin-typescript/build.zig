@@ -54,11 +54,11 @@ fn innerInitSingle(b: *std.Build, build_item: Build) !Output {
 
     // Zig-managed output directory (enables build caching)
     run.addArg("--outdir");
-    const outdir = run.addOutputDirectoryArg("dts");
+    const outdir = run.addOutputDirectoryArg2("dts", .{});
 
     // Dep file for rebuild tracking
     run.addArg("--dep-file");
-    _ = run.addDepFileOutputArg("dts.d");
+    _ = run.addDepFileOutputArg2("dts.d", .{});
 
     // Prefer an explicit path; otherwise the host @typescript/typescript-* binary from lazy deps.
     if (tsc_path orelse resolveHostTsc(dep)) |bin| {
@@ -82,7 +82,7 @@ fn innerInitSingle(b: *std.Build, build_item: Build) !Output {
 }
 
 fn resolveHostTsc(plugin_dep: *std.Build.Dependency) ?std.Build.LazyPath {
-    const host_dep = plugin_dep.builder.lazyDependency(host_tsc.depName(), .{}) orelse return null;
+    const host_dep = plugin_dep.builder.dependencyLazy(host_tsc.depName(), .{}) catch return null;
     // zig fetch strips the npm tarball's top-level `package/` directory.
     // Native packages ship the binary at lib/tsc (lib/tsc.exe on Windows).
     return host_dep.path(plugin_dep.builder.fmt("lib/{s}", .{host_tsc.exeName()}));
@@ -133,8 +133,7 @@ pub fn build(b: *std.Build) void {
 
     if (sync_deps) {
         const default_step = b.getInstallStep();
-        if (b.lazyDependency("typescript", .{})) |typescript_dep| {
-            plugin_system.addOptionalDependencyFetches(b, default_step, plugin_system.readNpmPackageJson(b, typescript_dep));
-        }
+        const typescript_dep = b.dependency("typescript", .{});
+        plugin_system.addOptionalDependencyFetches(b, default_step, plugin_system.readNpmPackageJson(b, typescript_dep));
     }
 }

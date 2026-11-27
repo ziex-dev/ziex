@@ -92,7 +92,7 @@ test "server > dispatches JSON-RPC messages" {
 
 // A modern (stateless) request: the version rides in `_meta`.
 fn modernBody(arena: std.mem.Allocator, method: []const u8, extra: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(arena,
+    return arena.print(
         \\{{"jsonrpc":"2.0","id":7,"method":"{s}","params":{{{s}"_meta":{{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{{}}}}}}}}
     , .{ method, extra });
 }
@@ -181,7 +181,7 @@ test "oauth > bearer, challenge, pkce" {
 // --- Over HTTP --- //
 
 fn url(buf: []u8, harness: *Harness, query: []const u8) ![]const u8 {
-    return std.fmt.bufPrint(buf, "http://127.0.0.1:{d}/mcp{s}", .{ harness.tcp.?.port, query });
+    return std.mem.print(buf, "http://127.0.0.1:{d}/mcp{s}", .{ harness.tcp.?.port, query });
 }
 
 test "http > client talks to a mounted server" {
@@ -250,12 +250,12 @@ test "http > modern requests are checked against their headers" {
 
     var res = try harness.fetch(arena, .{ .method = .POST, .path = "/mcp", .headers = modernHeaders("server/discover", null), .body = try modernBody(arena, "server/discover", "") });
     try expectEqual(200, res.status);
-    try expect(std.mem.indexOf(u8, res.body, "\"supportedVersions\":[\"2026-07-28\",\"2025-11-25\"]") != null);
+    try expect(std.mem.find(u8, res.body, "\"supportedVersions\":[\"2026-07-28\",\"2025-11-25\"]") != null);
 
     const call = try modernBody(arena, "tools/call", "\"name\":\"echo\",\"arguments\":{\"text\":\"hey\"},");
     res = try harness.fetch(arena, .{ .method = .POST, .path = "/mcp", .headers = modernHeaders("tools/call", "echo"), .body = call });
     try expectEqual(200, res.status);
-    try expect(std.mem.indexOf(u8, res.body, "\"resultType\":\"complete\"") != null);
+    try expect(std.mem.find(u8, res.body, "\"resultType\":\"complete\"") != null);
     // Base64 sentinel form of "echo".
     res = try harness.fetch(arena, .{ .method = .POST, .path = "/mcp", .headers = modernHeaders("tools/call", "=?base64?ZWNobw==?="), .body = call });
     try expectEqual(200, res.status);
@@ -269,12 +269,12 @@ test "http > modern requests are checked against their headers" {
     }) |headers| {
         res = try harness.fetch(arena, .{ .method = .POST, .path = "/mcp", .headers = headers, .body = call });
         try expectEqual(400, res.status);
-        try expect(std.mem.indexOf(u8, res.body, "-32020") != null);
+        try expect(std.mem.find(u8, res.body, "-32020") != null);
     }
 
     res = try harness.fetch(arena, .{ .method = .POST, .path = "/mcp", .headers = modernHeaders("nope/nope", null), .body = try modernBody(arena, "nope/nope", "") });
     try expectEqual(404, res.status);
-    try expect(std.mem.indexOf(u8, res.body, "-32601") != null);
+    try expect(std.mem.find(u8, res.body, "-32601") != null);
 
     res = try harness.fetch(arena, .{
         .method = .POST,
@@ -285,7 +285,7 @@ test "http > modern requests are checked against their headers" {
         ,
     });
     try expectEqual(400, res.status);
-    try expect(std.mem.indexOf(u8, res.body, "-32022") != null);
+    try expect(std.mem.find(u8, res.body, "-32022") != null);
 }
 
 test "http > auth and method errors" {
@@ -303,7 +303,7 @@ test "http > auth and method errors" {
 
     var res = try harness.fetch(arena, .{ .method = .POST, .path = "/mcp", .body = "{}" });
     try expectEqual(401, res.status);
-    try expect(std.mem.indexOf(u8, res.header("www-authenticate").?, "resource_metadata=") != null);
+    try expect(std.mem.find(u8, res.header("www-authenticate").?, "resource_metadata=") != null);
 
     res = try harness.fetch(arena, .{ .path = "/mcp", .headers = &.{.{ .name = "authorization", .value = "Bearer secret" }} });
     try expectEqual(405, res.status);
@@ -321,10 +321,10 @@ test "http > auth and method errors" {
 }
 
 fn queryParam(url_: []const u8, name: []const u8) ?[]const u8 {
-    const q = url_[(std.mem.indexOfScalar(u8, url_, '?') orelse return null) + 1 ..];
+    const q = url_[(std.mem.findScalar(u8, url_, '?') orelse return null) + 1 ..];
     var it = std.mem.splitScalar(u8, q, '&');
     while (it.next()) |pair| {
-        const eq = std.mem.indexOfScalar(u8, pair, '=') orelse continue;
+        const eq = std.mem.findScalar(u8, pair, '=') orelse continue;
         if (std.mem.eql(u8, pair[0..eq], name)) return pair[eq + 1 ..];
     }
     return null;
@@ -340,12 +340,12 @@ test "http > endpoint runs the OAuth flow and guards the tools" {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const base = try std.fmt.allocPrint(arena, "http://127.0.0.1:{d}/secure/mcp", .{harness.tcp.?.port});
+    const base = try arena.print("http://127.0.0.1:{d}/secure/mcp", .{harness.tcp.?.port});
 
     // Signed out: the challenge points at metadata under the same route.
     var res = try harness.fetch(arena, .{ .method = .POST, .path = "/secure/mcp", .body = "{}" });
     try expectEqual(401, res.status);
-    try expect(std.mem.indexOf(u8, res.header("www-authenticate").?, "/secure/mcp/.well-known/oauth-protected-resource") != null);
+    try expect(std.mem.find(u8, res.header("www-authenticate").?, "/secure/mcp/.well-known/oauth-protected-resource") != null);
 
     res = try harness.fetch(arena, .{ .path = "/secure/mcp/.well-known/oauth-protected-resource" });
     try expectEqual(200, res.status);
@@ -356,7 +356,7 @@ test "http > endpoint runs the OAuth flow and guards the tools" {
     res = try harness.fetch(arena, .{ .path = "/secure/mcp/.well-known/openid-configuration" });
     const meta = try std.json.parseFromSliceLeaky(struct { issuer: []const u8, token_endpoint: []const u8 }, arena, res.body, .{ .ignore_unknown_fields = true });
     try expectEqualStrings(base, meta.issuer);
-    try expectEqualStrings(try std.fmt.allocPrint(arena, "{s}/oauth/token", .{base}), meta.token_endpoint);
+    try expectEqualStrings(try arena.print("{s}/oauth/token", .{base}), meta.token_endpoint);
 
     // RFC 8414 / 9728 also put them at the root with the path appended.
     res = try harness.fetch(arena, .{ .path = "/.well-known/oauth-authorization-server/secure/mcp" });
@@ -385,11 +385,11 @@ test "http > endpoint runs the OAuth flow and guards the tools" {
 
     const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
     const challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
-    const authorize = try std.fmt.allocPrint(arena, "/secure/mcp/oauth/authorize?response_type=code&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_challenge={s}&code_challenge_method=S256&state=xyz", .{ client_id, challenge });
+    const authorize = try arena.print("/secure/mcp/oauth/authorize?response_type=code&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_challenge={s}&code_challenge_method=S256&state=xyz", .{ client_id, challenge });
 
-    res = try harness.fetch(arena, .{ .path = try std.fmt.allocPrint(arena, "/secure/mcp/oauth/authorize?response_type=code&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fother&code_challenge={s}&code_challenge_method=S256", .{ client_id, challenge }) });
+    res = try harness.fetch(arena, .{ .path = try arena.print("/secure/mcp/oauth/authorize?response_type=code&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fother&code_challenge={s}&code_challenge_method=S256", .{ client_id, challenge }) });
     try expectEqual(400, res.status);
-    res = try harness.fetch(arena, .{ .path = try std.fmt.allocPrint(arena, "/secure/mcp/oauth/authorize?response_type=code&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb", .{client_id}) });
+    res = try harness.fetch(arena, .{ .path = try arena.print("/secure/mcp/oauth/authorize?response_type=code&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb", .{client_id}) });
     try expectEqual(400, res.status);
 
     // Authorize → consent page → back to the client with a code.
@@ -398,7 +398,7 @@ test "http > endpoint runs the OAuth flow and guards the tools" {
     const consent = res.header("location").?;
     try expect(std.mem.startsWith(u8, consent, "/secure/consent?response_type=code&client_id="));
 
-    res = try harness.fetch(arena, .{ .path = try std.fmt.allocPrint(arena, "{s}&deny=1", .{consent}) });
+    res = try harness.fetch(arena, .{ .path = try arena.print("{s}&deny=1", .{consent}) });
     try expectEqualStrings("http://127.0.0.1:9/cb?error=access_denied&state=xyz", res.header("location").?);
 
     res = try harness.fetch(arena, .{ .path = consent });
@@ -409,16 +409,16 @@ test "http > endpoint runs the OAuth flow and guards the tools" {
     const code = queryParam(callback, "code").?;
 
     // A wrong verifier burns the code.
-    res = try harness.fetch(arena, .{ .method = .POST, .path = "/secure/mcp/oauth/token", .headers = form, .body = try std.fmt.allocPrint(arena, "grant_type=authorization_code&code={s}&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_verifier=wrong", .{ code, client_id }) });
+    res = try harness.fetch(arena, .{ .method = .POST, .path = "/secure/mcp/oauth/token", .headers = form, .body = try arena.print("grant_type=authorization_code&code={s}&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_verifier=wrong", .{ code, client_id }) });
     try expectEqual(400, res.status);
-    try expect(std.mem.indexOf(u8, res.body, "invalid_grant") != null);
-    res = try harness.fetch(arena, .{ .method = .POST, .path = "/secure/mcp/oauth/token", .headers = form, .body = try std.fmt.allocPrint(arena, "grant_type=authorization_code&code={s}&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_verifier={s}", .{ code, client_id, verifier }) });
+    try expect(std.mem.find(u8, res.body, "invalid_grant") != null);
+    res = try harness.fetch(arena, .{ .method = .POST, .path = "/secure/mcp/oauth/token", .headers = form, .body = try arena.print("grant_type=authorization_code&code={s}&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_verifier={s}", .{ code, client_id, verifier }) });
     try expectEqual(400, res.status);
 
     // A fresh code exchanges once.
     res = try harness.fetch(arena, .{ .path = consent });
     const code2 = queryParam(res.header("location").?, "code").?;
-    const exchange = try std.fmt.allocPrint(arena, "grant_type=authorization_code&code={s}&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_verifier={s}", .{ code2, client_id, verifier });
+    const exchange = try arena.print("grant_type=authorization_code&code={s}&client_id={s}&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_verifier={s}", .{ code2, client_id, verifier });
     res = try harness.fetch(arena, .{ .method = .POST, .path = "/secure/mcp/oauth/token", .headers = form, .body = exchange });
     try expectEqual(200, res.status);
     const access = try std.json.parseFromSliceLeaky(struct { access_token: []const u8, token_type: []const u8 }, arena, res.body, .{ .ignore_unknown_fields = true });
@@ -431,7 +431,7 @@ test "http > endpoint runs the OAuth flow and guards the tools" {
         .io = io,
         .allocator = gpa,
         .url = base,
-        .headers = &.{.{ .name = "authorization", .value = try std.fmt.allocPrint(arena, "Bearer {s}", .{access.access_token}) }},
+        .headers = &.{.{ .name = "authorization", .value = try arena.print("Bearer {s}", .{access.access_token}) }},
     };
     defer client.deinit();
     try expectEqualStrings("secure", (try client.initialize(arena)).serverInfo.name);

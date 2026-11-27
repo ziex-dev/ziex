@@ -1,8 +1,8 @@
 /// Extract specific line ranges from content (1-indexed, inclusive)
 /// Similar to cli/init.zig's line extraction for templates
 pub fn extractLines(allocator: zx.Allocator, content: []const u8, line_ranges: []const struct { u32, u32 }) []const u8 {
-    var result = std.array_list.Managed(u8).init(allocator);
-    defer result.deinit();
+    var result: std.ArrayList(u8) = .empty;
+    defer result.deinit(allocator);
 
     var line_iter = std.mem.splitScalar(u8, content, '\n');
     var line_n: u32 = 1;
@@ -13,9 +13,9 @@ pub fn extractLines(allocator: zx.Allocator, content: []const u8, line_ranges: [
             const start, const end = line_range;
             if (line_n >= start and line_n <= end) {
                 if (!first_line) {
-                    result.append('\n') catch unreachable;
+                    result.append(allocator, '\n') catch unreachable;
                 }
-                result.appendSlice(line) catch unreachable;
+                result.appendSlice(allocator, line) catch unreachable;
                 first_line = false;
                 break;
             }
@@ -49,12 +49,12 @@ pub fn findMinIndent(lines: []const []const u8, first_non_empty: usize, last_non
 
 /// Helper function to remove common leading indentation
 pub fn removeCommonIndentation(allocator: zx.Allocator, content: []const u8) []const u8 {
-    var lines = std.array_list.Managed([]const u8).init(allocator);
-    defer lines.deinit();
+    var lines: std.ArrayList([]const u8) = .empty;
+    defer lines.deinit(allocator);
 
     var it = std.mem.splitScalar(u8, content, '\n');
     while (it.next()) |line| {
-        lines.append(line) catch unreachable;
+        lines.append(allocator, line) catch unreachable;
     }
 
     if (lines.items.len == 0) {
@@ -84,18 +84,18 @@ pub fn removeCommonIndentation(allocator: zx.Allocator, content: []const u8) []c
     const min_indent = findMinIndent(lines.items, first, last);
 
     // Build result with indentation removed
-    var result = std.array_list.Managed(u8).init(allocator);
-    defer result.deinit();
+    var result: std.ArrayList(u8) = .empty;
+    defer result.deinit(allocator);
 
     for (lines.items[first .. last + 1], 0..) |line, i| {
         if (i > 0) {
-            result.append('\n') catch unreachable;
+            result.append(allocator, '\n') catch unreachable;
         }
         if (std.mem.trim(u8, line, " \t").len > 0) {
             const start = @min(min_indent, line.len);
-            result.appendSlice(line[start..]) catch unreachable;
+            result.appendSlice(allocator, line[start..]) catch unreachable;
         } else {
-            result.appendSlice(line) catch unreachable;
+            result.appendSlice(allocator, line) catch unreachable;
         }
     }
 
@@ -123,8 +123,8 @@ fn shouldStripDedupePrefix(token: []const u8, sep: usize) bool {
 
 /// Strip dedupe prefixes in identifiers, e.g. `Learn__Page` -> `Page`.
 pub fn stripDedupePrefixes(allocator: zx.Allocator, content: []const u8) []const u8 {
-    var out = std.array_list.Managed(u8).init(allocator);
-    defer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
 
     var i: usize = 0;
     while (i < content.len) {
@@ -135,18 +135,18 @@ pub fn stripDedupePrefixes(allocator: zx.Allocator, content: []const u8) []const
             while (i < content.len and isIdentContinue(content[i])) : (i += 1) {}
 
             const token = content[start..i];
-            if (std.mem.indexOf(u8, token, "__")) |sep| {
+            if (std.mem.find(u8, token, "__")) |sep| {
                 if (shouldStripDedupePrefix(token, sep)) {
-                    out.appendSlice(token[sep + 2 ..]) catch unreachable;
+                    out.appendSlice(allocator, token[sep + 2 ..]) catch unreachable;
                     continue;
                 }
             }
 
-            out.appendSlice(token) catch unreachable;
+            out.appendSlice(allocator, token) catch unreachable;
             continue;
         }
 
-        out.append(ch) catch unreachable;
+        out.append(allocator, ch) catch unreachable;
         i += 1;
     }
 
@@ -162,12 +162,12 @@ pub fn renderComponentToHtml(allocator: zx.Allocator, component: zx.Component) [
 /// Extract a section by marker comment, e.g. "Control Flow: if"
 /// The marker format is: // --- <section> ---
 pub fn extractSection(allocator: zx.Allocator, content: []const u8, section: []const u8) []const u8 {
-    var lines = std.array_list.Managed([]const u8).init(allocator);
-    defer lines.deinit();
+    var lines: std.ArrayList([]const u8) = .empty;
+    defer lines.deinit(allocator);
 
     var it = std.mem.splitScalar(u8, content, '\n');
     while (it.next()) |line| {
-        lines.append(line) catch unreachable;
+        lines.append(allocator, line) catch unreachable;
     }
 
     if (lines.items.len == 0) {
@@ -202,14 +202,14 @@ pub fn extractSection(allocator: zx.Allocator, content: []const u8, section: []c
         }
     }
 
-    var result = std.array_list.Managed(u8).init(allocator);
-    defer result.deinit();
+    var result: std.ArrayList(u8) = .empty;
+    defer result.deinit(allocator);
 
     for (lines.items[start_index.?..end_index], 0..) |line, i| {
         if (i > 0) {
-            result.append('\n') catch unreachable;
+            result.append(allocator, '\n') catch unreachable;
         }
-        result.appendSlice(line) catch unreachable;
+        result.appendSlice(allocator, line) catch unreachable;
     }
 
     const dedented = removeCommonIndentation(allocator, result.items);
@@ -220,8 +220,8 @@ pub fn extractSection(allocator: zx.Allocator, content: []const u8, section: []c
 // so docs show signatures taken from code that compiles.
 pub fn extractSignatures(allocator: zx.Allocator, content: []const u8, section: []const u8) []const u8 {
     const body = extractSection(allocator, content, section);
-    var result = std.array_list.Managed(u8).init(allocator);
-    defer result.deinit();
+    var result: std.ArrayList(u8) = .empty;
+    defer result.deinit(allocator);
 
     var it = std.mem.splitScalar(u8, body, '\n');
     while (it.next()) |line| {
@@ -231,8 +231,8 @@ pub fn extractSignatures(allocator: zx.Allocator, content: []const u8, section: 
 
         var sig = std.mem.trimEnd(u8, line, " \t");
         if (is_fn and std.mem.endsWith(u8, sig, " {")) sig = sig[0 .. sig.len - 2];
-        if (result.items.len > 0) result.append('\n') catch unreachable;
-        result.appendSlice(sig) catch unreachable;
+        if (result.items.len > 0) result.append(allocator, '\n') catch unreachable;
+        result.appendSlice(allocator, sig) catch unreachable;
     }
 
     return allocator.dupe(u8, result.items) catch unreachable;
@@ -242,7 +242,7 @@ pub fn extractSignatures(allocator: zx.Allocator, content: []const u8, section: 
 /// and return only the function body content with normalized indentation.
 pub fn extractUnwrapSection(allocator: zx.Allocator, content: []const u8, section: []const u8) []const u8 {
     const wrapped = extractSection(allocator, content, section);
-    const open = std.mem.indexOfScalar(u8, wrapped, '{') orelse return wrapped;
+    const open = std.mem.findScalar(u8, wrapped, '{') orelse return wrapped;
 
     var depth: usize = 0;
     var in_string = false;
@@ -302,12 +302,12 @@ pub fn extractUnwrapSection(allocator: zx.Allocator, content: []const u8, sectio
 }
 
 fn uncommentIfCommentOnly(allocator: zx.Allocator, content: []const u8) []const u8 {
-    var lines = std.array_list.Managed([]const u8).init(allocator);
-    defer lines.deinit();
+    var lines: std.ArrayList([]const u8) = .empty;
+    defer lines.deinit(allocator);
 
     var it = std.mem.splitScalar(u8, content, '\n');
     while (it.next()) |line| {
-        lines.append(line) catch unreachable;
+        lines.append(allocator, line) catch unreachable;
     }
 
     var has_non_empty = false;
@@ -320,11 +320,11 @@ fn uncommentIfCommentOnly(allocator: zx.Allocator, content: []const u8) []const 
 
     if (!has_non_empty) return content;
 
-    var out = std.array_list.Managed(u8).init(allocator);
-    defer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
 
     for (lines.items, 0..) |line, i| {
-        if (i > 0) out.append('\n') catch unreachable;
+        if (i > 0) out.append(allocator, '\n') catch unreachable;
 
         const trimmed = std.mem.trim(u8, line, " \t");
         if (trimmed.len == 0) continue;
@@ -333,36 +333,36 @@ fn uncommentIfCommentOnly(allocator: zx.Allocator, content: []const u8) []const 
         if (uncommented.len > 0 and uncommented[0] == ' ') {
             uncommented = uncommented[1..];
         }
-        out.appendSlice(uncommented) catch unreachable;
+        out.appendSlice(allocator, uncommented) catch unreachable;
     }
 
     return removeCommonIndentation(allocator, out.items);
 }
 
 fn stripDiscardPrefixLines(allocator: zx.Allocator, content: []const u8) []const u8 {
-    var lines = std.array_list.Managed([]const u8).init(allocator);
-    defer lines.deinit();
+    var lines: std.ArrayList([]const u8) = .empty;
+    defer lines.deinit(allocator);
 
     var it = std.mem.splitScalar(u8, content, '\n');
     while (it.next()) |line| {
-        lines.append(line) catch unreachable;
+        lines.append(allocator, line) catch unreachable;
     }
 
-    var out = std.array_list.Managed(u8).init(allocator);
-    defer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
 
     for (lines.items, 0..) |line, i| {
-        if (i > 0) out.append('\n') catch unreachable;
+        if (i > 0) out.append(allocator, '\n') catch unreachable;
 
         var indent: usize = 0;
         while (indent < line.len and (line[indent] == ' ' or line[indent] == '\t')) : (indent += 1) {}
 
         const rest = line[indent..];
         if (std.mem.startsWith(u8, rest, "_ = ")) {
-            out.appendSlice(line[0..indent]) catch unreachable;
-            out.appendSlice(rest[4..]) catch unreachable;
+            out.appendSlice(allocator, line[0..indent]) catch unreachable;
+            out.appendSlice(allocator, rest[4..]) catch unreachable;
         } else {
-            out.appendSlice(line) catch unreachable;
+            out.appendSlice(allocator, line) catch unreachable;
         }
     }
 
@@ -372,7 +372,7 @@ fn stripDiscardPrefixLines(allocator: zx.Allocator, content: []const u8) []const
 /// Extract content inside return (...) for ZX code
 pub fn extractZxReturnContent(allocator: zx.Allocator, content: []const u8) []const u8 {
     const return_pattern = "return (";
-    if (std.mem.indexOf(u8, content, return_pattern)) |start_idx| {
+    if (std.mem.find(u8, content, return_pattern)) |start_idx| {
         var depth: usize = 1;
         var i = start_idx + return_pattern.len;
         while (i < content.len and depth > 0) {
@@ -393,7 +393,7 @@ pub fn extractZxReturnContent(allocator: zx.Allocator, content: []const u8) []co
 /// Extract content after return statement for Zig code (until semicolon)
 pub fn extractZigReturnContent(allocator: zx.Allocator, content: []const u8) []const u8 {
     const return_pattern = "return ";
-    if (std.mem.indexOf(u8, content, return_pattern)) |start_idx| {
+    if (std.mem.find(u8, content, return_pattern)) |start_idx| {
         var depth: usize = 0;
         var in_string = false;
         var string_char: ?u8 = null;
@@ -514,8 +514,8 @@ pub fn highlightZx(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
     cursor.exec(cache.query, tree.rootNode());
     logTiming("Query execution", timer.lap());
     timer.reset();
-    var out = std.array_list.Managed(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
 
     var last: usize = 0;
     var match_count: usize = 0;
@@ -532,29 +532,29 @@ pub fn highlightZx(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
             const capture_name = cache.query.captureNameForId(cap.index) orelse continue;
 
             // Copy text before this token (HTML escaped, preserving newlines)
-            try appendHtmlEscapedPreserveWhitespace(&out, source[last..start]);
+            try appendHtmlEscapedPreserveWhitespace(allocator, &out, source[last..start]);
 
             // Convert dots to spaces for space-separated CSS classes
-            try out.appendSlice("<span class='");
+            try out.appendSlice(allocator, "<span class='");
             for (capture_name) |c| {
                 if (c == '.') {
-                    try out.append(' ');
+                    try out.append(allocator, ' ');
                 } else {
-                    try out.append(c);
+                    try out.append(allocator, c);
                 }
             }
-            try out.appendSlice("'>");
-            try appendHtmlEscapedPreserveWhitespace(&out, source[start..end]);
-            try out.appendSlice("</span>");
+            try out.appendSlice(allocator, "'>");
+            try appendHtmlEscapedPreserveWhitespace(allocator, &out, source[start..end]);
+            try out.appendSlice(allocator, "</span>");
 
             last = end;
         }
     }
 
     // Append remaining text (HTML escaped, preserving newlines)
-    try appendHtmlEscapedPreserveWhitespace(&out, source[last..]);
+    try appendHtmlEscapedPreserveWhitespace(allocator, &out, source[last..]);
 
-    const result = try out.toOwnedSlice();
+    const result = try out.toOwnedSlice(allocator);
     logTimingFmt("HTML generation ({d} matches, {d} -> {d} bytes)", .{ match_count, source.len, result.len }, timer.lap());
 
     const total_elapsed = total_timer.read();
@@ -573,17 +573,17 @@ pub fn highlightZx(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
     return result;
 }
 
-fn appendHtmlEscapedPreserveWhitespace(out: *std.array_list.Managed(u8), text: []const u8) !void {
+fn appendHtmlEscapedPreserveWhitespace(allocator: std.mem.Allocator, out: *std.ArrayList(u8), text: []const u8) !void {
     for (text) |c| {
         switch (c) {
-            '<' => try out.appendSlice("&lt;"),
-            '>' => try out.appendSlice("&gt;"),
-            '&' => try out.appendSlice("&amp;"),
-            '"' => try out.appendSlice("&quot;"),
-            '\'' => try out.appendSlice("&#39;"),
+            '<' => try out.appendSlice(allocator, "&lt;"),
+            '>' => try out.appendSlice(allocator, "&gt;"),
+            '&' => try out.appendSlice(allocator, "&amp;"),
+            '"' => try out.appendSlice(allocator, "&quot;"),
+            '\'' => try out.appendSlice(allocator, "&#39;"),
             // Preserve newlines, spaces, and tabs
-            '\n', '\r', '\t', ' ' => try out.append(c),
-            else => try out.append(c),
+            '\n', '\r', '\t', ' ' => try out.append(allocator, c),
+            else => try out.append(allocator, c),
         }
     }
 }
@@ -632,7 +632,7 @@ fn logTimingFmt(comptime label: []const u8, args: anytype, elapsed_ns: u64) void
     const color_label = "\x1b[1;35m"; // magenta
     const color_time = if (elapsed_ms < 1) "\x1b[1;32m" else if (elapsed_ms < 10) "\x1b[1;33m" else "\x1b[1;31m";
     var buf: [256]u8 = undefined;
-    const formatted_label = std.fmt.bufPrint(&buf, label, args) catch label;
+    const formatted_label = std.mem.print(&buf, label, args) catch label;
     std.log.info("  {s}[HL]{s} {s}: {s}{d:.3}ms{s}", .{
         color_label,     color_reset,
         formatted_label, color_time,

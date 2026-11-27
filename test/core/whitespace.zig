@@ -10,7 +10,7 @@ fn expectNorm(source: []const u8, start: u32, end: u32, leading: bool, text: []c
 
 /// Text node begins at the first newline (prefix is the prior sibling in source).
 fn afterNewline(source: []const u8) struct { start: u32, end: u32 } {
-    return .{ .start = @intCast(std.mem.indexOfScalar(u8, source, '\n').?), .end = @intCast(source.len) };
+    return .{ .start = @intCast(std.mem.findScalar(u8, source, '\n').?), .end = @intCast(source.len) };
 }
 
 test "normalizeText keeps space after expression across newline" {
@@ -78,7 +78,7 @@ test "normalizeText skips space after whitespace-only expression" {
 
 test "normalizeText same-line spaces are kept without leading_space" {
     const source = "{bank} · Cash";
-    const start: u32 = @intCast(std.mem.indexOfScalar(u8, source, ' ').?);
+    const start: u32 = @intCast(std.mem.findScalar(u8, source, ' ').?);
     try expectNorm(source, start, @intCast(source.len), false, " · Cash");
 }
 
@@ -89,7 +89,7 @@ test "normalizeText does not insert trailing space before expression" {
         \\Hello
         \\{kind}
     ;
-    const end: u32 = @intCast(std.mem.indexOfScalar(u8, source, '\n').?);
+    const end: u32 = @intCast(std.mem.findScalar(u8, source, '\n').?);
     const normalized = Transpile.normalizeText(source, 0, end).?;
     try testing.expect(!normalized.leading_space);
     try testing.expectEqualStrings("Hello", normalized.text);

@@ -112,7 +112,7 @@ const RequestArgs = struct {
                 self.method = std.meta.stringToEnum(Method, name) orelse return error.InvalidMethod;
             } else if (std.mem.eql(u8, flag, "--header")) {
                 const header = nextArg(&args) orelse return error.MissingHeader;
-                const sep = std.mem.indexOfScalar(u8, header, ':') orelse continue;
+                const sep = std.mem.findScalar(u8, header, ':') orelse continue;
                 try self.headers.append(allocator, .{
                     .name = header[0..sep],
                     .value = std.mem.trimStart(u8, header[sep + 1 ..], " "),

@@ -382,7 +382,7 @@ fn onOpenShare(result: zx.Worker.Result(Engine, "openShare")) void {
 
 fn onTemplates(result: zx.Worker.Result(Engine, "templates")) void {
     model.templates = result catch |err| {
-        model.log = std.fmt.allocPrint(gpa, "The playground worker failed to start ({t}).", .{err}) catch "";
+        model.log = gpa.print("The playground worker failed to start ({t}).", .{err}) catch "";
         model.failed = true;
         model.panel_open = true;
         refresh();
@@ -604,7 +604,7 @@ fn onEditorCursor(args: []const js.Value) void {
     defer doc.deinit();
     const el = doc.getElementById("pg-cursor-pos") orelse return;
     defer el.deinit();
-    el.setTextContent(std.fmt.bufPrint(&buf, "Ln {d}, Col {d}", .{ line, col }) catch return);
+    el.setTextContent(std.mem.print(&buf, "Ln {d}, Col {d}", .{ line, col }) catch return);
 }
 
 fn onEditorRun(_: []const js.Value) void {
@@ -702,7 +702,7 @@ fn onAddFile(_: *zx.client.Event.Stateful) void {
 
 /// What a new file starts with, by its name (`page.zx` is a page, `route.zig` a handler...).
 fn starterFor(name: []const u8) []const u8 {
-    const base = if (std.mem.lastIndexOfScalar(u8, name, '/')) |i| name[i + 1 ..] else name;
+    const base = if (std.mem.findScalarLast(u8, name, '/')) |i| name[i + 1 ..] else name;
     if (std.mem.eql(u8, base, "page.zx")) return starter_page;
     if (std.mem.eql(u8, base, "layout.zx")) return starter_layout;
     if (std.mem.eql(u8, base, "route.zig")) return starter_route;
@@ -781,7 +781,7 @@ fn onRenameTab(e: *zx.client.Event.Stateful) void {
 }
 
 fn validName(name: []const u8) bool {
-    return name.len > 0 and name[0] != '/' and std.mem.indexOf(u8, name, "..") == null;
+    return name.len > 0 and name[0] != '/' and std.mem.find(u8, name, "..") == null;
 }
 
 /// The files that make up the project: what runs, gets shared and is saved.
@@ -928,7 +928,7 @@ fn onRunDone(result: zx.Worker.Result(Engine, "run")) void {
             model.panel_open = true;
         }
     } else |err| {
-        model.log = std.fmt.allocPrint(gpa, "The playground worker stopped ({t}).", .{err}) catch "";
+        model.log = gpa.print("The playground worker stopped ({t}).", .{err}) catch "";
         model.failed = true;
         model.panel_open = true;
     }
@@ -965,7 +965,7 @@ fn onFormatDone(result: zx.Worker.Result(Tools, "format")) void {
     model.formatting_name = "";
     defer refresh();
     const formatted = result catch |err| {
-        model.message = std.fmt.allocPrint(gpa, "Format unavailable ({t})", .{err}) catch "";
+        model.message = gpa.print("Format unavailable ({t})", .{err}) catch "";
         return;
     };
     if (!formatted.ok) {
@@ -981,7 +981,7 @@ fn onFormatDone(result: zx.Worker.Result(Tools, "format")) void {
             if (editor_api) |api| api.call(void, "setText", .{ cur.name, cur.content }) catch {};
             saveFiles();
         }
-        model.message = std.fmt.allocPrint(gpa, "Formatted {s}", .{cur.name}) catch "";
+        model.message = gpa.print("Formatted {s}", .{cur.name}) catch "";
         return;
     };
 }
@@ -998,7 +998,7 @@ fn onShareData(result: zx.Worker.Result(Engine, "shareData")) void {
     defer loc.deinit();
     const origin = loc.origin(gpa) catch return;
     defer gpa.free(origin);
-    const url = std.fmt.allocPrint(gpa, "{s}/playground#data={s}", .{ origin, data }) catch return;
+    const url = gpa.print("{s}/playground#data={s}", .{ origin, data }) catch return;
     defer gpa.free(url);
     const nav = web.window().navigator();
     defer nav.deinit();
@@ -1026,8 +1026,8 @@ fn onClearLog(e: *zx.client.Event.Stateful) void {
 
 fn responseHead(a: std.mem.Allocator) []const u8 {
     const p = model.preview;
-    if (p.content_type.len == 0) return std.fmt.allocPrint(a, "HTTP {d}", .{p.status}) catch "";
-    return std.fmt.allocPrint(a, "HTTP {d} • {s}", .{ p.status, p.content_type }) catch "";
+    if (p.content_type.len == 0) return a.print("HTTP {d}", .{p.status}) catch "";
+    return a.print("HTTP {d} • {s}", .{ p.status, p.content_type }) catch "";
 }
 
 // --- Preview navigation (app mode) ---
@@ -1050,11 +1050,11 @@ fn urlBarPath() []const u8 {
 /// `playground.local/about`, `https://x/about?q`, `about` -> `/about?q`.
 fn normalizePath(raw: []const u8) []const u8 {
     var p = std.mem.trim(u8, raw, &std.ascii.whitespace);
-    if (std.mem.indexOf(u8, p, "://")) |i| p = p[i + 3 ..];
+    if (std.mem.find(u8, p, "://")) |i| p = p[i + 3 ..];
     if (p.len > 0 and p[0] != '/') {
-        if (std.mem.indexOfScalar(u8, p, '/')) |slash| {
-            if (std.mem.indexOfScalar(u8, p[0..slash], '.') != null) p = p[slash..];
-        } else if (std.mem.indexOfScalar(u8, p, '.') != null) p = "/";
+        if (std.mem.findScalar(u8, p, '/')) |slash| {
+            if (std.mem.findScalar(u8, p[0..slash], '.') != null) p = p[slash..];
+        } else if (std.mem.findScalar(u8, p, '.') != null) p = "/";
     }
     if (p.len == 0) return "/";
     if (p[0] != '/') return std.mem.concat(gpa, u8, &.{ "/", p }) catch "/";
@@ -1142,8 +1142,8 @@ fn onSplitMove(e: *zx.client.Event.Stateful) void {
     if (width <= 0) return;
     const ratio = std.math.clamp((ev.clientX() - rect.left()) / width, 0.2, 0.8);
     var buf: [48]u8 = undefined;
-    setFlex(doc, "pg-editor", std.fmt.bufPrint(&buf, "1 1 {d:.1}%", .{ratio * 100}) catch return);
-    setFlex(doc, "pg-preview", std.fmt.bufPrint(&buf, "1 1 {d:.1}%", .{(1 - ratio) * 100}) catch return);
+    setFlex(doc, "pg-editor", std.mem.print(&buf, "1 1 {d:.1}%", .{ratio * 100}) catch return);
+    setFlex(doc, "pg-preview", std.mem.print(&buf, "1 1 {d:.1}%", .{(1 - ratio) * 100}) catch return);
 }
 
 fn setFlex(doc: web.Document, id: []const u8, value: []const u8) void {
@@ -1163,7 +1163,7 @@ fn onSplitEnd(_: *zx.client.Event.Stateful) void {
 var panel_dragging = false;
 
 fn panelStyle(a: std.mem.Allocator) []const u8 {
-    return std.fmt.allocPrint(a, "height: {d}px", .{model.panel_height}) catch "";
+    return a.print("height: {d}px", .{model.panel_height}) catch "";
 }
 
 fn onPanelResizeStart(e: *zx.client.Event.Stateful) void {
@@ -1191,7 +1191,7 @@ fn onPanelResize(e: *zx.client.Event.Stateful) void {
     const style = panel.as(web.HTMLElement).style();
     defer style.deinit();
     var buf: [32]u8 = undefined;
-    style.setProperty("height", std.fmt.bufPrint(&buf, "{d}px", .{model.panel_height}) catch return, null);
+    style.setProperty("height", std.mem.print(&buf, "{d}px", .{model.panel_height}) catch return, null);
 }
 
 fn onPanelResizeEnd(_: *zx.client.Event.Stateful) void {

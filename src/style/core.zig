@@ -133,7 +133,7 @@ pub fn formatValue(value: anytype, w: anytype) std.Io.Writer.Error!void {
         }
 
         inline for (
-            comptime std.meta.fieldNames(@TypeOf(value)),
+            comptime info.field_names,
         ) |field_name| {
             if (tag == @field(info.tag_type.?, field_name)) {
                 if (comptime std.mem.eql(u8, field_name, "hex_")) {

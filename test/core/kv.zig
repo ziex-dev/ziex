@@ -5,7 +5,7 @@ const allocator = std.testing.allocator;
 
 var kv_fs = zx.Kv.Fs{
     .io = std.testing.io,
-    .subdir = "zig-out" ++ std.fs.path.sep_str ++ "test-data" ++ std.fs.path.sep_str ++ "kv",
+    .subdir = "zig-out" ++ std.Io.Dir.path.sep_str ++ "test-data" ++ std.Io.Dir.path.sep_str ++ "kv",
 };
 
 const kv = kv_fs.kv();
@@ -25,7 +25,7 @@ const UserAlias = struct {
 fn uniqueLabel(comptime prefix: []const u8, buf: []u8) ![]const u8 {
     var source: std.Random.IoSource = .{ .io = std.testing.io };
     const value = source.interface().int(u64);
-    return std.fmt.bufPrint(buf, "{s}-{x}", .{ prefix, value });
+    return std.mem.print(buf, "{s}-{x}", .{ prefix, value });
 }
 
 fn freeUser(user: User) void {
@@ -58,8 +58,8 @@ test "list returns prefixed keys" {
     var key2_buf: [96]u8 = undefined;
     var other_key_buf: [96]u8 = undefined;
 
-    const key1 = try std.fmt.bufPrint(&key1_buf, "{s}-a", .{prefix});
-    const key2 = try std.fmt.bufPrint(&key2_buf, "{s}-b", .{prefix});
+    const key1 = try std.mem.print(&key1_buf, "{s}-a", .{prefix});
+    const key2 = try std.mem.print(&key2_buf, "{s}-b", .{prefix});
     const other_key = try uniqueLabel("kv-list-other", &other_key_buf);
 
     defer kv.delete(key1) catch {};
@@ -254,7 +254,7 @@ test "file without a metadata line reads as missing" {
     var name_buf: [128]u8 = undefined;
     const name = std.base64.url_safe_no_pad.Encoder.encode(&name_buf, key);
     var path_buf: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buf, "{s}{s}default{s}{s}", .{ kv_fs.subdir, std.fs.path.sep_str, std.fs.path.sep_str, name });
+    const path = try std.mem.print(&path_buf, "{s}{s}default{s}{s}", .{ kv_fs.subdir, std.Io.Dir.path.sep_str, std.Io.Dir.path.sep_str, name });
     try kv.put(key, "placeholder", .{});
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = path, .data = "plain value from an older format" });
 

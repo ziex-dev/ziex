@@ -38,11 +38,11 @@ pub fn POST(ctx: zx.RouteContext) !void {
         const decoder = std.base64.standard.Decoder;
         const bytes = try ctx.arena.alloc(u8, try decoder.calcSizeForSlice(a.content));
         try decoder.decode(bytes, a.content);
-        att = try std.fmt.allocPrint(ctx.arena, "{s}={s}", .{ a.filename, bytes });
+        att = try ctx.arena.print("{s}={s}", .{ a.filename, bytes });
     }
     const tag = if (body.headers) |h| h.map.get("X-Tag") orelse "" else "";
 
-    const id = try std.fmt.allocPrint(ctx.arena, "{s}|{s}|{s}|{s}|{s}|{s}|{s}|{s}", .{
+    const id = try ctx.arena.print("{s}|{s}|{s}|{s}|{s}|{s}|{s}|{s}", .{
         body.from,
         try std.mem.join(ctx.arena, ",", body.to),
         try std.mem.join(ctx.arena, ",", body.cc),

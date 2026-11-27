@@ -14,7 +14,7 @@ pub fn POST(ctx: zx.RouteContext) !void {
         return ctx.response.text("unauthorized");
     }
 
-    const key = ctx.request.pathname[std.mem.lastIndexOfScalar(u8, ctx.request.pathname, '/').? + 1 ..];
+    const key = ctx.request.pathname[std.mem.findScalarLast(u8, ctx.request.pathname, '/').? + 1 ..];
     const body = try std.json.parseFromSliceLeaky(struct { context: Context }, ctx.arena, ctx.request.text() orelse "", .{ .ignore_unknown_fields = true });
     const pro = std.mem.eql(u8, body.context.plan orelse "", "pro");
 

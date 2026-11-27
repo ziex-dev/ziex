@@ -42,18 +42,18 @@ fn onClick(args: []const js.Value) void {
 
 // --- Scroll spy ---
 
-const Target = struct { id: []u8, el: web.Element, links: std.ArrayListUnmanaged(web.Element) = .empty };
+const Target = struct { id: []u8, el: web.Element, links: std.ArrayList(web.Element) = .empty };
 
-var targets: std.ArrayListUnmanaged(Target) = .empty;
-var nav_links: std.ArrayListUnmanaged(web.Element) = .empty;
-var page_links: std.ArrayListUnmanaged(web.Element) = .empty;
+var targets: std.ArrayList(Target) = .empty;
+var nav_links: std.ArrayList(web.Element) = .empty;
+var page_links: std.ArrayList(web.Element) = .empty;
 var current: ?usize = null;
 var scheduled = false;
 
 fn hashOf(link: web.Element) ?[]u8 {
     const href = (link.getAttribute(gpa, "href") catch return null) orelse return null;
     defer gpa.free(href);
-    const at = std.mem.indexOfScalar(u8, href, '#') orelse return null;
+    const at = std.mem.findScalar(u8, href, '#') orelse return null;
     if (at + 1 >= href.len) return null;
     return gpa.dupe(u8, href[at + 1 ..]) catch null;
 }

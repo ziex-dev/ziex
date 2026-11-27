@@ -228,7 +228,7 @@ pub const perf_runs = 5;
 /// Prints a perf line prefixed with ⏲, dimming ` > ` and ` | ` separators like the test runner.
 pub fn perf(comptime format: []const u8, args: anytype) void {
     var buf: [1024]u8 = undefined;
-    const line = std.fmt.bufPrint(&buf, format, args) catch format;
+    const line = std.mem.print(&buf, format, args) catch format;
     std.debug.print("\x1b[33m⏲\x1b[0m ", .{});
     var start: usize = 0;
     var i: usize = 0;

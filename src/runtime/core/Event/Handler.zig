@@ -516,7 +516,7 @@ pub fn actionHandler(ctx: *anyopaque, event: zx.client.Event) void {
     };
 
     var id_buf: [16]u8 = undefined;
-    const id_str = std.fmt.bufPrint(&id_buf, "{d}", .{handler_id}) catch "0";
+    const id_str = std.mem.print(&id_buf, "{d}", .{handler_id}) catch "0";
     const headers = [_]zx.http.Header{
         .{ .name = "Content-Type", .value = "application/json" },
         .{ .name = Constants.action_header_name, .value = id_str },
@@ -568,7 +568,7 @@ fn eventHandler(ctx: *anyopaque, event: zx.client.Event) void {
     }
 
     var id_buf: [16]u8 = undefined;
-    const id_str = std.fmt.bufPrint(&id_buf, "{d}", .{handler_id}) catch "0";
+    const id_str = std.mem.print(&id_buf, "{d}", .{handler_id}) catch "0";
     const headers = [_]zx.http.Header{
         .{ .name = "Content-Type", .value = "application/json" },
         .{ .name = Constants.event_header_name, .value = id_str },

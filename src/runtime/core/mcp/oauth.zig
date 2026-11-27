@@ -84,9 +84,9 @@ pub const Challenge = struct {
 // `WWW-Authenticate` value pointing clients at the protected-resource metadata.
 pub fn wwwAuthenticate(allocator: std.mem.Allocator, challenge: Challenge) ![]u8 {
     if (challenge.scope) |scope| {
-        return std.fmt.allocPrint(allocator, "Bearer realm=\"{s}\", resource_metadata=\"{s}\", scope=\"{s}\"", .{ challenge.realm, challenge.resource_metadata_url, scope });
+        return allocator.print("Bearer realm=\"{s}\", resource_metadata=\"{s}\", scope=\"{s}\"", .{ challenge.realm, challenge.resource_metadata_url, scope });
     }
-    return std.fmt.allocPrint(allocator, "Bearer realm=\"{s}\", resource_metadata=\"{s}\"", .{ challenge.realm, challenge.resource_metadata_url });
+    return allocator.print("Bearer realm=\"{s}\", resource_metadata=\"{s}\"", .{ challenge.realm, challenge.resource_metadata_url });
 }
 
 pub fn bearer(authorization: ?[]const u8) ?[]const u8 {

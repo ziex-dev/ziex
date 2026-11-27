@@ -100,12 +100,12 @@ fn loadStats(arena: zx.Allocator) !Stats {
 
 fn formatInt(allocator: zx.Allocator, n: u64) []const u8 {
     var buf: [32]u8 = undefined;
-    const s = std.fmt.bufPrint(&buf, "{d}", .{n}) catch return "0";
-    var out = std.array_list.Managed(u8).init(allocator);
+    const s = std.mem.print(&buf, "{d}", .{n}) catch return "0";
+    var out: std.ArrayList(u8) = .empty;
     const len = s.len;
     for (s, 0..) |c, i| {
-        if (i != 0 and (len - i) % 3 == 0) out.append(',') catch {};
-        out.append(c) catch {};
+        if (i != 0 and (len - i) % 3 == 0) out.append(allocator, ',') catch {};
+        out.append(allocator, c) catch {};
     }
     return out.items;
 }
@@ -178,25 +178,25 @@ fn buildStatCards(allocator: zx.Allocator, s: Stats) [6]StatCard {
 }
 
 fn buildLanguageRows(allocator: zx.Allocator, s: Stats) []BarRow {
-    var rows = std.array_list.Managed(BarRow).init(allocator);
+    var rows: std.ArrayList(BarRow) = .empty;
     for (s.languages) |lang| {
-        rows.append(.{ .label = lang.name, .value = @floatFromInt(lang.lines), .display = formatInt(allocator, lang.lines) }) catch {};
+        rows.append(allocator, .{ .label = lang.name, .value = @floatFromInt(lang.lines), .display = formatInt(allocator, lang.lines) }) catch {};
     }
     return rows.items;
 }
 
 fn timelineColumn(allocator: zx.Allocator, s: Stats, comptime name: []const u8) []f64 {
-    var out = std.array_list.Managed(f64).init(allocator);
+    var out: std.ArrayList(f64) = .empty;
     for (s.timeline) |entry| {
-        out.append(@floatFromInt(@field(entry, name))) catch {};
+        out.append(allocator, @floatFromInt(@field(entry, name))) catch {};
     }
     return out.items;
 }
 
 fn starsColumn(allocator: zx.Allocator, s: Stats) []f64 {
-    var out = std.array_list.Managed(f64).init(allocator);
+    var out: std.ArrayList(f64) = .empty;
     for (s.stars_per_month) |entry| {
-        out.append(@floatFromInt(entry.stars)) catch {};
+        out.append(allocator, @floatFromInt(entry.stars)) catch {};
     }
     return out.items;
 }
@@ -216,13 +216,13 @@ fn sparkPath(allocator: zx.Allocator, points: []const f64) []const u8 {
         max = p;
     };
     if (max == 0) max = 1;
-    var out = std.array_list.Managed(u8).init(allocator);
+    var out: std.ArrayList(u8) = .empty;
     const step: f64 = 100.0 / @as(f64, @floatFromInt(points.len - 1));
     for (points, 0..) |p, i| {
         const x = step * @as(f64, @floatFromInt(i));
         const y = 32.0 - (p / max) * 30.0 - 1.0;
         const seg = allocator.print("{d:.2},{d:.2} ", .{ x, y }) catch "";
-        out.appendSlice(seg) catch {};
+        out.appendSlice(allocator, seg) catch {};
     }
     return out.items;
 }

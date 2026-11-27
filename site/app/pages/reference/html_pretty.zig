@@ -33,19 +33,19 @@ const Parser = struct {
     i: usize = 0,
 
     fn children(p: *Parser, parent: ?[]const u8) Allocator.Error![]Node {
-        var list: std.ArrayListUnmanaged(Node) = .empty;
+        var list: std.ArrayList(Node) = .empty;
         while (p.i < p.src.len) {
             const rest = p.src[p.i..];
             if (std.mem.startsWith(u8, rest, "<!--")) {
-                const end = std.mem.indexOfPos(u8, p.src, p.i + 4, "-->") orelse p.src.len - 3;
+                const end = std.mem.findPos(u8, p.src, p.i + 4, "-->") orelse p.src.len - 3;
                 try list.append(p.a, .{ .comment = p.src[p.i .. end + 3] });
                 p.i = end + 3;
             } else if (std.mem.startsWith(u8, rest, "<!")) {
-                const end = std.mem.indexOfScalarPos(u8, p.src, p.i, '>') orelse p.src.len - 1;
+                const end = std.mem.findScalarPos(u8, p.src, p.i, '>') orelse p.src.len - 1;
                 try list.append(p.a, .{ .doctype = p.src[p.i .. end + 1] });
                 p.i = end + 1;
             } else if (std.mem.startsWith(u8, rest, "</")) {
-                const end = std.mem.indexOfScalarPos(u8, p.src, p.i, '>') orelse p.src.len - 1;
+                const end = std.mem.findScalarPos(u8, p.src, p.i, '>') orelse p.src.len - 1;
                 const name = std.mem.trim(u8, p.src[p.i + 2 .. end], " \t\n");
                 p.i = end + 1;
                 // Closes us (or an ancestor): stop either way.
@@ -54,7 +54,7 @@ const Parser = struct {
             } else if (rest[0] == '<' and rest.len > 1 and std.ascii.isAlphabetic(rest[1])) {
                 try list.append(p.a, try p.element());
             } else {
-                const end = std.mem.indexOfScalarPos(u8, p.src, p.i + 1, '<') orelse p.src.len;
+                const end = std.mem.findScalarPos(u8, p.src, p.i + 1, '<') orelse p.src.len;
                 const text = p.src[p.i..end];
                 if (std.mem.trim(u8, text, &std.ascii.whitespace).len > 0) try list.append(p.a, .{ .text = text });
                 p.i = end;
@@ -90,10 +90,10 @@ const Parser = struct {
         // Raw text elements keep their content verbatim.
         if (std.ascii.eqlIgnoreCase(name, "script") or std.ascii.eqlIgnoreCase(name, "style")) {
             var close_buf: [16]u8 = undefined;
-            const close = std.fmt.bufPrint(&close_buf, "</{s}", .{name}) catch "</";
-            const end = std.mem.indexOfPos(u8, p.src, p.i, close) orelse p.src.len;
+            const close = std.mem.print(&close_buf, "</{s}", .{name}) catch "</";
+            const end = std.mem.findPos(u8, p.src, p.i, close) orelse p.src.len;
             const body = p.src[p.i..end];
-            p.i = if (std.mem.indexOfScalarPos(u8, p.src, end, '>')) |gt| gt + 1 else p.src.len;
+            p.i = if (std.mem.findScalarPos(u8, p.src, end, '>')) |gt| gt + 1 else p.src.len;
             const kids = try p.a.alloc(Node, if (body.len > 0) 1 else 0);
             if (body.len > 0) kids[0] = .{ .text = body };
             return .{ .element = .{ .name = name, .attrs = attrs, .children = kids, .void = false } };
@@ -176,7 +176,7 @@ fn openTag(w: *Writer, name: []const u8, attrs: []const u8) !void {
             const vstart = i;
             if (i < attrs.len and (attrs[i] == '"' or attrs[i] == '\'')) {
                 const q = attrs[i];
-                i = (std.mem.indexOfScalarPos(u8, attrs, i + 1, q) orelse attrs.len - 1) + 1;
+                i = (std.mem.findScalarPos(u8, attrs, i + 1, q) orelse attrs.len - 1) + 1;
             } else {
                 while (i < attrs.len and !std.ascii.isWhitespace(attrs[i])) i += 1;
             }

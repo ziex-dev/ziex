@@ -32,16 +32,18 @@ pub fn getVersion(b: *std.Build) std.SemanticVersion {
     const argv: []const []const u8 = &.{
         "git", "-C", b.fmt("{f}", .{b.root}), "--git-dir", ".git", "describe", "--match", "v*.*.*", "--tags",
     };
-    var code: u8 = undefined;
-    const git_describe_untrimmed = b.runAllowFail(argv, &code, .ignore) catch |err| {
-        const argv_joined = std.mem.join(b.allocator, " ", argv) catch @panic("OOM");
-        std.log.warn(
-            \\Failed to run git describe to resolve Ziex version: {}
-            \\command: {s}
-            \\
-            \\Consider passing the -Dversion flag to specify the version.
-        , .{ err, argv_joined });
-        return ziex_version;
+    const git_describe_untrimmed = switch (b.runFallible(argv, .{ .stderr_behavior = .ignore })) {
+        .success => |stdout| stdout,
+        else => |res| {
+            const argv_joined = std.mem.join(b.allocator, " ", argv) catch @panic("OOM");
+            std.log.warn(
+                \\Failed to run git describe to resolve Ziex version: {t}
+                \\command: {s}
+                \\
+                \\Consider passing the -Dversion flag to specify the version.
+            , .{ res, argv_joined });
+            return ziex_version;
+        },
     };
 
     const git_describe = std.mem.trim(u8, git_describe_untrimmed, " \n\r");
@@ -49,10 +51,10 @@ pub fn getVersion(b: *std.Build) std.SemanticVersion {
 
     // Untagged development build: <tag>-<height>-g<hash>
     // e.g. v0.1.0-dev.1389-3-gc36f2aa1 → 0.1.0-dev.1392+c36f2aa1
-    if (std.mem.lastIndexOfScalar(u8, desc, '-')) |hash_sep| {
+    if (std.mem.findScalarLast(u8, desc, '-')) |hash_sep| {
         const commit_id = desc[hash_sep + 1 ..];
         if (commit_id.len > 1 and commit_id[0] == 'g') {
-            if (std.mem.lastIndexOfScalar(u8, desc[0..hash_sep], '-')) |height_sep| {
+            if (std.mem.findScalarLast(u8, desc[0..hash_sep], '-')) |height_sep| {
                 const commit_height = desc[height_sep + 1 .. hash_sep];
                 if (isAllDigits(commit_height)) {
                     const tagged_ancestor = desc[0..height_sep];
@@ -91,7 +93,7 @@ fn isAllDigits(s: []const u8) bool {
 
 /// `dev` + height → `dev.<height>`; `dev.1389` + 3 → `dev.1392`.
 fn bumpDevPre(b: *std.Build, pre: []const u8, height: u64) []const u8 {
-    if (std.mem.lastIndexOfScalar(u8, pre, '.')) |dot| {
+    if (std.mem.findScalarLast(u8, pre, '.')) |dot| {
         const base = pre[0..dot];
         const n_str = pre[dot + 1 ..];
         if (std.fmt.parseUnsigned(u64, n_str, 10)) |n| {

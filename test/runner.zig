@@ -78,7 +78,7 @@ pub fn main(init: std.process.Init) !void {
 
         const is_unnamed_test = isUnnamed(t);
         if (env.filter) |f| {
-            if (!is_unnamed_test and std.mem.indexOf(u8, t.name, f) == null) {
+            if (!is_unnamed_test and std.mem.find(u8, t.name, f) == null) {
                 continue;
             }
         }
@@ -571,13 +571,13 @@ fn randomInput(rand: std.Random, buf: *[max_fuzz_input]u8, corpus: []const []con
                 },
                 1 => if (len < buf.len) {
                     const at = rand.uintAtMost(usize, len);
-                    std.mem.copyBackwards(u8, buf[at + 1 .. len + 1], buf[at..len]);
+                    @memmove(buf[at + 1 .. len + 1], buf[at..len]);
                     buf[at] = rand.int(u8);
                     len += 1;
                 },
                 2 => if (len > 0) {
                     const at = rand.uintLessThan(usize, len);
-                    std.mem.copyForwards(u8, buf[at .. len - 1], buf[at + 1 .. len]);
+                    @memmove(buf[at .. len - 1], buf[at + 1 .. len]);
                     len -= 1;
                 },
                 else => len = rand.uintAtMost(usize, len),
@@ -590,19 +590,19 @@ fn randomInput(rand: std.Random, buf: *[max_fuzz_input]u8, corpus: []const []con
     return buf[0..len];
 }
 
-fn isUnnamed(t: std.builtin.TestFn) bool {
+fn isUnnamed(t: std.lang.TestFn) bool {
     const marker = ".test_";
     const test_name = t.name;
-    const index = std.mem.indexOf(u8, test_name, marker) orelse return false;
+    const index = std.mem.find(u8, test_name, marker) orelse return false;
     _ = std.fmt.parseInt(u32, test_name[index + marker.len ..], 10) catch return false;
     return true;
 }
 
-fn isSetup(t: std.builtin.TestFn) bool {
+fn isSetup(t: std.lang.TestFn) bool {
     return std.mem.endsWith(u8, t.name, "tests:beforeAll");
 }
 
-fn isTeardown(t: std.builtin.TestFn) bool {
+fn isTeardown(t: std.lang.TestFn) bool {
     return std.mem.endsWith(u8, t.name, "tests:afterAll");
 }
 

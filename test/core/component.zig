@@ -148,10 +148,10 @@ test "devtool > serialize includes props via dump_props" {
     var aw = std.Io.Writer.Allocating.init(a);
     try zx.util.devtool.formatWithOptions(comp, &aw.writer, .{});
     const out = aw.written();
-    try testing.expect(std.mem.indexOf(u8, out, "WithCtx") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "Hello") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "42") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "label") != null);
+    try testing.expect(std.mem.find(u8, out, "WithCtx") != null);
+    try testing.expect(std.mem.find(u8, out, "Hello") != null);
+    try testing.expect(std.mem.find(u8, out, "42") != null);
+    try testing.expect(std.mem.find(u8, out, "label") != null);
 }
 
 test "fn > dump_props returns json" {
@@ -161,7 +161,7 @@ test "fn > dump_props returns json" {
 
     const fn_comp = Component.ComponentFn.init(WithCtx, "WithCtx", a, .{ .label = "Hello", .initial = 42 });
     const json = fn_comp.dev.dump_props(a, fn_comp.data).?;
-    try testing.expect(std.mem.indexOf(u8, json, "Hello") != null);
-    try testing.expect(std.mem.indexOf(u8, json, "42") != null);
-    try testing.expect(std.mem.indexOf(u8, json, "label") != null);
+    try testing.expect(std.mem.find(u8, json, "Hello") != null);
+    try testing.expect(std.mem.find(u8, json, "42") != null);
+    try testing.expect(std.mem.find(u8, json, "label") != null);
 }

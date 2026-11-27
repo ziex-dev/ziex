@@ -89,7 +89,7 @@ fn writeSection(w: *std.Io.Writer, last_group: *?[]const u8, title: []const u8, 
     var body = std.mem.trim(u8, raw_body, " \t\r\n");
     if (body.len == 0) return;
 
-    if (std.mem.indexOf(u8, body, "\nconst ziex = struct")) |idx| {
+    if (std.mem.find(u8, body, "\nconst ziex = struct")) |idx| {
         body = std.mem.trimEnd(u8, body[0..idx], " \t\r\n");
     }
     if (body.len == 0) return;
@@ -118,14 +118,14 @@ fn shouldSkipSection(title: []const u8) bool {
 }
 
 fn sectionGroup(title: []const u8) []const u8 {
-    if (std.mem.indexOfScalar(u8, title, ':')) |idx| {
+    if (std.mem.findScalar(u8, title, ':')) |idx| {
         return std.mem.trim(u8, title[0..idx], " ");
     }
     return title;
 }
 
 fn sectionHeading(title: []const u8) []const u8 {
-    if (std.mem.indexOfScalar(u8, title, ':')) |idx| {
+    if (std.mem.findScalar(u8, title, ':')) |idx| {
         return std.mem.trim(u8, title[idx + 1 ..], " ");
     }
     return title;

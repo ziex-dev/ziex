@@ -108,7 +108,7 @@ fn onFilter(e: zx.client.Event) void {
 
 fn onOpenTable(e: zx.client.Event) void {
     const name = e.value() orelse return;
-    const sql = std.fmt.allocPrint(zx.allocator, "SELECT * FROM \"{s}\" LIMIT 100;", .{name}) catch return;
+    const sql = zx.allocator.print("SELECT * FROM \"{s}\" LIMIT 100;", .{name}) catch return;
     const input = editor() orelse return;
     input.ref.set("value", js.string(sql)) catch return;
     updateCursor();
@@ -144,7 +144,7 @@ fn updateCursor() void {
     const text = input.ref.getAlloc(js.String, zx.allocator, "value") catch return;
     const pos: usize = @intFromFloat(input.ref.get(f64, "selectionStart") catch 0);
     const before = text[0..@min(pos, text.len)];
-    const line_start = if (std.mem.lastIndexOfScalar(u8, before, '\n')) |i| i + 1 else 0;
+    const line_start = if (std.mem.findScalarLast(u8, before, '\n')) |i| i + 1 else 0;
     lines.set(std.mem.count(u8, text, "\n") + 1);
     cursor.set(.{ std.mem.count(u8, before, "\n") + 1, before.len - line_start + 1 });
 }

@@ -53,8 +53,8 @@ fn fetchLatestReleaseTag(
     defer if (auth_header) |h| allocator.free(h.value);
 
     const slug = std.mem.trimEnd(u8, zx_info.repository, "/");
-    const owner_repo = if (std.mem.lastIndexOfScalar(u8, slug, '/')) |i|
-        if (std.mem.lastIndexOfScalar(u8, slug[0..i], '/')) |j| slug[j + 1 ..] else slug
+    const owner_repo = if (std.mem.findScalarLast(u8, slug, '/')) |i|
+        if (std.mem.findScalarLast(u8, slug[0..i], '/')) |j| slug[j + 1 ..] else slug
     else
         slug;
 

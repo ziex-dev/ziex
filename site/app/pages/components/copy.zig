@@ -106,7 +106,7 @@ fn stripPrompt(s: []const u8) []const u8 {
 }
 
 fn copyFrom(button: web.Element) void {
-    var out: std.ArrayListUnmanaged(u8) = .empty;
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(gpa);
 
     if (within(button, ".install-box")) {
@@ -130,7 +130,7 @@ fn copyFrom(button: web.Element) void {
             defer gpa.free(t);
             var s = stripPrompt(t);
             var buf: [256]u8 = undefined;
-            if (std.mem.indexOf(u8, s, " #or")) |at| {
+            if (std.mem.find(u8, s, " #or")) |at| {
                 if (s.len - 4 <= buf.len) {
                     @memcpy(buf[0..at], s[0..at]);
                     @memcpy(buf[at .. s.len - 4], s[at + 4 ..]);
@@ -159,10 +159,10 @@ fn installCode(box: web.Element) ?web.Element {
         if (id) |tab_id| {
             defer gpa.free(tab_id);
             var buf: [128]u8 = undefined;
-            const name = if (std.mem.indexOf(u8, tab_id, "tab-")) |at|
-                std.fmt.bufPrint(&buf, "#content-{s}{s}", .{ tab_id[0..at], tab_id[at + 4 ..] }) catch null
+            const name = if (std.mem.find(u8, tab_id, "tab-")) |at|
+                std.mem.print(&buf, "#content-{s}{s}", .{ tab_id[0..at], tab_id[at + 4 ..] }) catch null
             else
-                std.fmt.bufPrint(&buf, "#content-{s}", .{tab_id}) catch null;
+                std.mem.print(&buf, "#content-{s}", .{tab_id}) catch null;
             if (name) |sel| if (box.querySelector(sel)) |tab| {
                 defer tab.deinit();
                 if (tab.querySelector(".install-code")) |code| return code;

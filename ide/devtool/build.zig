@@ -78,7 +78,7 @@ pub fn build(b: *std.Build) !void {
     // Panel pages, exported once and shared by every browser
     const pages_export = b.addRunArtifact(ziex_b.cli.exe orelse @panic("ziex: cli.build requires a from-source zx artifact"));
     pages_export.addArgs(&.{ "build", "--static", "--build-args", "-Dplatform=extension", "--outdir" });
-    const pages_dir = pages_export.addOutputDirectoryArg("pages");
+    const pages_dir = pages_export.addOutputDirectoryArg2("pages", .{});
     // The export runs a nested zig build whose inputs zig can't track
     pages_export.has_side_effects = true;
 
@@ -130,7 +130,7 @@ pub fn build(b: *std.Build) !void {
         const zip = b.addSystemCommand(&.{ "zip", "-q", "-r", "-X" });
         zip.setCwd(files.getDirectory());
         zip.has_side_effects = true;
-        const zip_output = zip.addOutputFileArg(b.fmt("ziex-devtools-{s}.zip", .{name}));
+        const zip_output = zip.addOutputFileArg2(b.fmt("ziex-devtools-{s}.zip", .{name}), .{});
         zip.addArg(".");
         step.dependOn(&b.addInstallFile(zip_output, b.fmt("ziex-devtools-{s}.zip", .{name})).step);
     }
@@ -161,16 +161,16 @@ fn addSafariApp(b: *std.Build, step: *std.Build.Step, extension_dir: std.Build.L
         ,
         "sh",
     });
-    sign.addDirectoryArg(bundle.getDirectory().path(b, app));
+    sign.addDirectoryArg2(bundle.getDirectory().path(b, app), .{});
     sign.addFileArg(entitlements);
-    const signed = sign.addOutputDirectoryArg("signed").path(b, app);
+    const signed = sign.addOutputDirectoryArg2("signed", .{}).path(b, app);
 
     step.dependOn(&b.addInstallDirectory(.{ .source_dir = signed, .install_dir = .prefix, .install_subdir = app }).step);
 
     // ditto keeps the bundle's permissions and signature intact
     const zip = b.addSystemCommand(&.{ "ditto", "-c", "-k", "--keepParent" });
-    zip.addDirectoryArg(signed);
-    step.dependOn(&b.addInstallFile(zip.addOutputFileArg("ziex-devtools-safari.zip"), "ziex-devtools-safari.zip").step);
+    zip.addDirectoryArg2(signed, .{});
+    step.dependOn(&b.addInstallFile(zip.addOutputFileArg2("ziex-devtools-safari.zip", .{}), "ziex-devtools-safari.zip").step);
 }
 
 /// Universal (arm64 + x86_64) build of extension/safari.swift with `define` set.
@@ -183,8 +183,8 @@ fn swiftBinary(b: *std.Build, comptime define: []const u8) std.Build.LazyPath {
         }
         swiftc.addFileArg(b.path("extension/safari.swift"));
         swiftc.addArg("-o");
-        lipo.addFileArg(swiftc.addOutputFileArg(arch));
+        lipo.addFileArg(swiftc.addOutputFileArg2(arch, .{}));
     }
     lipo.addArg("-output");
-    return lipo.addOutputFileArg(define);
+    return lipo.addOutputFileArg2(define, .{});
 }

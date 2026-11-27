@@ -31,7 +31,7 @@ pub fn format(a: std.mem.Allocator, name: []const u8, content: []const u8) !Form
         }
         return .{ .ok = true, .text = try tree.renderAlloc(a) };
     }
-    if (!std.mem.endsWith(u8, name, ".zx")) return .{ .ok = false, .text = try std.fmt.allocPrint(a, "No formatter for {s}", .{name}) };
+    if (!std.mem.endsWith(u8, name, ".zx")) return .{ .ok = false, .text = try a.print("No formatter for {s}", .{name}) };
 
     try assets.loadTools();
     var arena: std.heap.ArenaAllocator = .init(gpa);
@@ -91,7 +91,7 @@ fn lspSend(a: std.mem.Allocator, s: *wasi.Session, message: []const u8, out: *st
 }
 
 fn configurationReply(a: std.mem.Allocator, reply: []const u8) !?[]const u8 {
-    if (std.mem.indexOf(u8, reply, "\"workspace/configuration\"") == null) return null;
+    if (std.mem.find(u8, reply, "\"workspace/configuration\"") == null) return null;
     const Request = struct {
         id: std.json.Value,
         method: []const u8,

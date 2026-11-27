@@ -74,7 +74,7 @@ pub const Meta = struct {
     /// Parses the leading metadata line of `raw`; null when missing, malformed or
     /// from an unknown version.
     pub fn split(comptime T: type, raw: []const u8) ?Split(T) {
-        const nl = std.mem.indexOfScalar(u8, raw[0..@min(raw.len, max_len)], '\n') orelse return null;
+        const nl = std.mem.findScalar(u8, raw[0..@min(raw.len, max_len)], '\n') orelse return null;
         // Metadata is numbers only, so parsing never allocates.
         var fba = std.heap.FixedBufferAllocator.init(&.{});
         const meta = zx.util.zxon.parse(T, fba.allocator(), raw[0..nl], .{}) catch return null;

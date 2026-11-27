@@ -17,7 +17,7 @@ const Item = struct {
 };
 
 test "flaky: performance > csr" {
-    var gpa_state: std.heap.DebugAllocator(.{}) = .{};
+    var gpa_state: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
     defer _ = gpa_state.deinit();
     const gpa = gpa_state.allocator();
 
@@ -188,7 +188,7 @@ const LARGE_ROW_COUNT: usize = 10_000;
 test "flaky: performance > csr extreme" {
     if (!test_util.shouldRunSlowTest()) return;
 
-    var gpa_state: std.heap.DebugAllocator(.{}) = .{};
+    var gpa_state: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
     defer _ = gpa_state.deinit();
     const gpa = gpa_state.allocator();
 

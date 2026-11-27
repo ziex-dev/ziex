@@ -11,14 +11,14 @@ pub fn match(self: CodeEditorScheme, env_map: *const std.process.Environ.Map) bo
     if (self.envs.len == 0) return false;
 
     for (self.envs) |env_spec| {
-        if (std.mem.indexOfScalar(u8, env_spec, '=')) |eq_idx| {
+        if (std.mem.findScalar(u8, env_spec, '=')) |eq_idx| {
             const key = env_spec[0..eq_idx];
             const pattern = env_spec[eq_idx + 1 ..];
             const val = env_map.get(key) orelse return false;
 
             if (std.mem.startsWith(u8, pattern, "*") and std.mem.endsWith(u8, pattern, "*")) {
                 const inner = pattern[1 .. pattern.len - 1];
-                if (std.mem.indexOf(u8, val, inner) == null) return false;
+                if (std.mem.find(u8, val, inner) == null) return false;
             } else if (std.mem.startsWith(u8, pattern, "*")) {
                 const inner = pattern[1..];
                 if (!std.mem.endsWith(u8, val, inner)) return false;

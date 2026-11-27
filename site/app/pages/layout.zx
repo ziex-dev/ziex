@@ -128,9 +128,9 @@ fn siteOrigin(ctx: zx.LayoutContext) []const u8 {
 }
 
 fn originFromUrl(url: []const u8) ?[]const u8 {
-    const scheme_end = std.mem.indexOf(u8, url, "://") orelse return null;
+    const scheme_end = std.mem.find(u8, url, "://") orelse return null;
     const after_scheme = url[scheme_end + 3 ..];
-    const path_start = std.mem.indexOfScalar(u8, after_scheme, '/') orelse after_scheme.len;
+    const path_start = std.mem.findScalar(u8, after_scheme, '/') orelse after_scheme.len;
     return url[0 .. scheme_end + 3 + path_start];
 }
 

@@ -80,7 +80,7 @@ test "sections render in parallel" {
     const elapsed = start.durationTo(std.Io.Timestamp.now(io, .awake)).toMilliseconds();
 
     for ([_][]const u8{ "$ZX(0,`done`)", "$ZX(1,`done`)", "$ZX(2,`done`)" }) |final| {
-        try std.testing.expect(std.mem.indexOf(u8, sink.out.items, final) != null);
+        try std.testing.expect(std.mem.find(u8, sink.out.items, final) != null);
     }
     try std.testing.expect(elapsed < 400);
 }

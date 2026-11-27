@@ -191,7 +191,7 @@ pub fn release(alloc: std.mem.Allocator) void {
 pub fn assertNoLeaks() void {
     if (comptime builtin.os.tag == .wasi or builtin.os.tag == .freestanding) return;
     if (builtin.optimize != .debug) return;
-    const leaked = debug_allocator.deinit() == .leak;
+    const leaked = debug_allocator.deinit() != 0;
     // `zx dev` shows the leak report; a panic trace would bury it.
     if (mode != .dev) std.debug.assert(!leaked);
 }
@@ -210,7 +210,7 @@ fn onSignal(_: std.posix.SIG) void {
     };
 }
 
-var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 100 }) = .{};
+var debug_allocator: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{ .stack_trace_frames = 100 });
 pub const allocator = switch (builtin.os.tag) {
     .wasi, .freestanding => std.heap.wasm_allocator,
     else => switch (builtin.optimize) {
@@ -295,8 +295,8 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
     defer if (port_env) |s| alloc.free(s);
 
     const rootdir = rootdir_env orelse constants.default_rootdir;
-    const datadir = try std.fs.path.join(alloc, &.{ rootdir, datadir_env orelse constants.default_datadir });
-    const staticdir = try std.fs.path.join(alloc, &.{ rootdir, staticdir_env orelse constants.default_staticdir });
+    const datadir = try std.Io.Dir.path.join(alloc, &.{ rootdir, datadir_env orelse constants.default_datadir });
+    const staticdir = try std.Io.Dir.path.join(alloc, &.{ rootdir, staticdir_env orelse constants.default_staticdir });
     const port = if (port_env) |pe| std.fmt.parseInt(u16, pe, 10) catch return error.InvalidPort else cfg.server.port;
 
     cfg.datadir = datadir;
@@ -355,7 +355,7 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
 
     // Feature ==> zx.kv (filesystem backend)
     if (comptime app_opts.feat_kv_server) {
-        const kv_subdir = try std.fs.path.join(alloc, &.{ datadir, "kv" });
+        const kv_subdir = try std.Io.Dir.path.join(alloc, &.{ datadir, "kv" });
         kv_fs = .{ .io = inita.io, .subdir = kv_subdir };
         kv = kv_fs.kv();
         zx.kv = kv;
@@ -364,7 +364,7 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
 
     // Feature ==> zx.cache (filesystem backend)
     if (comptime app_opts.feat_cache_server) {
-        const cache_subdir = try std.fs.path.join(alloc, &.{ datadir, "cache" });
+        const cache_subdir = try std.Io.Dir.path.join(alloc, &.{ datadir, "cache" });
         cache_fs = .{ .io = inita.io, .subdir = cache_subdir };
         const cache_kv: zx.Kv = cache_fs.kv();
         cache = try zx.Cache.init(alloc, inita.io, cache_kv, .{
@@ -376,7 +376,7 @@ fn resolveOptions(alloc: std.mem.Allocator, inita: zx.Init, config: Config) !Con
 
     // Feature ==> zx.db  / sqlite/postgres/mysql
     if (comptime app_opts.feat_sqlite_server) {
-        const db_dir = try std.fs.path.join(alloc, &.{ datadir, "db", "default.db" });
+        const db_dir = try std.Io.Dir.path.join(alloc, &.{ datadir, "db", "default.db" });
         defer alloc.free(db_dir);
         const db_url = try alloc.print("file:{s}", .{db_dir});
         zx.db = try zx.Db.Sqlite.open(alloc, inita.io, db_url, .{});
@@ -522,7 +522,7 @@ fn initBucket(alloc: std.mem.Allocator, inita: zx.Init, datadir: []const u8) !vo
     } else if (comptime BucketBackend == zx.Bucket.Wasm) {
         bucket_backend = .{ .binding = envVar(env, zx.Bucket.Wasm.env.binding.key()) orelse "default" };
     } else if (comptime BucketBackend == zx.Bucket.Fs) {
-        bucket_backend = .{ .io = inita.io, .root = try std.fs.path.join(env, &.{ datadir, "bucket" }) };
+        bucket_backend = .{ .io = inita.io, .root = try std.Io.Dir.path.join(env, &.{ datadir, "bucket" }) };
     } else unreachable;
 
     zx.bucket = bucket_backend.bucket();

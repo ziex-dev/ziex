@@ -13,7 +13,7 @@ const std = @import("std");
 const ts = @import("tree_sitter");
 const mdzx = @import("tree_sitter_mdzx");
 
-const Writer = std.array_list.Managed(u8);
+const Writer = std.ArrayList(u8);
 
 /// Tree-sitter node kinds used by the MDZX block + inline grammars.
 pub const NodeKind = enum {
@@ -290,8 +290,8 @@ pub fn transpileWithOptions(
     defer parsed.deinit();
 
     const root = parsed.block.rootNode();
-    var out = Writer.init(allocator);
-    errdefer out.deinit();
+    var out: Writer = .empty;
+    errdefer out.deinit(allocator);
 
     var blocks = std.ArrayList([]const u8).empty;
     defer {
@@ -313,94 +313,95 @@ pub fn transpileWithOptions(
             .frontmatter => {
                 const fm_text = frontmatterSource(effective_source, child);
                 if (frontmatterDeclaresRender(fm_text)) return error.UserDeclaredRender;
-                if (std.mem.indexOf(u8, fm_text, "pub fn Page") != null) has_author_page = true;
+                if (std.mem.find(u8, fm_text, "pub fn Page") != null) has_author_page = true;
                 has_props = frontmatterHasProps(fm_text);
                 has_props_var = frontmatterHasPropsVar(fm_text);
-                try writeFrontmatter(&out, fm_text);
+                try writeFrontmatter(allocator, &out, fm_text);
             },
             else => {
                 if (!kind.isBlock()) continue;
                 if (options.pure_md and kind.isZxEmbed()) return error.PureMdEmbed;
-                var buf = Writer.init(allocator);
-                errdefer buf.deinit();
-                try writeBlock(&buf, effective_source, child, &parsed);
+                var buf: Writer = .empty;
+                errdefer buf.deinit(allocator);
+                try writeBlock(allocator, &buf, effective_source, child, &parsed);
                 if (buf.items.len > 0) {
-                    try blocks.append(allocator, try buf.toOwnedSlice());
+                    try blocks.append(allocator, try buf.toOwnedSlice(allocator));
                 } else {
-                    buf.deinit();
+                    buf.deinit(allocator);
                 }
             },
         }
     }
 
     if (blocks.items.len > 0) {
-        try writeRenderFn(&out, blocks.items, has_props, has_props_var);
+        try writeRenderFn(allocator, &out, blocks.items, has_props, has_props_var);
     }
 
     const should_emit_page = options.emit_default_page and !has_author_page and !has_props;
     if (should_emit_page) {
-        try out.appendSlice(default_page);
+        try out.appendSlice(allocator, default_page);
     }
 
-    return try out.toOwnedSlice();
+    return try out.toOwnedSlice(allocator);
 }
 
 fn writeRenderFn(
+    allocator: std.mem.Allocator,
     out: *Writer,
     blocks: []const []const u8,
     has_props: bool,
     has_props_var: bool,
 ) !void {
     if (has_props) {
-        try out.appendSlice(
+        try out.appendSlice(allocator,
             \\pub fn render(ctx: *@import("zx").ComponentCtx(Props)) @import("zx").Component {
             \\
         );
         if (has_props_var) {
-            try out.appendSlice("    props = ctx.props;\n");
+            try out.appendSlice(allocator, "    props = ctx.props;\n");
         }
-        try out.appendSlice("    const allocator = ctx.allocator;\n");
+        try out.appendSlice(allocator, "    const allocator = ctx.allocator;\n");
     } else {
-        try out.appendSlice(
+        try out.appendSlice(allocator,
             \\pub fn render(allocator: @import("zx").Allocator) @import("zx").Component {
             \\
         );
     }
 
     if (blocks.len == 1) {
-        try out.appendSlice("    return (");
-        try appendWithAllocator(out, blocks[0]);
-        try out.appendSlice(");\n");
+        try out.appendSlice(allocator, "    return (");
+        try appendWithAllocator(allocator, out, blocks[0]);
+        try out.appendSlice(allocator, ");\n");
     } else {
-        try out.appendSlice("    return (<div @allocator={allocator}>\n");
+        try out.appendSlice(allocator, "    return (<div @allocator={allocator}>\n");
         for (blocks) |block| {
-            try out.appendSlice("        ");
-            try out.appendSlice(block);
-            try out.append('\n');
+            try out.appendSlice(allocator, "        ");
+            try out.appendSlice(allocator, block);
+            try out.append(allocator, '\n');
         }
-        try out.appendSlice("    </div>);\n");
+        try out.appendSlice(allocator, "    </div>);\n");
     }
-    try out.appendSlice("}\n");
+    try out.appendSlice(allocator, "}\n");
 }
 
 pub fn shouldEmitDefaultPage(path: ?[]const u8) bool {
     const p = path orelse return true;
-    const base = std.fs.path.basename(p);
+    const base = std.Io.Dir.path.basename(p);
     return std.mem.eql(u8, base, "page.mdzx") or std.mem.eql(u8, base, "page.md");
 }
 
 fn frontmatterDeclaresRender(fm: []const u8) bool {
-    return std.mem.indexOf(u8, fm, "fn render(") != null;
+    return std.mem.find(u8, fm, "fn render(") != null;
 }
 
 fn frontmatterHasProps(fm: []const u8) bool {
-    if (std.mem.indexOf(u8, fm, "pub const Props") != null) return true;
-    if (std.mem.indexOf(u8, fm, "const Props") != null) return true;
+    if (std.mem.find(u8, fm, "pub const Props") != null) return true;
+    if (std.mem.find(u8, fm, "const Props") != null) return true;
     return false;
 }
 
 fn frontmatterHasPropsVar(fm: []const u8) bool {
-    return std.mem.indexOf(u8, fm, "var props") != null;
+    return std.mem.find(u8, fm, "var props") != null;
 }
 
 fn frontmatterSource(source: []const u8, node: ts.Node) []const u8 {
@@ -410,32 +411,32 @@ fn frontmatterSource(source: []const u8, node: ts.Node) []const u8 {
     return "";
 }
 
-fn writeFrontmatter(out: *Writer, content: []const u8) !void {
+fn writeFrontmatter(allocator: std.mem.Allocator, out: *Writer, content: []const u8) !void {
     const trimmed = std.mem.trim(u8, content, " \t\r\n");
     if (trimmed.len > 0) {
-        try out.appendSlice(trimmed);
-        try out.appendSlice("\n\n");
+        try out.appendSlice(allocator, trimmed);
+        try out.appendSlice(allocator, "\n\n");
     }
 }
 
-fn writeBlock(buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
+fn writeBlock(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
     switch (NodeKind.fromNode(node)) {
-        .atx_heading => try writeHeading(buf, source, node, parsed),
-        .paragraph => try writeParagraph(buf, source, node, parsed),
-        .thematic_break => try buf.appendSlice("<hr />"),
-        .fenced_code_block => try writeFencedCodeBlock(buf, source, node),
-        .indented_code_block => try writeIndentedCodeBlock(buf, source, node),
-        .block_quote => try writeBlockQuote(buf, source, node, parsed),
-        .list => try writeList(buf, source, node, parsed),
+        .atx_heading => try writeHeading(allocator, buf, source, node, parsed),
+        .paragraph => try writeParagraph(allocator, buf, source, node, parsed),
+        .thematic_break => try buf.appendSlice(allocator, "<hr />"),
+        .fenced_code_block => try writeFencedCodeBlock(allocator, buf, source, node),
+        .indented_code_block => try writeIndentedCodeBlock(allocator, buf, source, node),
+        .block_quote => try writeBlockQuote(allocator, buf, source, node, parsed),
+        .list => try writeList(allocator, buf, source, node, parsed),
         .mdzx_component, .zx_expression_block => {
-            try buf.appendSlice(std.mem.trim(u8, textOf(source, node), "\n \t"));
+            try buf.appendSlice(allocator, std.mem.trim(u8, textOf(source, node), "\n \t"));
         },
         .link_reference_definition => {},
         else => {},
     }
 }
 
-fn writeHeading(buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
+fn writeHeading(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
     const level = getHeadingLevel(node);
     const tag = switch (level) {
         1 => "h1",
@@ -447,17 +448,17 @@ fn writeHeading(buf: *Writer, source: []const u8, node: ts.Node, parsed: *const 
         else => "h1",
     };
 
-    try buf.append('<');
-    try buf.appendSlice(tag);
-    try buf.append('>');
+    try buf.append(allocator, '<');
+    try buf.appendSlice(allocator, tag);
+    try buf.append(allocator, '>');
 
     if (node.childByFieldName("heading_content")) |inline_node| {
-        try writeInline(buf, source, inline_node, parsed);
+        try writeInline(allocator, buf, source, inline_node, parsed);
     }
 
-    try buf.appendSlice("</");
-    try buf.appendSlice(tag);
-    try buf.append('>');
+    try buf.appendSlice(allocator, "</");
+    try buf.appendSlice(allocator, tag);
+    try buf.append(allocator, '>');
 }
 
 fn getHeadingLevel(node: ts.Node) u8 {
@@ -470,20 +471,20 @@ fn getHeadingLevel(node: ts.Node) u8 {
     return 1;
 }
 
-fn writeParagraph(buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
-    try buf.appendSlice("<p>");
+fn writeParagraph(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
+    try buf.appendSlice(allocator, "<p>");
     const child_count = node.childCount();
     var i: u32 = 0;
     while (i < child_count) : (i += 1) {
         const child = node.child(i) orelse continue;
         if (NodeKind.fromNode(child) == .@"inline") {
-            try writeInline(buf, source, child, parsed);
+            try writeInline(allocator, buf, source, child, parsed);
         }
     }
-    try buf.appendSlice("</p>");
+    try buf.appendSlice(allocator, "</p>");
 }
 
-fn writeFencedCodeBlock(buf: *Writer, source: []const u8, node: ts.Node) !void {
+fn writeFencedCodeBlock(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node) !void {
     var lang: ?[]const u8 = null;
     var content: ?[]const u8 = null;
 
@@ -502,25 +503,25 @@ fn writeFencedCodeBlock(buf: *Writer, source: []const u8, node: ts.Node) !void {
         }
     }
 
-    try buf.appendSlice("<pre><code");
+    try buf.appendSlice(allocator, "<pre><code");
     if (lang) |l| {
         if (l.len > 0) {
-            try buf.appendSlice(" class=\"language-");
-            try buf.appendSlice(l);
-            try buf.append('"');
+            try buf.appendSlice(allocator, " class=\"language-");
+            try buf.appendSlice(allocator, l);
+            try buf.append(allocator, '"');
         }
     }
-    try buf.append('>');
+    try buf.append(allocator, '>');
     if (content) |c| {
-        try appendText(buf, std.mem.trimEnd(u8, c, "\n"));
+        try appendText(allocator, buf, std.mem.trimEnd(u8, c, "\n"));
     }
-    try buf.appendSlice("</code></pre>");
+    try buf.appendSlice(allocator, "</code></pre>");
 }
 
-fn writeIndentedCodeBlock(buf: *Writer, source: []const u8, node: ts.Node) !void {
-    try buf.appendSlice("<pre><code>");
-    var content = Writer.init(buf.allocator);
-    defer content.deinit();
+fn writeIndentedCodeBlock(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node) !void {
+    try buf.appendSlice(allocator, "<pre><code>");
+    var content: Writer = .empty;
+    defer content.deinit(allocator);
     const child_count = node.childCount();
     var i: u32 = 0;
     while (i < child_count) : (i += 1) {
@@ -530,15 +531,15 @@ fn writeIndentedCodeBlock(buf: *Writer, source: []const u8, node: ts.Node) !void
             line[4..]
         else
             line;
-        try content.appendSlice(std.mem.trimEnd(u8, stripped, "\n"));
-        if (i + 1 < child_count) try content.append('\n');
+        try content.appendSlice(allocator, std.mem.trimEnd(u8, stripped, "\n"));
+        if (i + 1 < child_count) try content.append(allocator, '\n');
     }
-    try appendText(buf, content.items);
-    try buf.appendSlice("</code></pre>");
+    try appendText(allocator, buf, content.items);
+    try buf.appendSlice(allocator, "</code></pre>");
 }
 
-fn writeBlockQuote(buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
-    try buf.appendSlice("<blockquote>");
+fn writeBlockQuote(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
+    try buf.appendSlice(allocator, "<blockquote>");
     var first = true;
     const child_count = node.childCount();
     var i: u32 = 0;
@@ -546,33 +547,33 @@ fn writeBlockQuote(buf: *Writer, source: []const u8, node: ts.Node, parsed: *con
         const child = node.child(i) orelse continue;
         if (NodeKind.fromNode(child) != .@"inline") continue;
         if (std.mem.trim(u8, textOf(source, child), " \t\n").len == 0) continue;
-        if (!first) try buf.appendSlice("<br />");
+        if (!first) try buf.appendSlice(allocator, "<br />");
         first = false;
-        try writeInline(buf, source, child, parsed);
+        try writeInline(allocator, buf, source, child, parsed);
     }
-    try buf.appendSlice("</blockquote>");
+    try buf.appendSlice(allocator, "</blockquote>");
 }
 
-fn writeList(buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
+fn writeList(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
     const is_ordered = isOrderedList(node);
     const tag = if (is_ordered) "ol" else "ul";
 
-    try buf.append('<');
-    try buf.appendSlice(tag);
-    try buf.append('>');
+    try buf.append(allocator, '<');
+    try buf.appendSlice(allocator, tag);
+    try buf.append(allocator, '>');
 
     const child_count = node.childCount();
     var i: u32 = 0;
     while (i < child_count) : (i += 1) {
         const child = node.child(i) orelse continue;
         if (NodeKind.fromNode(child) == .list_item) {
-            try writeListItem(buf, source, child, parsed);
+            try writeListItem(allocator, buf, source, child, parsed);
         }
     }
 
-    try buf.appendSlice("</");
-    try buf.appendSlice(tag);
-    try buf.append('>');
+    try buf.appendSlice(allocator, "</");
+    try buf.appendSlice(allocator, tag);
+    try buf.append(allocator, '>');
 }
 
 fn isOrderedList(node: ts.Node) bool {
@@ -593,70 +594,71 @@ fn isOrderedList(node: ts.Node) bool {
     return false;
 }
 
-fn writeListItem(buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
-    try buf.appendSlice("<li>");
+fn writeListItem(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node, parsed: *const Parsed) !void {
+    try buf.appendSlice(allocator, "<li>");
     const child_count = node.childCount();
     var i: u32 = 0;
     while (i < child_count) : (i += 1) {
         const child = node.child(i) orelse continue;
         switch (NodeKind.fromNode(child)) {
-            .task_list_marker_checked => try buf.appendSlice("<input type=\"checkbox\" checked=\"\" disabled=\"\" /> "),
-            .task_list_marker_unchecked => try buf.appendSlice("<input type=\"checkbox\" disabled=\"\" /> "),
-            .@"inline" => try writeInline(buf, source, child, parsed),
+            .task_list_marker_checked => try buf.appendSlice(allocator, "<input type=\"checkbox\" checked=\"\" disabled=\"\" /> "),
+            .task_list_marker_unchecked => try buf.appendSlice(allocator, "<input type=\"checkbox\" disabled=\"\" /> "),
+            .@"inline" => try writeInline(allocator, buf, source, child, parsed),
             else => {},
         }
     }
-    try buf.appendSlice("</li>");
+    try buf.appendSlice(allocator, "</li>");
 }
 
-fn writeInline(buf: *Writer, source: []const u8, block_inline: ts.Node, parsed: *const Parsed) !void {
+fn writeInline(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, block_inline: ts.Node, parsed: *const Parsed) !void {
     const node = parsed.inlineRoot(block_inline) orelse block_inline;
     const child_count = node.childCount();
     if (child_count == 0) {
-        try appendText(buf, textOf(source, block_inline));
+        try appendText(allocator, buf, textOf(source, block_inline));
         return;
     }
     var i: u32 = 0;
     while (i < child_count) : (i += 1) {
         const child = node.child(i) orelse continue;
-        try writeInlineElement(buf, source, child);
+        try writeInlineElement(allocator, buf, source, child);
     }
 }
 
-fn writeInlineElement(buf: *Writer, source: []const u8, node: ts.Node) !void {
+fn writeInlineElement(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node) !void {
     switch (NodeKind.fromNode(node)) {
-        .code_span => try writeCodeSpan(buf, source, node),
-        .emphasis => try writeTaggedContent(buf, source, node, .emphasis_content, "<em>", "</em>"),
-        .strong_emphasis => try writeTaggedContent(buf, source, node, .strong_emphasis_content, "<strong>", "</strong>"),
-        .bold_italic => try writeTaggedContent(buf, source, node, .bold_italic_content, "<strong><em>", "</em></strong>"),
-        .strikethrough => try writeTaggedContent(buf, source, node, .strikethrough_content, "<s>", "</s>"),
-        .inline_link => try writeInlineLink(buf, source, node),
-        .full_reference_link => try writeReferenceLink(buf, source, node),
-        .image => try writeImage(buf, source, node),
-        .autolink => try writeAutolink(buf, source, node),
+        .code_span => try writeCodeSpan(allocator, buf, source, node),
+        .emphasis => try writeTaggedContent(allocator, buf, source, node, .emphasis_content, "<em>", "</em>"),
+        .strong_emphasis => try writeTaggedContent(allocator, buf, source, node, .strong_emphasis_content, "<strong>", "</strong>"),
+        .bold_italic => try writeTaggedContent(allocator, buf, source, node, .bold_italic_content, "<strong><em>", "</em></strong>"),
+        .strikethrough => try writeTaggedContent(allocator, buf, source, node, .strikethrough_content, "<s>", "</s>"),
+        .inline_link => try writeInlineLink(allocator, buf, source, node),
+        .full_reference_link => try writeReferenceLink(allocator, buf, source, node),
+        .image => try writeImage(allocator, buf, source, node),
+        .autolink => try writeAutolink(allocator, buf, source, node),
         .backslash_escape => {
             const text = textOf(source, node);
-            try appendText(buf, if (text.len >= 2) text[1..2] else text);
+            try appendText(allocator, buf, if (text.len >= 2) text[1..2] else text);
         },
-        .soft_line_break => try buf.append(' '),
-        else => try appendText(buf, textOf(source, node)),
+        .soft_line_break => try buf.append(allocator, ' '),
+        else => try appendText(allocator, buf, textOf(source, node)),
     }
 }
 
-fn writeCodeSpan(buf: *Writer, source: []const u8, node: ts.Node) !void {
-    try buf.appendSlice("<code>");
+fn writeCodeSpan(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node) !void {
+    try buf.appendSlice(allocator, "<code>");
     const child_count = node.childCount();
     var i: u32 = 0;
     while (i < child_count) : (i += 1) {
         const child = node.child(i) orelse continue;
         if (NodeKind.fromNode(child) == .code_span_content) {
-            try appendText(buf, textOf(source, child));
+            try appendText(allocator, buf, textOf(source, child));
         }
     }
-    try buf.appendSlice("</code>");
+    try buf.appendSlice(allocator, "</code>");
 }
 
 fn writeTaggedContent(
+    allocator: std.mem.Allocator,
     buf: *Writer,
     source: []const u8,
     node: ts.Node,
@@ -664,17 +666,17 @@ fn writeTaggedContent(
     open: []const u8,
     close: []const u8,
 ) !void {
-    try buf.appendSlice(open);
+    try buf.appendSlice(allocator, open);
     const child_count = node.childCount();
     var i: u32 = 0;
     while (i < child_count) : (i += 1) {
         const child = node.child(i) orelse continue;
-        if (NodeKind.fromNode(child) == content_kind) try appendText(buf, textOf(source, child));
+        if (NodeKind.fromNode(child) == content_kind) try appendText(allocator, buf, textOf(source, child));
     }
-    try buf.appendSlice(close);
+    try buf.appendSlice(allocator, close);
 }
 
-fn writeInlineLink(buf: *Writer, source: []const u8, node: ts.Node) !void {
+fn writeInlineLink(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node) !void {
     var href: ?[]const u8 = null;
     var link_text_node: ?ts.Node = null;
 
@@ -689,18 +691,18 @@ fn writeInlineLink(buf: *Writer, source: []const u8, node: ts.Node) !void {
         }
     }
 
-    try buf.appendSlice("<a");
+    try buf.appendSlice(allocator, "<a");
     if (href) |h| {
-        try buf.appendSlice(" href=\"");
-        try buf.appendSlice(h);
-        try buf.append('"');
+        try buf.appendSlice(allocator, " href=\"");
+        try buf.appendSlice(allocator, h);
+        try buf.append(allocator, '"');
     }
-    try buf.append('>');
-    if (link_text_node) |lt| try writeLinkText(buf, source, lt, .body);
-    try buf.appendSlice("</a>");
+    try buf.append(allocator, '>');
+    if (link_text_node) |lt| try writeLinkText(allocator, buf, source, lt, .body);
+    try buf.appendSlice(allocator, "</a>");
 }
 
-fn writeReferenceLink(buf: *Writer, source: []const u8, node: ts.Node) !void {
+fn writeReferenceLink(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node) !void {
     var link_text_node: ?ts.Node = null;
     const child_count = node.childCount();
     var i: u32 = 0;
@@ -709,14 +711,14 @@ fn writeReferenceLink(buf: *Writer, source: []const u8, node: ts.Node) !void {
         if (NodeKind.fromNode(child) == .link_text) link_text_node = child;
     }
 
-    try buf.appendSlice("<a>");
-    if (link_text_node) |lt| try writeLinkText(buf, source, lt, .body);
-    try buf.appendSlice("</a>");
+    try buf.appendSlice(allocator, "<a>");
+    if (link_text_node) |lt| try writeLinkText(allocator, buf, source, lt, .body);
+    try buf.appendSlice(allocator, "</a>");
 }
 
 const LinkTextMode = enum { body, attr };
 
-fn writeLinkText(buf: *Writer, source: []const u8, node: ts.Node, mode: LinkTextMode) !void {
+fn writeLinkText(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node, mode: LinkTextMode) !void {
     const child_count = node.childCount();
     if (child_count == 0) {
         const raw = textOf(source, node);
@@ -724,7 +726,7 @@ fn writeLinkText(buf: *Writer, source: []const u8, node: ts.Node, mode: LinkText
             raw[1 .. raw.len - 1]
         else
             raw;
-        try emitLinkText(buf, inner, mode);
+        try emitLinkText(allocator, buf, inner, mode);
         return;
     }
     var i: u32 = 0;
@@ -733,31 +735,31 @@ fn writeLinkText(buf: *Writer, source: []const u8, node: ts.Node, mode: LinkText
         if (!child.isNamed()) {
             const text = textOf(source, child);
             if (std.mem.eql(u8, text, "[") or std.mem.eql(u8, text, "]")) continue;
-            try emitLinkText(buf, text, mode);
+            try emitLinkText(allocator, buf, text, mode);
         } else if (NodeKind.fromNode(child) == .backslash_escape) {
             const text = textOf(source, child);
-            try emitLinkText(buf, if (text.len >= 2) text[1..2] else text, mode);
+            try emitLinkText(allocator, buf, if (text.len >= 2) text[1..2] else text, mode);
         } else {
-            try emitLinkText(buf, textOf(source, child), mode);
+            try emitLinkText(allocator, buf, textOf(source, child), mode);
         }
     }
 }
 
-fn emitLinkText(buf: *Writer, text: []const u8, mode: LinkTextMode) !void {
+fn emitLinkText(allocator: std.mem.Allocator, buf: *Writer, text: []const u8, mode: LinkTextMode) !void {
     switch (mode) {
-        .body => try appendText(buf, text),
+        .body => try appendText(allocator, buf, text),
         .attr => {
             for (text) |c| {
                 switch (c) {
-                    '"' => try buf.appendSlice("&quot;"),
-                    else => try buf.append(c),
+                    '"' => try buf.appendSlice(allocator, "&quot;"),
+                    else => try buf.append(allocator, c),
                 }
             }
         },
     }
 }
 
-fn writeImage(buf: *Writer, source: []const u8, node: ts.Node) !void {
+fn writeImage(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node) !void {
     var src: ?[]const u8 = null;
     var alt_node: ?ts.Node = null;
 
@@ -772,53 +774,53 @@ fn writeImage(buf: *Writer, source: []const u8, node: ts.Node) !void {
         }
     }
 
-    try buf.appendSlice("<img");
+    try buf.appendSlice(allocator, "<img");
     if (src) |s| {
-        try buf.appendSlice(" src=\"");
-        try buf.appendSlice(s);
-        try buf.append('"');
+        try buf.appendSlice(allocator, " src=\"");
+        try buf.appendSlice(allocator, s);
+        try buf.append(allocator, '"');
     }
     if (alt_node) |alt| {
-        try buf.appendSlice(" alt=\"");
-        try writeLinkText(buf, source, alt, .attr);
-        try buf.append('"');
+        try buf.appendSlice(allocator, " alt=\"");
+        try writeLinkText(allocator, buf, source, alt, .attr);
+        try buf.append(allocator, '"');
     }
-    try buf.appendSlice(" />");
+    try buf.appendSlice(allocator, " />");
 }
 
-fn writeAutolink(buf: *Writer, source: []const u8, node: ts.Node) !void {
+fn writeAutolink(allocator: std.mem.Allocator, buf: *Writer, source: []const u8, node: ts.Node) !void {
     const child_count = node.childCount();
     var i: u32 = 0;
     while (i < child_count) : (i += 1) {
         const child = node.child(i) orelse continue;
         if (NodeKind.fromNode(child) == .uri) {
             const uri = textOf(source, child);
-            try buf.appendSlice("<a href=\"");
-            try buf.appendSlice(uri);
-            try buf.appendSlice("\">");
-            try appendText(buf, uri);
-            try buf.appendSlice("</a>");
+            try buf.appendSlice(allocator, "<a href=\"");
+            try buf.appendSlice(allocator, uri);
+            try buf.appendSlice(allocator, "\">");
+            try appendText(allocator, buf, uri);
+            try buf.appendSlice(allocator, "</a>");
             return;
         }
     }
 }
 
-fn appendWithAllocator(out: *Writer, zx_str: []const u8) !void {
+fn appendWithAllocator(allocator: std.mem.Allocator, out: *Writer, zx_str: []const u8) !void {
     for (zx_str, 0..) |c, idx| {
         if (c == '/' and idx + 1 < zx_str.len and zx_str[idx + 1] == '>') {
-            try out.appendSlice(zx_str[0..idx]);
-            try out.appendSlice(" @allocator={allocator}");
-            try out.appendSlice(zx_str[idx..]);
+            try out.appendSlice(allocator, zx_str[0..idx]);
+            try out.appendSlice(allocator, " @allocator={allocator}");
+            try out.appendSlice(allocator, zx_str[idx..]);
             return;
         }
         if (c == '>') {
-            try out.appendSlice(zx_str[0..idx]);
-            try out.appendSlice(" @allocator={allocator}");
-            try out.appendSlice(zx_str[idx..]);
+            try out.appendSlice(allocator, zx_str[0..idx]);
+            try out.appendSlice(allocator, " @allocator={allocator}");
+            try out.appendSlice(allocator, zx_str[idx..]);
             return;
         }
     }
-    try out.appendSlice(zx_str);
+    try out.appendSlice(allocator, zx_str);
 }
 
 fn textOf(source: []const u8, node: ts.Node) []const u8 {
@@ -828,17 +830,17 @@ fn textOf(source: []const u8, node: ts.Node) []const u8 {
     return "";
 }
 
-fn appendText(buf: *Writer, text: []const u8) !void {
-    try buf.appendSlice("{\"");
+fn appendText(allocator: std.mem.Allocator, buf: *Writer, text: []const u8) !void {
+    try buf.appendSlice(allocator, "{\"");
     for (text) |c| {
         switch (c) {
-            '"' => try buf.appendSlice("\\\""),
-            '\\' => try buf.appendSlice("\\\\"),
-            '\n' => try buf.appendSlice("\\n"),
-            '\r' => try buf.appendSlice("\\r"),
-            '\t' => try buf.appendSlice("\\t"),
-            else => try buf.append(c),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
+            else => try buf.append(allocator, c),
         }
     }
-    try buf.appendSlice("\"}");
+    try buf.appendSlice(allocator, "\"}");
 }

@@ -11,7 +11,7 @@ pub fn ExcludeFields(comptime T: type, comptime excluded: []const []const u8) ty
 
     var names: [count][:0]const u8 = undefined;
     var types: [count]type = undefined;
-    var attrs: [count]std.builtin.Type.Struct.FieldAttributes = undefined;
+    var attrs: [count]std.lang.Type.Struct.FieldAttributes = undefined;
     var i: usize = 0;
     for (info.field_names, info.field_types, info.field_attrs) |name, ty, attr| {
         if (!isExcluded(name, excluded)) {

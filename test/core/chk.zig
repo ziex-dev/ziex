@@ -250,7 +250,7 @@ fn validateSource(allocator: std.mem.Allocator, source: [:0]const u8) !check.Dia
 fn countWithMessage(diags: check.DiagnosticList, needle: []const u8) usize {
     var n: usize = 0;
     for (diags.items) |d| {
-        if (std.mem.indexOf(u8, d.message, needle) != null) n += 1;
+        if (std.mem.find(u8, d.message, needle) != null) n += 1;
     }
     return n;
 }

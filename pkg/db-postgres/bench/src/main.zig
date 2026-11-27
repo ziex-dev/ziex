@@ -110,8 +110,8 @@ fn ZxDb(comptime cached: bool) type {
 }
 
 fn withParam(gpa: std.mem.Allocator, url: []const u8, param: []const u8) ![]u8 {
-    const sep: u8 = if (std.mem.indexOfScalar(u8, url, '?') == null) '?' else '&';
-    return std.fmt.allocPrint(gpa, "{s}{c}{s}", .{ url, sep, param });
+    const sep: u8 = if (std.mem.findScalar(u8, url, '?') == null) '?' else '&';
+    return gpa.print("{s}{c}{s}", .{ url, sep, param });
 }
 
 /// pg.zig; `cached` reuses a named prepared statement (one round trip instead of two).
@@ -255,7 +255,7 @@ fn Libpq(comptime prepared: bool) type {
 
         fn selectOne(self: *Self, v: i32) !i32 {
             var buf: [16]u8 = undefined;
-            const text = try std.fmt.bufPrintSentinel(&buf, "{d}", .{v}, 0);
+            const text = try std.mem.printSentinel(&buf, "{d}", .{v}, 0);
             const res = self.run("select_one", select_sql, &.{text.ptr});
             defer c.PQclear(res);
             if (c.PQresultStatus(res) != c.PGRES_TUPLES_OK) return error.QueryFailed;
@@ -264,7 +264,7 @@ fn Libpq(comptime prepared: bool) type {
 
         fn insert(self: *Self, v: i32, text: [:0]const u8) !void {
             var buf: [16]u8 = undefined;
-            const num = try std.fmt.bufPrintSentinel(&buf, "{d}", .{v}, 0);
+            const num = try std.mem.printSentinel(&buf, "{d}", .{v}, 0);
             try check(self.run("insert", insert_sql, &.{ num.ptr, text.ptr }), c.PGRES_COMMAND_OK, self.conn);
         }
 
@@ -482,7 +482,7 @@ pub fn main(init: std.process.Init) !void {
 
 fn thousands(buf: *[32]u8, value: u64) []const u8 {
     var digits: [24]u8 = undefined;
-    const raw = std.fmt.bufPrint(&digits, "{d}", .{value}) catch unreachable;
+    const raw = std.mem.print(&digits, "{d}", .{value}) catch unreachable;
     var len: usize = 0;
     for (raw, 0..) |ch, i| {
         if (i > 0 and (raw.len - i) % 3 == 0) {

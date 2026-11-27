@@ -12,7 +12,7 @@ fn withServer(comptime case: fn (base: []const u8) anyerror!void) !void {
     defer harness.stop();
 
     var buf: [64]u8 = undefined;
-    try case(try std.fmt.bufPrint(&buf, "http://127.0.0.1:{d}/email/resend", .{harness.tcp.?.port}));
+    try case(try std.mem.print(&buf, "http://127.0.0.1:{d}/email/resend", .{harness.tcp.?.port}));
 }
 
 const hello: Email.Message = .{
@@ -66,10 +66,10 @@ test "address > rejects invalid" {
 
 test "address > format quotes the name" {
     var buf: [64]u8 = undefined;
-    try std.testing.expectEqualStrings("a@b.dev", try std.fmt.bufPrint(&buf, "{f}", .{Email.Address{ .email = "a@b.dev" }}));
+    try std.testing.expectEqualStrings("a@b.dev", try std.mem.print(&buf, "{f}", .{Email.Address{ .email = "a@b.dev" }}));
     try std.testing.expectEqualStrings(
         "\"Doe, \\\"J\\\"\" <j@d.dev>",
-        try std.fmt.bufPrint(&buf, "{f}", .{Email.Address{ .email = "j@d.dev", .name = "Doe, \"J\"" }}),
+        try std.mem.print(&buf, "{f}", .{Email.Address{ .email = "j@d.dev", .name = "Doe, \"J\"" }}),
     );
 }
 
@@ -295,9 +295,9 @@ test "smtp > send through plaintext mock" {
     }.handle);
 
     defer gpa.free(captured);
-    try std.testing.expect(std.mem.indexOf(u8, captured, "Subject: Hello") != null);
-    try std.testing.expect(std.mem.indexOf(u8, captured, "hi") != null);
-    try std.testing.expect(std.mem.indexOf(u8, captured, "From:") != null);
+    try std.testing.expect(std.mem.find(u8, captured, "Subject: Hello") != null);
+    try std.testing.expect(std.mem.find(u8, captured, "hi") != null);
+    try std.testing.expect(std.mem.find(u8, captured, "From:") != null);
 }
 
 test "smtp > empty host is unavailable" {

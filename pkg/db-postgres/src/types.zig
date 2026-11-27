@@ -162,7 +162,7 @@ fn decodeBytea(gpa: std.mem.Allocator, data: []const u8) ![]u8 {
 pub fn formatFloat(buf: []u8, value: f64) ![]const u8 {
     if (std.math.isNan(value)) return "NaN";
     if (std.math.isInf(value)) return if (value > 0) "Infinity" else "-Infinity";
-    return std.fmt.bufPrint(buf, "{e}", .{value});
+    return std.mem.print(buf, "{e}", .{value});
 }
 
 // --- Tests --- //

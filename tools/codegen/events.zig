@@ -70,7 +70,7 @@ fn zigIdent(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
 // and `newURL` → `new_url`. The original camelCase is preserved separately as the
 // JS property name to read from the underlying DOM event object.
 fn camelToSnake(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
-    var out: std.ArrayListUnmanaged(u8) = .empty;
+    var out: std.ArrayList(u8) = .empty;
     for (name, 0..) |c, i| {
         const is_upper = c >= 'A' and c <= 'Z';
         if (is_upper and i > 0) {
@@ -94,7 +94,7 @@ fn camelToSnake(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
 // A parsed interface: flat list of (name, zig_type) after resolving inheritance.
 const Interface = struct {
     name: []const u8,
-    fields: std.ArrayListUnmanaged(Field),
+    fields: std.ArrayList(Field),
     href: []const u8 = "",
 
     const Field = struct {
@@ -132,7 +132,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir) ![
     // Key: interface name, Value: array of raw member JSON objects.
     // -------------------------------------------------------------------------
     var raw_members = std.StringHashMap(
-        std.ArrayListUnmanaged(std.json.Value),
+        std.ArrayList(std.json.Value),
     ).init(a);
     var raw_inheritance = std.StringHashMap([]const u8).init(a);
 
@@ -150,7 +150,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir) ![
             const def_type = (def.object.get("type") orelse continue).string;
             if (!eql(def_type, "interface")) continue;
             if (!std.mem.endsWith(u8, name, "Event")) continue;
-            if (std.mem.indexOf(u8, name, "Init") != null) continue;
+            if (std.mem.find(u8, name, "Init") != null) continue;
 
             // Record inheritance
             if (def.object.get("inheritance")) |inh| {
@@ -175,7 +175,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir) ![
         const idl_ext = (idlp.object.get("idlExtendedNames") orelse continue).object;
         for (idl_ext.keys(), idl_ext.values()) |name, partials| {
             if (!std.mem.endsWith(u8, name, "Event")) continue;
-            if (std.mem.indexOf(u8, name, "Init") != null) continue;
+            if (std.mem.find(u8, name, "Init") != null) continue;
             for (partials.array.items) |partial| {
                 const members_json = (partial.object.get("members") orelse continue).array;
                 const entry2 = try raw_members.getOrPut(name);
@@ -298,7 +298,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir) ![
     // Collect (event_name, iface_name) pairs that have a backing struct so we can
     // emit the aliases, the `Kind` enum, and the `Data` switch in one pass.
     const Pair = struct { ev: []const u8, iface: []const u8 };
-    var pairs: std.ArrayListUnmanaged(Pair) = .empty;
+    var pairs: std.ArrayList(Pair) = .empty;
     var ev_it = event_map.iterator();
     while (ev_it.next()) |entry| {
         const ev_name = entry.key_ptr.*;
@@ -380,7 +380,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, webref: std.Io.Dir) ![
     try w.writeAll("pub const js_field_names = std.StaticStringMap([]const u8).initComptime(.{\n");
     var pair_it = js_name_pairs.iterator();
     // Sort entries for deterministic output.
-    var sorted_keys: std.ArrayListUnmanaged([]const u8) = .empty;
+    var sorted_keys: std.ArrayList([]const u8) = .empty;
     while (pair_it.next()) |e| try sorted_keys.append(a, e.key_ptr.*);
     std.mem.sort([]const u8, sorted_keys.items, {}, struct {
         fn lt(_: void, l: []const u8, r: []const u8) bool {
@@ -418,13 +418,13 @@ fn isValidIdent(name: []const u8) bool {
 fn resolveInterface(
     name: []const u8,
     a: std.mem.Allocator,
-    raw_members: *std.StringHashMap(std.ArrayListUnmanaged(std.json.Value)),
+    raw_members: *std.StringHashMap(std.ArrayList(std.json.Value)),
     raw_inheritance: *std.StringHashMap([]const u8),
     out: *std.StringHashMap(Interface),
 ) !void {
     if (out.contains(name)) return;
 
-    var fields: std.ArrayListUnmanaged(Interface.Field) = .empty;
+    var fields: std.ArrayList(Interface.Field) = .empty;
     var seen_names = std.StringHashMap(void).init(a);
 
     // Walk inheritance chain depth-first: child fields first, then parent

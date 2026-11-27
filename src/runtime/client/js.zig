@@ -145,7 +145,7 @@ pub const Value = enum(u32) {
     /// `this[i]` for arrays and array-likes.
     pub fn at(self: Value, i: usize) Value {
         var buf: [20]u8 = undefined;
-        const key = std.fmt.bufPrint(&buf, "{d}", .{i}) catch unreachable;
+        const key = std.mem.print(&buf, "{d}", .{i}) catch unreachable;
         return self.get(key) catch .undefined;
     }
 
@@ -358,7 +358,7 @@ fn strRaw(s: []const u8) Raw {
     return .{ .tag = .string, .a = @intCast(@intFromPtr(s.ptr)), .n = @floatFromInt(s.len) };
 }
 
-var temps: std.ArrayListUnmanaged([]u8) = .empty;
+var temps: std.ArrayList([]u8) = .empty;
 
 fn jsonRaw(x: anytype) Raw {
     const gpa = gpa_;
@@ -392,8 +392,8 @@ pub const Callback = struct {
     pub const returns_bit: u32 = 1 << 31;
 
     const Slot = struct { func: ?Fn = null, ret: ?ReturnFn = null, ctx: ?*anyopaque, once: bool };
-    var slots: std.ArrayListUnmanaged(Slot) = .empty;
-    var free_ids: std.ArrayListUnmanaged(u32) = .empty;
+    var slots: std.ArrayList(Slot) = .empty;
+    var free_ids: std.ArrayList(u32) = .empty;
 
     pub const Options = struct {
         /// Unregister after the first call (e.g. requestAnimationFrame).

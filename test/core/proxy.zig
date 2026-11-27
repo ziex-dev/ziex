@@ -40,7 +40,7 @@ test "proxy > PageProxy wraps a page; local proxies don't cascade" {
         fn run(h: *Harness, arena: Allocator) !void {
             const res = try h.fetch(arena, .{ .path = "/proxy/inner/page" });
             try expectEqual(200, res.status);
-            try expect(std.mem.indexOf(u8, res.body, "proxied page") != null);
+            try expect(std.mem.find(u8, res.body, "proxied page") != null);
             try expectEqualStrings("root>,inner,page-proxy,page,<root", res.header("x-trace").?);
             try expectEqualStrings("1", res.header("x-after-page").?);
         }
@@ -87,7 +87,7 @@ test "proxy > errors answer 500 without running the handler" {
         fn run(h: *Harness, arena: Allocator) !void {
             var res = try h.fetch(arena, .{ .path = "/proxy/fail" });
             try expectEqual(500, res.status);
-            try expect(std.mem.indexOf(u8, res.body, "unreachable") == null);
+            try expect(std.mem.find(u8, res.body, "unreachable") == null);
             try expectEqualStrings("root>,<root", res.header("x-trace").?);
 
             res = try h.fetch(arena, .{ .path = "/proxy", .headers = &.{.{ .name = "x-fail-before", .value = "1" }} });

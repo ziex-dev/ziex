@@ -8,7 +8,7 @@ pub fn main(init: std.process.Init) !void {
     if (args.len < 4 or (args.len - 2) % 2 != 0) return error.Usage;
 
     const kind = args[1];
-    var specs: std.ArrayListUnmanaged(Spec) = .empty;
+    var specs: std.ArrayList(Spec) = .empty;
     var i: usize = 2;
     while (i < args.len) : (i += 2) {
         const raw = try std.Io.Dir.cwd().readFileAlloc(io, args[i + 1], arena, .unlimited);
@@ -105,7 +105,7 @@ const MethodEntry = struct {
 
 // Every method of every given revision.
 fn emitMethods(arena: std.mem.Allocator, w: *std.Io.Writer, specs: []const Spec) !void {
-    var list: std.ArrayListUnmanaged(MethodEntry) = .empty;
+    var list: std.ArrayList(MethodEntry) = .empty;
     for (specs) |spec| {
         var it = spec.defs.iterator();
         next: while (it.next()) |entry| {
@@ -172,7 +172,7 @@ fn emitMethods(arena: std.mem.Allocator, w: *std.Io.Writer, specs: []const Spec)
 }
 
 fn emitDefsIndex(arena: std.mem.Allocator, w: *std.Io.Writer, specs: []const Spec) !void {
-    var names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var names: std.ArrayList([]const u8) = .empty;
     for (specs) |spec| {
         var it = spec.defs.iterator();
         next: while (it.next()) |entry| {
@@ -220,7 +220,7 @@ fn findMethodConst(value: std.json.Value) ?[]const u8 {
 }
 
 fn wireToTag(arena: std.mem.Allocator, wire: []const u8) ![]const u8 {
-    var out: std.ArrayListUnmanaged(u8) = .empty;
+    var out: std.ArrayList(u8) = .empty;
     for (wire) |c| {
         if (c == '/' or c == '-') {
             try out.append(arena, '_');

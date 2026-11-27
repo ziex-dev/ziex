@@ -130,7 +130,7 @@ pub const Cursor = struct {
 
     /// NUL-terminated string without the terminator.
     pub fn cstr(self: *Cursor) Error![]const u8 {
-        const end = std.mem.indexOfScalarPos(u8, self.data, self.pos, 0) orelse return Error.ProtocolViolation;
+        const end = std.mem.findScalarPos(u8, self.data, self.pos, 0) orelse return Error.ProtocolViolation;
         defer self.pos = end + 1;
         return self.data[self.pos..end];
     }
@@ -249,7 +249,7 @@ pub const Writer = struct {
 
     pub fn cstr(self: *Writer, value: []const u8) !void {
         // an embedded NUL would truncate the field on the server
-        if (std.mem.indexOfScalar(u8, value, 0) != null) return error.InvalidNul;
+        if (std.mem.findScalar(u8, value, 0) != null) return error.InvalidNul;
         try self.raw(value);
         try self.int1(0);
     }

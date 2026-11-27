@@ -42,7 +42,7 @@ pub fn Fallback(allocator: zx.Allocator) zx.Component {
 }
 
 fn portValue(allocator: std.mem.Allocator, host: []const u8) []const u8 {
-    if (std.mem.lastIndexOfScalar(u8, host, ':')) |idx| {
+    if (std.mem.findScalarLast(u8, host, ':')) |idx| {
         const maybe_port = host[idx + 1 ..];
         if (maybe_port.len > 0 and std.fmt.parseInt(u16, maybe_port, 10) catch null != null) {
             return maybe_port;

@@ -1,4 +1,4 @@
-// Collects DebugAllocator leak reports from an app's stderr, line by line.
+// Collects SafeAllocator leak reports from an app's stderr, line by line.
 // Colour codes are ignored: `zig build` sets `CLICOLOR_FORCE` for the app.
 
 const LeakReport = @This();
@@ -39,9 +39,7 @@ pub fn feed(self: *LeakReport, raw_line: []const u8) !Feed {
     try stripAnsi(self.allocator, &self.plain, raw_line);
     const line = std.mem.trimEnd(u8, self.plain.items, "\r");
 
-    if (std.mem.startsWith(u8, line, "error(DebugAllocator): memory address") and
-        std.mem.indexOf(u8, line, "leaked") != null)
-    {
+    if (std.mem.startsWith(u8, line, "error(SafeAllocator): leaked ")) {
         try self.leaks.append(self.allocator, .{});
         self.in_report = true;
         self.context_left = 0;
@@ -98,15 +96,15 @@ fn stripAnsi(allocator: std.mem.Allocator, out: *std.ArrayList(u8), line: []cons
 /// `<file>:<line>:<col>: 0x<addr> in <function> (<binary>)`, parsed from the
 /// right so Windows drive letters don't interfere.
 fn parseFrame(line: []const u8) ?Frame {
-    const addr = std.mem.lastIndexOf(u8, line, ": 0x") orelse return null;
+    const addr = std.mem.findLast(u8, line, ": 0x") orelse return null;
     const after = line[addr + ": 0x".len ..];
-    const in_pos = std.mem.indexOf(u8, after, " in ") orelse return null;
+    const in_pos = std.mem.find(u8, after, " in ") orelse return null;
     const rest = after[in_pos + " in ".len ..];
-    const function = if (std.mem.lastIndexOf(u8, rest, " (")) |p| rest[0..p] else rest;
+    const function = if (std.mem.findLast(u8, rest, " (")) |p| rest[0..p] else rest;
 
     const loc = line[0..addr];
-    const col_sep = std.mem.lastIndexOfScalar(u8, loc, ':') orelse return null;
-    const line_sep = std.mem.lastIndexOfScalar(u8, loc[0..col_sep], ':') orelse return null;
+    const col_sep = std.mem.findScalarLast(u8, loc, ':') orelse return null;
+    const line_sep = std.mem.findScalarLast(u8, loc[0..col_sep], ':') orelse return null;
     const file = loc[0..line_sep];
     const line_no = std.fmt.parseInt(u32, loc[line_sep + 1 .. col_sep], 10) catch 0;
     const col_no = std.fmt.parseInt(u32, loc[col_sep + 1 ..], 10) catch 0;

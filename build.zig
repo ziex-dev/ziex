@@ -50,24 +50,23 @@ pub fn build(b: *std.Build) !void {
     // Imports (zx)
     {
         if (enable_sqlite) {
-            const db_sqlite_dep = b.lazyDependency("db_sqlite", .{ .target = target, .optimize = optimize });
-            if (db_sqlite_dep) |a| mod.addImport("sqlite", a.module("sqlite"));
+            const db_sqlite_dep = b.dependency("db_sqlite", .{ .target = target, .optimize = optimize });
+            mod.addImport("sqlite", db_sqlite_dep.module("sqlite"));
         }
         if (!is_client) {
             if (enable_postgres) {
-                const db_postgres_dp = b.lazyDependency("db_postgres", .{ .target = target, .optimize = optimize });
-                if (db_postgres_dp) |a| mod.addImport("db_postgres", a.module("postgres"));
+                const db_postgres_dp = b.dependency("db_postgres", .{ .target = target, .optimize = optimize });
+                mod.addImport("db_postgres", db_postgres_dp.module("postgres"));
             }
 
             if (enable_mysql) {
-                const db_mysql_dp = b.lazyDependency("db_mysql", .{ .target = target, .optimize = optimize });
-                if (db_mysql_dp) |a| mod.addImport("db_mysql", a.module("mysql"));
+                const db_mysql_dp = b.dependency("db_mysql", .{ .target = target, .optimize = optimize });
+                mod.addImport("db_mysql", db_mysql_dp.module("mysql"));
             }
 
             if (enable_httpz) {
-                if (b.lazyDependency("httpz", .{ .target = target, .optimize = optimize })) |httpz_dep| {
-                    mod.addImport("httpz", httpz_dep.module("httpz"));
-                }
+                const httpz_dep = b.dependency("httpz", .{ .target = target, .optimize = optimize });
+                mod.addImport("httpz", httpz_dep.module("httpz"));
             }
         }
 
@@ -107,13 +106,8 @@ pub fn build(b: *std.Build) !void {
     cli_mod.addAnonymousImport("app_template", .{ .root_source_file = b.path("templates/Template.zig") });
 
     if (enable_lsp) {
-        if (b.lazyDependency("lsp_kit", .{ .target = target, .optimize = optimize })) |lsp_kit| {
-            cli_mod.addImport("lsp", lsp_kit.module("lsp"));
-        }
-
-        if (b.lazyDependency("zls", .{ .target = target, .optimize = optimize })) |zls| {
-            cli_mod.addImport("zls", zls.module("zls"));
-        }
+        cli_mod.addImport("lsp", b.dependency("lsp_kit", .{ .target = target, .optimize = optimize }).module("lsp"));
+        cli_mod.addImport("zls", b.dependency("zls", .{ .target = target, .optimize = optimize }).module("zls"));
     }
 
     const exe = b.addExecutable(.{ .name = "zx", .root_module = cli_mod });
@@ -132,9 +126,9 @@ pub fn build(b: *std.Build) !void {
     // --- Steps: Test --- //
     if (b.isRoot()) {
         const mode_test = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
-        if (b.lazyDependency("db_sqlite", .{})) |ad| mode_test.addImport("sqlite", ad.module("sqlite"));
-        if (b.lazyDependency("db_postgres", .{})) |ad| mode_test.addImport("db_postgres", ad.module("postgres"));
-        if (b.lazyDependency("db_mysql", .{})) |ad| mode_test.addImport("db_mysql", ad.module("mysql"));
+        mode_test.addImport("sqlite", b.dependency("db_sqlite", .{}).module("sqlite"));
+        mode_test.addImport("db_postgres", b.dependency("db_postgres", .{}).module("postgres"));
+        mode_test.addImport("db_mysql", b.dependency("db_mysql", .{}).module("mysql"));
         mode_test.addOptions("zx_info", options);
         mode_test.addImport("lang", lang_mod);
 
@@ -168,9 +162,7 @@ pub fn build(b: *std.Build) !void {
         });
 
         if (enable_lsp)
-            if (b.lazyDependency("lsp_kit", .{ .target = target, .optimize = optimize })) |lsp_kit| {
-                html_hover_mod.addImport("lsp", lsp_kit.module("lsp"));
-            };
+            html_hover_mod.addImport("lsp", b.dependency("lsp_kit", .{ .target = target, .optimize = optimize }).module("lsp"));
 
         testing_mod.addImport("html_hover", html_hover_mod);
 

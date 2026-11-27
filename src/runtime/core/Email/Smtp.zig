@@ -288,7 +288,7 @@ pub const Client = struct {
     pub fn rcpt(c: *Client, to: []const u8) Email.Error!void {
         if (hasLineBreak(to)) return error.InvalidAddress;
         var buf: [320]u8 = undefined;
-        const line = std.fmt.bufPrint(&buf, "RCPT TO:<{s}>", .{to}) catch return error.InvalidAddress;
+        const line = std.mem.print(&buf, "RCPT TO:<{s}>", .{to}) catch return error.InvalidAddress;
         // 250 or 251
         try c.cmd(25, line);
     }
@@ -335,13 +335,13 @@ pub const Client = struct {
         if (!std.mem.eql(u8, c.server_name, p.host) and !isLocalhost(c.server_name)) return error.Unauthorized;
 
         var cred_buf: [512]u8 = undefined;
-        const cred = std.fmt.bufPrint(&cred_buf, "{s}\x00{s}\x00{s}", .{ p.identity, p.username, p.password }) catch
+        const cred = std.mem.print(&cred_buf, "{s}\x00{s}\x00{s}", .{ p.identity, p.username, p.password }) catch
             return error.InvalidMessage;
         var enc_buf: [b64.Encoder.calcSize(cred_buf.len)]u8 = undefined;
         const enc = b64.Encoder.encode(&enc_buf, cred);
 
         var line_buf: [640]u8 = undefined;
-        const line = std.fmt.bufPrint(&line_buf, "AUTH PLAIN {s}", .{enc}) catch return error.InvalidMessage;
+        const line = std.mem.print(&line_buf, "AUTH PLAIN {s}", .{enc}) catch return error.InvalidMessage;
         const code = try c.cmdCode(0, line);
         if (code != 235) return mapReply(code);
     }
@@ -359,7 +359,7 @@ pub const Client = struct {
         std.crypto.auth.hmac.HmacMd5.create(&mac, challenge_buf[0..challenge_len], p.secret);
 
         var resp_buf: [320]u8 = undefined;
-        const resp = std.fmt.bufPrint(&resp_buf, "{s} {x}", .{ p.username, &mac }) catch return error.InvalidMessage;
+        const resp = std.mem.print(&resp_buf, "{s} {x}", .{ p.username, &mac }) catch return error.InvalidMessage;
         var enc_buf: [b64.Encoder.calcSize(resp_buf.len)]u8 = undefined;
         const enc = b64.Encoder.encode(&enc_buf, resp);
 
@@ -370,7 +370,7 @@ pub const Client = struct {
     fn ehlo(c: *Client) Email.Error!void {
         c.clearExt();
         var buf: [320]u8 = undefined;
-        const line = std.fmt.bufPrint(&buf, "EHLO {s}", .{c.local_name}) catch return error.InvalidMessage;
+        const line = std.mem.print(&buf, "EHLO {s}", .{c.local_name}) catch return error.InvalidMessage;
         const code, const msg = try c.cmdMsg(250, line);
         _ = code;
         try c.parseEhlo(msg);
@@ -379,7 +379,7 @@ pub const Client = struct {
     fn helo(c: *Client) Email.Error!void {
         c.clearExt();
         var buf: [320]u8 = undefined;
-        const line = std.fmt.bufPrint(&buf, "HELO {s}", .{c.local_name}) catch return error.InvalidMessage;
+        const line = std.mem.print(&buf, "HELO {s}", .{c.local_name}) catch return error.InvalidMessage;
         try c.cmd(250, line);
     }
 
@@ -389,7 +389,7 @@ pub const Client = struct {
         while (lines.next()) |raw| {
             const line = std.mem.trim(u8, raw, " \t\r");
             if (line.len == 0) continue;
-            const sp = std.mem.indexOfScalar(u8, line, ' ') orelse line.len;
+            const sp = std.mem.findScalar(u8, line, ' ') orelse line.len;
             var key_buf: [64]u8 = undefined;
             if (sp > key_buf.len) continue;
             const key = try c.gpa.dupe(u8, std.ascii.upperString(key_buf[0..sp], line[0..sp]));
@@ -594,7 +594,7 @@ fn mapReply(code: u16) Email.Error {
 }
 
 fn hasLineBreak(s: []const u8) bool {
-    return std.mem.indexOfAny(u8, s, "\r\n") != null;
+    return std.mem.findAny(u8, s, "\r\n") != null;
 }
 
 fn recipients(arena: std.mem.Allocator, m: Email.Message) Email.Error![]const []const u8 {
@@ -628,7 +628,7 @@ fn encodeMessage(arena: std.mem.Allocator, m: Email.Message) Email.Error![]u8 {
         try writeBody(&w.writer, arena, m.text, m.html);
     } else {
         const boundary = try randomBoundary(arena);
-        try writeHeader(&w.writer, "Content-Type", try std.fmt.allocPrint(arena, "multipart/mixed; boundary=\"{s}\"", .{boundary}));
+        try writeHeader(&w.writer, "Content-Type", try arena.print("multipart/mixed; boundary=\"{s}\"", .{boundary}));
         try writeAll(&w.writer, "\r\n");
         try print(&w.writer, "--{s}\r\n", .{boundary});
         try writeBody(&w.writer, arena, m.text, m.html);
@@ -638,12 +638,12 @@ fn encodeMessage(arena: std.mem.Allocator, m: Email.Message) Email.Error![]u8 {
             if (a.content_id) |cid| {
                 try writeHeader(&w.writer, "Content-Type", ctype);
                 try writeHeader(&w.writer, "Content-Transfer-Encoding", "base64");
-                try writeHeader(&w.writer, "Content-Disposition", try std.fmt.allocPrint(arena, "inline; filename=\"{s}\"", .{a.filename}));
-                try writeHeader(&w.writer, "Content-ID", try std.fmt.allocPrint(arena, "<{s}>", .{cid}));
+                try writeHeader(&w.writer, "Content-Disposition", try arena.print("inline; filename=\"{s}\"", .{a.filename}));
+                try writeHeader(&w.writer, "Content-ID", try arena.print("<{s}>", .{cid}));
             } else {
                 try writeHeader(&w.writer, "Content-Type", ctype);
                 try writeHeader(&w.writer, "Content-Transfer-Encoding", "base64");
-                try writeHeader(&w.writer, "Content-Disposition", try std.fmt.allocPrint(arena, "attachment; filename=\"{s}\"", .{a.filename}));
+                try writeHeader(&w.writer, "Content-Disposition", try arena.print("attachment; filename=\"{s}\"", .{a.filename}));
             }
             try writeAll(&w.writer, "\r\n");
             try writeBase64(&w.writer, a.content);
@@ -658,7 +658,7 @@ fn encodeMessage(arena: std.mem.Allocator, m: Email.Message) Email.Error![]u8 {
 fn writeBody(w: *std.Io.Writer, arena: std.mem.Allocator, text: ?[]const u8, html: ?[]const u8) Email.Error!void {
     if (text != null and html != null) {
         const boundary = try randomBoundary(arena);
-        try writeHeader(w, "Content-Type", try std.fmt.allocPrint(arena, "multipart/alternative; boundary=\"{s}\"", .{boundary}));
+        try writeHeader(w, "Content-Type", try arena.print("multipart/alternative; boundary=\"{s}\"", .{boundary}));
         try writeAll(w, "\r\n");
         try print(w, "--{s}\r\n", .{boundary});
         try writeHeader(w, "Content-Type", "text/plain; charset=utf-8");
@@ -725,13 +725,13 @@ fn print(w: *std.Io.Writer, comptime fmt: []const u8, args: anytype) Email.Error
 
 fn randomBoundary(arena: std.mem.Allocator) Email.Error![]const u8 {
     const n = boundary_seq.fetchAdd(1, .monotonic);
-    return std.fmt.allocPrint(arena, "zx_{x}", .{n}) catch return error.OutOfMemory;
+    return arena.print("zx_{x}", .{n}) catch return error.OutOfMemory;
 }
 
 var boundary_seq: std.atomic.Value(u64) = .init(1);
 
 fn fmtAddress(arena: std.mem.Allocator, a: Email.Address) Email.Error![]const u8 {
-    return std.fmt.allocPrint(arena, "{f}", .{a}) catch return error.OutOfMemory;
+    return arena.print("{f}", .{a}) catch return error.OutOfMemory;
 }
 
 fn fmtList(arena: std.mem.Allocator, list: []const Email.Address) Email.Error![]const u8 {

@@ -22,7 +22,7 @@ pub fn POST(ctx: zx.RouteContext) !void {
     for (body.messages) |m| try roles.append(ctx.arena, m.role[0]);
     const last = body.messages[body.messages.len - 1].content;
 
-    const reply = try std.fmt.allocPrint(ctx.arena, "{s}|{s}|{s}", .{ body.model, roles.items, last });
+    const reply = try ctx.arena.print("{s}|{s}|{s}", .{ body.model, roles.items, last });
     const finish = if (body.max_tokens != null) "length" else "stop";
     const usage = .{ .prompt_tokens = body.messages.len, .completion_tokens = 2 };
 

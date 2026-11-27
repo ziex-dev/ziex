@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
         .{ "web", "web.zig", "Typed browser bindings from webref", .fast },
     }) |g| {
         const run = addGenerator(b, g[0], g[1], g[2], g[3], root, all);
-        run.addDirectoryArg(webref.path(""));
+        run.addDirectoryArg2(webref.path(""), .{});
     }
 
     _ = addGenerator(b, "html", "html_docs.zig", "HTML element/attribute docs for the LSP (network)", .debug, root, all);

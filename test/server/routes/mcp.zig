@@ -53,7 +53,7 @@ pub fn POST(ctx: zx.RouteContext) !void {
     const reply = try server.handleMessage(ctx.arena, &c, ctx.request.text() orelse "");
     if (reply.len == 0) return ctx.response.setStatus(.accepted);
     ctx.response.headers.append("Content-Type", "text/event-stream");
-    ctx.response.text(try std.fmt.allocPrint(ctx.arena,
+    ctx.response.text(try ctx.arena.print(
         \\event: message
         \\data: {{"jsonrpc":"2.0","method":"notifications/message","params":{{"level":"info","data":"working"}}}}
         \\
@@ -70,7 +70,7 @@ fn echo(c: *Ctx, args: ?std.json.Value) anyerror!mcp.ToolResult {
 }
 
 fn whoami(c: *Ctx, _: ?std.json.Value) anyerror!mcp.ToolResult {
-    return mcp.ToolResult.text(c.arena, try std.fmt.allocPrint(c.arena, "{s} {s}", .{ c.session_id, c.protocol_version }));
+    return mcp.ToolResult.text(c.arena, try c.arena.print("{s} {s}", .{ c.session_id, c.protocol_version }));
 }
 
 fn fail(_: *Ctx, _: ?std.json.Value) anyerror!mcp.ToolResult {

@@ -116,7 +116,7 @@ fn cleanLineInPlace(raw: []u8) []const u8 {
     // Strip ANSI first: escape codes can precede the `info(verbose):` prefix.
     var line = std.mem.trim(u8, stripAnsiInPlace(raw), " \t\r");
     const verbose_prefix = "info(verbose): ";
-    if (std.mem.indexOf(u8, line, verbose_prefix)) |idx| {
+    if (std.mem.find(u8, line, verbose_prefix)) |idx| {
         line = std.mem.trim(u8, line[idx + verbose_prefix.len ..], " \t");
     }
     return line;
@@ -240,14 +240,14 @@ pub const BuildState = struct {
                     return null;
                 }
             } else if (last_diag.caret_line == null) {
-                if (std.mem.indexOfAny(u8, line, "^~") != null) {
+                if (std.mem.findAny(u8, line, "^~") != null) {
                     last_diag.caret_line = try self.allocator.dupe(u8, line);
                     return null;
                 }
             }
         }
 
-        if (std.mem.indexOf(u8, line, "Build Summary:") != null) {
+        if (std.mem.find(u8, line, "Build Summary:") != null) {
             self.in_summary_tree = true;
             return null;
         }
@@ -541,7 +541,7 @@ pub fn parseInstallStatus(content: []const u8, role: []const u8) ?StepStatus {
     rest = std.mem.trimStart(u8, rest, " ");
 
     // Skip the `<name>` token.
-    const space = std.mem.indexOfScalar(u8, rest, ' ') orelse return null;
+    const space = std.mem.findScalar(u8, rest, ' ') orelse return null;
     rest = std.mem.trimStart(u8, rest[space..], " ");
     return parseStatusWord(rest);
 }
@@ -551,7 +551,7 @@ pub fn parseInstallStatus(content: []const u8, role: []const u8) ?StepStatus {
 fn parseCompileStatus(content: []const u8, target_marker: []const u8) ?StepStatus {
     const prefix = "compile ";
     if (!std.mem.startsWith(u8, content, prefix)) return null;
-    const marker_idx = std.mem.indexOf(u8, content, target_marker) orelse return null;
+    const marker_idx = std.mem.find(u8, content, target_marker) orelse return null;
     var rest = content[marker_idx + target_marker.len ..];
     rest = std.mem.trimStart(u8, rest, " ");
     return parseStatusWord(rest);
@@ -562,7 +562,7 @@ pub fn parseAssetDirStatus(content: []const u8) ?StepStatus {
     const prefix = "install ";
     if (!std.mem.startsWith(u8, content, prefix)) return null;
     var rest = content[prefix.len..];
-    const space = std.mem.indexOfScalar(u8, rest, ' ') orelse return null;
+    const space = std.mem.findScalar(u8, rest, ' ') orelse return null;
     const path = rest[0..space];
     if (path.len < 2 or path[path.len - 1] != '/') return null;
     rest = std.mem.trimStart(u8, rest[space..], " ");
@@ -573,14 +573,14 @@ pub fn parseAssetDirStatus(content: []const u8) ?StepStatus {
 /// (it represents a downstream dependency dedupe, not a real install outcome).
 pub fn parseStatusWord(rest: []const u8) ?StepStatus {
     if (rest.len == 0) return null;
-    const end = std.mem.indexOfAny(u8, rest, " \t") orelse rest.len;
+    const end = std.mem.findAny(u8, rest, " \t") orelse rest.len;
     const word = rest[0..end];
     if (std.mem.eql(u8, word, "success")) return .success;
     if (std.mem.eql(u8, word, "cached")) return .cached;
     // "1 errors", "2 errors", "transitive failure" - all mean failed.
     if (std.mem.endsWith(u8, rest, " errors") or
-        std.mem.indexOf(u8, rest, "transitive failure") != null or
-        std.mem.indexOf(u8, rest, "failure") != null)
+        std.mem.find(u8, rest, "transitive failure") != null or
+        std.mem.find(u8, rest, "failure") != null)
     {
         return .failure;
     }
@@ -598,13 +598,13 @@ const AssetInstall = struct {
 pub fn parseUserAssetInstall(line: []const u8) ?AssetInstall {
     const trimmed = std.mem.trimStart(u8, line, " \t");
     if (!std.mem.startsWith(u8, trimmed, "install ")) return null;
-    if (std.mem.indexOf(u8, trimmed, ".zig-cache") != null) return null;
-    if (std.mem.indexOf(u8, trimmed, "/zig/p/") != null) return null;
-    if (std.mem.indexOf(u8, trimmed, "/public/") == null and
-        std.mem.indexOf(u8, trimmed, "/assets/") == null) return null;
+    if (std.mem.find(u8, trimmed, ".zig-cache") != null) return null;
+    if (std.mem.find(u8, trimmed, "/zig/p/") != null) return null;
+    if (std.mem.find(u8, trimmed, "/public/") == null and
+        std.mem.find(u8, trimmed, "/assets/") == null) return null;
 
     const static_marker = "/static/";
-    const last_static_pos = std.mem.lastIndexOf(u8, trimmed, static_marker) orelse return null;
+    const last_static_pos = std.mem.findLast(u8, trimmed, static_marker) orelse return null;
     const start = last_static_pos + static_marker.len;
     if (start >= trimmed.len) return null;
     return .{ .web_path = trimmed[start..] };
@@ -653,7 +653,7 @@ fn parseCommand(os_tag: std.Target.Os.Tag, line: []const u8) ?struct { exe_name:
     const exe, const rest = nextCommandToken(cmd) orelse return null;
     const subcommand, _ = nextCommandToken(rest) orelse return null;
     return .{
-        .exe_name = if (os_tag == .windows) commandBasenameWindows(exe) else std.fs.path.basename(exe),
+        .exe_name = if (os_tag == .windows) commandBasenameWindows(exe) else std.Io.Dir.path.basename(exe),
         .subcommand = subcommand,
     };
 }
@@ -662,17 +662,17 @@ fn parseCommand(os_tag: std.Target.Os.Tag, line: []const u8) ?struct { exe_name:
 fn stripLeadingEnvAssignments(line: []const u8) []const u8 {
     var rest = std.mem.trimStart(u8, line, " \t");
     while (rest.len > 0 and rest[0] != '"' and rest[0] != '\'') {
-        const eq = std.mem.indexOfScalar(u8, rest, '=') orelse break;
+        const eq = std.mem.findScalar(u8, rest, '=') orelse break;
         const key = rest[0..eq];
-        if (key.len == 0 or std.mem.indexOfAny(u8, key, " \t/\\") != null) break;
+        if (key.len == 0 or std.mem.findAny(u8, key, " \t/\\") != null) break;
 
         var after = rest[eq + 1 ..];
         if (after.len > 0 and (after[0] == '"' or after[0] == '\'')) {
             const quote = after[0];
-            const end = std.mem.indexOfScalarPos(u8, after, 1, quote) orelse break;
+            const end = std.mem.findScalarPos(u8, after, 1, quote) orelse break;
             rest = std.mem.trimStart(u8, after[end + 1 ..], " \t");
         } else {
-            const sp = std.mem.indexOfAny(u8, after, " \t") orelse return "";
+            const sp = std.mem.findAny(u8, after, " \t") orelse return "";
             rest = std.mem.trimStart(u8, after[sp..], " \t");
         }
     }
@@ -682,14 +682,14 @@ fn stripLeadingEnvAssignments(line: []const u8) []const u8 {
 /// Best-effort label from a verbose command line for status display.
 fn parseVerboseStepLabel(line: []const u8) ?[]const u8 {
     const name_marker = " --name ";
-    if (std.mem.indexOf(u8, line, name_marker)) |idx| {
+    if (std.mem.find(u8, line, name_marker)) |idx| {
         const rest = line[idx + name_marker.len ..];
-        const end = std.mem.indexOfAny(u8, rest, " \t\"") orelse rest.len;
+        const end = std.mem.findAny(u8, rest, " \t\"") orelse rest.len;
         if (end == 0) return null;
         return rest[0..end];
     }
-    if (std.mem.indexOf(u8, line, " transpile ")) |_| return "transpile";
-    if (std.mem.indexOf(u8, line, " translate-c ")) |_| return "translate-c";
+    if (std.mem.find(u8, line, " transpile ")) |_| return "transpile";
+    if (std.mem.find(u8, line, " translate-c ")) |_| return "translate-c";
     return null;
 }
 
@@ -697,15 +697,15 @@ fn nextCommandToken(input: []const u8) ?struct { []const u8, []const u8 } {
     const trimmed = std.mem.trimStart(u8, input, " \t");
     if (trimmed.len == 0) return null;
     if (trimmed[0] == '"') {
-        const end = std.mem.indexOfScalarPos(u8, trimmed, 1, '"') orelse return null;
+        const end = std.mem.findScalarPos(u8, trimmed, 1, '"') orelse return null;
         return .{ trimmed[1..end], trimmed[end + 1 ..] };
     }
-    const end = std.mem.indexOfAny(u8, trimmed, " \t") orelse trimmed.len;
+    const end = std.mem.findAny(u8, trimmed, " \t") orelse trimmed.len;
     return .{ trimmed[0..end], trimmed[end..] };
 }
 
 fn commandBasenameWindows(path: []const u8) []const u8 {
-    const idx = std.mem.lastIndexOfAny(u8, path, "/\\") orelse return path;
+    const idx = std.mem.findLastAny(u8, path, "/\\") orelse return path;
     return path[idx + 1 ..];
 }
 
@@ -723,7 +723,7 @@ pub fn parseDiagnostic(allocator: std.mem.Allocator, line: []const u8) ?Diagnost
     var msg_start: usize = 0;
     var found = false;
     for (matches) |m| {
-        if (std.mem.indexOf(u8, line, m.marker)) |pos| {
+        if (std.mem.find(u8, line, m.marker)) |pos| {
             chosen_kind = m.kind;
             location_end = pos;
             msg_start = pos + m.marker.len;

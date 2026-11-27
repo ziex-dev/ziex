@@ -34,7 +34,7 @@ pub fn resolveZigExe(environ_map: ?*const std.process.Environ.Map, zig_path: []c
             if (p.len > 0) return p;
         }
         if (m.get("_")) |p| {
-            const base = std.fs.path.basename(p);
+            const base = std.Io.Dir.path.basename(p);
             if (std.mem.eql(u8, base, "zig") or std.mem.eql(u8, base, "zig.exe")) return p;
         }
     }
@@ -80,12 +80,12 @@ fn trySpawnZigFromPath(
     const delimiter: u8 = if (builtin.os.tag == .windows) ';' else ':';
     const exe_name = if (builtin.os.tag == .windows) "zig.exe" else "zig";
     var entries = std.mem.splitScalar(u8, path, delimiter);
-    var candidate_buf: [std.fs.max_path_bytes]u8 = undefined;
+    var candidate_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
 
     while (entries.next()) |entry| {
         if (entry.len == 0) continue;
-        const separator = if (std.mem.endsWith(u8, entry, "/") or std.mem.endsWith(u8, entry, "\\")) "" else std.fs.path.sep_str;
-        const candidate = std.fmt.bufPrint(&candidate_buf, "{s}{s}{s}", .{ entry, separator, exe_name }) catch continue;
+        const separator = if (std.mem.endsWith(u8, entry, "/") or std.mem.endsWith(u8, entry, "\\")) "" else std.Io.Dir.path.sep_str;
+        const candidate = std.mem.print(&candidate_buf, "{s}{s}{s}", .{ entry, separator, exe_name }) catch continue;
 
         copyArgv(argv_buf, options.argv);
         argv_buf[0] = candidate;
@@ -107,7 +107,7 @@ fn trySpawnZigFromUnderscore(
 ) std.process.SpawnError!std.process.Child {
     const environ_map = options.environ_map orelse return error.FileNotFound;
     const underscore = environ_map.get("_") orelse return error.FileNotFound;
-    const base = std.fs.path.basename(underscore);
+    const base = std.Io.Dir.path.basename(underscore);
     if (!std.mem.eql(u8, base, "zig") and !std.mem.eql(u8, base, "zig.exe")) return error.FileNotFound;
     if (std.mem.eql(u8, options.argv[0], underscore)) return error.FileNotFound;
 
@@ -155,7 +155,7 @@ pub fn resolveManifestPath(
     manifest_override: []const u8,
 ) ![]const u8 {
     if (manifest_override.len > 0) return try allocator.dupe(u8, manifest_override);
-    return try std.fs.path.join(allocator, &.{ install_prefix, CliConstant.default_manifest_relpath });
+    return try std.Io.Dir.path.join(allocator, &.{ install_prefix, CliConstant.default_manifest_relpath });
 }
 
 /// Read `transpile_dir` from an app manifest, falling back to the CLI default.
@@ -204,7 +204,7 @@ pub fn resolveExePath(
         return try allocator.dupe(u8, binpath_override);
     }
 
-    const manifest_path = try std.fs.path.join(allocator, &.{ install_prefix, CliConstant.default_manifest_relpath });
+    const manifest_path = try std.Io.Dir.path.join(allocator, &.{ install_prefix, CliConstant.default_manifest_relpath });
     defer allocator.free(manifest_path);
 
     const source = try std.Io.Dir.cwd().readFileAlloc(io, manifest_path, allocator, .unlimited);
@@ -225,12 +225,12 @@ pub fn resolveExePath(
     });
 
     const rel = manifest.exe_path orelse return error.ExecutableNotFound;
-    const path = try std.fs.path.join(allocator, &.{ install_prefix, rel });
+    const path = try std.Io.Dir.path.join(allocator, &.{ install_prefix, rel });
     _ = std.Io.Dir.cwd().statFile(io, path, .{}) catch return error.ExecutableNotFound;
     return path;
 }
 
-const ignore_dirs = [_][]const u8{".well-known" ++ std.fs.path.sep_str ++ "_zx"};
+const ignore_dirs = [_][]const u8{".well-known" ++ std.Io.Dir.path.sep_str ++ "_zx"};
 fn shouldIgnorePath(path: []const u8) bool {
     for (ignore_dirs) |ignore_dir| {
         if (std.mem.startsWith(u8, path, ignore_dir)) return true;
@@ -247,7 +247,7 @@ pub fn copydirs(
     printer: *tui.Printer,
 ) !void {
     for (source_dirs) |source_dir| {
-        const source_path = try std.fs.path.join(allocator, &.{ base_dir, source_dir });
+        const source_path = try std.Io.Dir.path.join(allocator, &.{ base_dir, source_dir });
         defer allocator.free(source_path);
 
         var source = std.Io.Dir.cwd().openDir(io, source_path, .{ .iterate = true }) catch |err| switch (err) {
@@ -269,18 +269,18 @@ pub fn copydirs(
         defer walker.deinit();
 
         while (try walker.next(io)) |entry| {
-            const src_path = try std.fs.path.join(allocator, &.{ source_path, entry.path });
+            const src_path = try std.Io.Dir.path.join(allocator, &.{ source_path, entry.path });
             defer allocator.free(src_path);
 
             const rel_base = if ((public_to_root and std.mem.eql(u8, source_dir, "public")) or
                 std.mem.eql(u8, source_dir, ".")) "" else source_dir;
-            const dst_rel_path = try std.fs.path.join(allocator, &.{
+            const dst_rel_path = try std.Io.Dir.path.join(allocator, &.{
                 rel_base,
                 entry.path,
             });
             defer allocator.free(dst_rel_path);
 
-            const dst_abs_path = try std.fs.path.join(allocator, &.{ dest_dir, dst_rel_path });
+            const dst_abs_path = try std.Io.Dir.path.join(allocator, &.{ dest_dir, dst_rel_path });
             defer allocator.free(dst_abs_path);
 
             switch (entry.kind) {
@@ -288,7 +288,7 @@ pub fn copydirs(
                     if (shouldIgnorePath(dst_rel_path)) continue;
 
                     // Create parent directory if needed
-                    if (std.fs.path.dirname(dst_abs_path)) |parent| {
+                    if (std.Io.Dir.path.dirname(dst_abs_path)) |parent| {
                         std.Io.Dir.cwd().createDirPath(io, parent) catch |err| switch (err) {
                             error.PathAlreadyExists => {},
                             else => return err,
@@ -327,13 +327,13 @@ pub fn getRunnablePath(
     const dest_dir = try cwd.openDir(io, temp_dir.path, .{});
     defer dest_dir.close(io);
 
-    const bin_name = std.fs.path.basename(program_path);
+    const bin_name = std.Io.Dir.path.basename(program_path);
     if (builtin.os.tag == .windows) {
         try cwd.copyFile(program_path, dest_dir, bin_name, io, .{});
-        const stem_len = program_path.len - std.fs.path.extension(program_path).len;
+        const stem_len = program_path.len - std.Io.Dir.path.extension(program_path).len;
         const pdb_path = try std.mem.concat(allocator, u8, &.{ program_path[0..stem_len], ".pdb" });
         defer allocator.free(pdb_path);
-        cwd.copyFile(pdb_path, dest_dir, std.fs.path.basename(pdb_path), io, .{}) catch |err| switch (err) {
+        cwd.copyFile(pdb_path, dest_dir, std.Io.Dir.path.basename(pdb_path), io, .{}) catch |err| switch (err) {
             error.FileNotFound => {},
             else => |e| return e,
         };
@@ -342,7 +342,7 @@ pub fn getRunnablePath(
         cwd.hardLink(program_path, dest_dir, bin_name, io, .{}) catch
             try cwd.copyFile(program_path, dest_dir, bin_name, io, .{});
     }
-    return try std.fs.path.join(allocator, &.{ temp_dir.path, bin_name });
+    return try std.Io.Dir.path.join(allocator, &.{ temp_dir.path, bin_name });
 }
 
 pub fn randInt(io: std.Io, comptime T: type) T {
@@ -352,14 +352,14 @@ pub fn randInt(io: std.Io, comptime T: type) T {
 }
 
 pub const TempDir = struct {
-    const temp_dir = std.fs.path.fmtJoin(&.{ ".zig-cache", "ziex", "tmp" });
+    const temp_dir = std.Io.Dir.path.fmtJoin(&.{ ".zig-cache", "ziex", "tmp" });
     path: []const u8,
 
     pub fn init(io: std.Io, allocator: std.mem.Allocator) !TempDir {
         return .{
             .path = try allocator.print(
                 "{f}{s}{x}",
-                .{ temp_dir, std.fs.path.sep_str, randInt(io, u32) },
+                .{ temp_dir, std.Io.Dir.path.sep_str, randInt(io, u32) },
             ),
         };
     }

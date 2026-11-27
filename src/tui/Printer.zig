@@ -83,21 +83,21 @@ pub fn filepathKind(self: *Printer, file_path: []const u8, kind: FilePathKind) v
             const arena = self.arena.allocator();
 
             // Split path into components
-            var components = std.array_list.Managed([]const u8).init(arena);
-            defer components.deinit();
+            var components: std.ArrayList([]const u8) = .empty;
+            defer components.deinit(arena);
 
             var it = std.mem.splitScalar(u8, file_path, '/');
             while (it.next()) |component| {
                 if (component.len > 0) {
-                    components.append(component) catch return;
+                    components.append(arena, component) catch return;
                 }
             }
 
             if (components.items.len == 0) return;
 
             // Print directories leading to the file
-            var current_path = std.array_list.Managed(u8).init(arena);
-            defer current_path.deinit();
+            var current_path: std.ArrayList(u8) = .empty;
+            defer current_path.deinit(arena);
 
             for (components.items[0 .. components.items.len - 1], 0..) |dir, depth| {
                 if (self.options.file_tree_max_depth) |max_depth| {
@@ -105,9 +105,9 @@ pub fn filepathKind(self: *Printer, file_path: []const u8, kind: FilePathKind) v
                 }
 
                 if (current_path.items.len > 0) {
-                    current_path.append('/') catch return;
+                    current_path.append(arena, '/') catch return;
                 }
-                current_path.appendSlice(dir) catch return;
+                current_path.appendSlice(arena, dir) catch return;
 
                 const dir_path = current_path.items;
                 const key = arena.dupe(u8, dir_path) catch return;

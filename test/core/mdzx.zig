@@ -13,58 +13,58 @@ fn transpile(source: []const u8) ![]const u8 {
 test "heading transpiles to h1" {
     const out = try transpile("# Hello\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<h1") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "Hello") != null);
+    try testing.expect(std.mem.find(u8, out, "<h1") != null);
+    try testing.expect(std.mem.find(u8, out, "Hello") != null);
 }
 
 test "paragraph with emphasis" {
     const out = try transpile("This is *italic* text.\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<em>") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "italic") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "</em>") != null);
+    try testing.expect(std.mem.find(u8, out, "<em>") != null);
+    try testing.expect(std.mem.find(u8, out, "italic") != null);
+    try testing.expect(std.mem.find(u8, out, "</em>") != null);
 }
 
 test "strong emphasis" {
     const out = try transpile("Say **bold** please.\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<strong>") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "bold") != null);
+    try testing.expect(std.mem.find(u8, out, "<strong>") != null);
+    try testing.expect(std.mem.find(u8, out, "bold") != null);
 }
 
 test "strikethrough" {
     const out = try transpile("Not ~~gone~~ yet.\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<s>") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "gone") != null);
+    try testing.expect(std.mem.find(u8, out, "<s>") != null);
+    try testing.expect(std.mem.find(u8, out, "gone") != null);
 }
 
 test "inline code" {
     const out = try transpile("Use `code` here.\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<code>") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "code") != null);
+    try testing.expect(std.mem.find(u8, out, "<code>") != null);
+    try testing.expect(std.mem.find(u8, out, "code") != null);
 }
 
 test "inline link" {
     const out = try transpile("Go [home](https://example.com).\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<a href=\"https://example.com\">") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "home") != null);
+    try testing.expect(std.mem.find(u8, out, "<a href=\"https://example.com\">") != null);
+    try testing.expect(std.mem.find(u8, out, "home") != null);
 }
 
 test "image" {
     const out = try transpile("![alt](https://example.com/a.png)\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<img") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "src=\"https://example.com/a.png\"") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "alt=\"alt\"") != null);
+    try testing.expect(std.mem.find(u8, out, "<img") != null);
+    try testing.expect(std.mem.find(u8, out, "src=\"https://example.com/a.png\"") != null);
+    try testing.expect(std.mem.find(u8, out, "alt=\"alt\"") != null);
 }
 
 test "thematic break" {
     const out = try transpile("***\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<hr") != null);
+    try testing.expect(std.mem.find(u8, out, "<hr") != null);
 }
 
 test "fenced code block" {
@@ -75,20 +75,20 @@ test "fenced code block" {
         \\
     );
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<pre") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "language-zig") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "const x = 1;") != null);
+    try testing.expect(std.mem.find(u8, out, "<pre") != null);
+    try testing.expect(std.mem.find(u8, out, "language-zig") != null);
+    try testing.expect(std.mem.find(u8, out, "const x = 1;") != null);
     // Closing fence must not appear inside the code element
-    try testing.expect(std.mem.indexOf(u8, out, "1;```") == null);
-    try testing.expect(std.mem.indexOf(u8, out, "1;\n```") == null);
+    try testing.expect(std.mem.find(u8, out, "1;```") == null);
+    try testing.expect(std.mem.find(u8, out, "1;\n```") == null);
 }
 
 test "emits render and default page" {
     const out = try transpile("# Hi\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn render(allocator:") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "mdzx.page(@This()") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn Page(") != null);
+    try testing.expect(std.mem.find(u8, out, "pub fn render(allocator:") != null);
+    try testing.expect(std.mem.find(u8, out, "mdzx.page(@This()") != null);
+    try testing.expect(std.mem.find(u8, out, "pub fn Page(") != null);
 }
 
 test "author page suppresses default page" {
@@ -106,12 +106,12 @@ test "author page suppresses default page" {
     defer testing.allocator.free(out);
     var count: usize = 0;
     var rest: []const u8 = out;
-    while (std.mem.indexOf(u8, rest, "pub fn Page(")) |idx| {
+    while (std.mem.find(u8, rest, "pub fn Page(")) |idx| {
         count += 1;
         rest = rest[idx + 1 ..];
     }
     try testing.expectEqual(@as(usize, 1), count);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn render(allocator:") != null);
+    try testing.expect(std.mem.find(u8, out, "pub fn render(allocator:") != null);
 }
 
 test "user-declared render is an error" {
@@ -142,9 +142,9 @@ test "props emits component ctx render and skips default page" {
         \\
     );
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn render(ctx: *@import(\"zx\").ComponentCtx(Props))") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "props = ctx.props;") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn Page(") == null);
+    try testing.expect(std.mem.find(u8, out, "pub fn render(ctx: *@import(\"zx\").ComponentCtx(Props))") != null);
+    try testing.expect(std.mem.find(u8, out, "props = ctx.props;") != null);
+    try testing.expect(std.mem.find(u8, out, "pub fn Page(") == null);
 }
 
 test "pure md rejects zx embeds" {
@@ -163,8 +163,8 @@ test "pure md allows markdown-only" {
         .emit_default_page = true,
     });
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn render(allocator:") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn Page(") != null);
+    try testing.expect(std.mem.find(u8, out, "pub fn render(allocator:") != null);
+    try testing.expect(std.mem.find(u8, out, "pub fn Page(") != null);
 }
 
 test "non-page path skips default page" {
@@ -172,8 +172,8 @@ test "non-page path skips default page" {
         .emit_default_page = false,
     });
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn render(allocator:") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "pub fn Page(") == null);
+    try testing.expect(std.mem.find(u8, out, "pub fn render(allocator:") != null);
+    try testing.expect(std.mem.find(u8, out, "pub fn Page(") == null);
 }
 
 test "unordered list" {
@@ -183,9 +183,9 @@ test "unordered list" {
         \\
     );
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<ul") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<li") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "one") != null);
+    try testing.expect(std.mem.find(u8, out, "<ul") != null);
+    try testing.expect(std.mem.find(u8, out, "<li") != null);
+    try testing.expect(std.mem.find(u8, out, "one") != null);
 }
 
 test "ordered list" {
@@ -195,8 +195,8 @@ test "ordered list" {
         \\
     );
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<ol") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "first") != null);
+    try testing.expect(std.mem.find(u8, out, "<ol") != null);
+    try testing.expect(std.mem.find(u8, out, "first") != null);
 }
 
 test "block quote" {
@@ -205,22 +205,22 @@ test "block quote" {
         \\
     );
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<blockquote") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "quoted") != null);
+    try testing.expect(std.mem.find(u8, out, "<blockquote") != null);
+    try testing.expect(std.mem.find(u8, out, "quoted") != null);
 }
 
 test "multiple headings" {
     const out = try transpile("# A\n\n## B\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<h1") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<h2") != null);
+    try testing.expect(std.mem.find(u8, out, "<h1") != null);
+    try testing.expect(std.mem.find(u8, out, "<h2") != null);
 }
 
 test "zx component block" {
     const out = try transpile("<Button label=\"Go\" />\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<Button") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "label=\"Go\"") != null);
+    try testing.expect(std.mem.find(u8, out, "<Button") != null);
+    try testing.expect(std.mem.find(u8, out, "label=\"Go\"") != null);
 }
 
 test "frontmatter zig decls preserved" {
@@ -234,9 +234,9 @@ test "frontmatter zig decls preserved" {
     ;
     const out = try transpile(src);
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "pub const title = \"Hi\";") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<h1") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "Body") != null);
+    try testing.expect(std.mem.find(u8, out, "pub const title = \"Hi\";") != null);
+    try testing.expect(std.mem.find(u8, out, "<h1") != null);
+    try testing.expect(std.mem.find(u8, out, "Body") != null);
 }
 
 test "dual grammar, block leaves opaque inline, inline parses emphasis" {
@@ -302,7 +302,7 @@ test "fixture basic.mdzx" {
     defer testing.allocator.free(source);
     const out = try transpile(source);
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<h1") != null);
+    try testing.expect(std.mem.find(u8, out, "<h1") != null);
 }
 
 test "braces in fenced code stay literal" {
@@ -313,50 +313,50 @@ test "braces in fenced code stay literal" {
         \\
     );
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "type Point") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<pre") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "language-ts") != null);
+    try testing.expect(std.mem.find(u8, out, "type Point") != null);
+    try testing.expect(std.mem.find(u8, out, "<pre") != null);
+    try testing.expect(std.mem.find(u8, out, "language-ts") != null);
     // Whole fence content wrapped as a ZX string expression
-    try testing.expect(std.mem.indexOf(u8, out, "{\"type Point") != null);
+    try testing.expect(std.mem.find(u8, out, "{\"type Point") != null);
 }
 
 test "braces in inline code are zx-escaped" {
     const out = try transpile("Use `{expressions}` here.\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<code>") != null);
-    try testing.expect(std.mem.indexOf(u8, out,
+    try testing.expect(std.mem.find(u8, out, "<code>") != null);
+    try testing.expect(std.mem.find(u8, out,
         \\{"{expressions}"}
     ) != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<code>{expressions}</code>") == null);
+    try testing.expect(std.mem.find(u8, out, "<code>{expressions}</code>") == null);
 }
 
 test "paragraph keeps plain text around markup" {
     const out = try transpile("Use **bold**, *italic*, and `code`.\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "Use ") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<strong>") != null);
-    try testing.expect(std.mem.indexOf(u8, out, ", ") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<em>") != null);
-    try testing.expect(std.mem.indexOf(u8, out, " and ") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<code>") != null);
+    try testing.expect(std.mem.find(u8, out, "Use ") != null);
+    try testing.expect(std.mem.find(u8, out, "<strong>") != null);
+    try testing.expect(std.mem.find(u8, out, ", ") != null);
+    try testing.expect(std.mem.find(u8, out, "<em>") != null);
+    try testing.expect(std.mem.find(u8, out, " and ") != null);
+    try testing.expect(std.mem.find(u8, out, "<code>") != null);
 }
 
 test "backslash escapes preserve surrounding text" {
     const out = try transpile("Escaped: \\*not emphasis\\*\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "Escaped: ") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "not emphasis") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "<em>") == null);
+    try testing.expect(std.mem.find(u8, out, "Escaped: ") != null);
+    try testing.expect(std.mem.find(u8, out, "not emphasis") != null);
+    try testing.expect(std.mem.find(u8, out, "<em>") == null);
 }
 
 test "ampersand in heading is not double-escaped" {
     const out = try transpile("## Quote & break\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<h2") != null);
+    try testing.expect(std.mem.find(u8, out, "<h2") != null);
     // Emitted as a ZX string expr with a raw `&` (runtime escapes once)
-    try testing.expect(std.mem.indexOf(u8, out, "Quote & break") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "&amp;amp;") == null);
-    try testing.expect(std.mem.indexOf(u8, out, "{\"Quote & break\"}") != null);
+    try testing.expect(std.mem.find(u8, out, "Quote & break") != null);
+    try testing.expect(std.mem.find(u8, out, "&amp;amp;") == null);
+    try testing.expect(std.mem.find(u8, out, "{\"Quote & break\"}") != null);
 }
 
 test "block quote keeps nested lines without leaking markers" {
@@ -367,19 +367,19 @@ test "block quote keeps nested lines without leaking markers" {
         \\
     );
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<blockquote") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "first line") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "second line") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "&amp;gt;") == null);
+    try testing.expect(std.mem.find(u8, out, "<blockquote") != null);
+    try testing.expect(std.mem.find(u8, out, "first line") != null);
+    try testing.expect(std.mem.find(u8, out, "second line") != null);
+    try testing.expect(std.mem.find(u8, out, "&amp;gt;") == null);
     // Contiguous quote lines should not leave a marker glued to body text
-    try testing.expect(std.mem.indexOf(u8, out, "> second") == null);
+    try testing.expect(std.mem.find(u8, out, "> second") == null);
 }
 
 test "inline link at line start is not a link-ref definition" {
     const out = try transpile("[Back to MDZX example](/examples/md)\n");
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "<a href=\"/examples/md\">") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "Back to MDZX example") != null);
+    try testing.expect(std.mem.find(u8, out, "<a href=\"/examples/md\">") != null);
+    try testing.expect(std.mem.find(u8, out, "Back to MDZX example") != null);
 }
 
 test "task list markers become checkboxes" {
@@ -389,11 +389,11 @@ test "task list markers become checkboxes" {
         \\
     );
     defer testing.allocator.free(out);
-    try testing.expect(std.mem.indexOf(u8, out, "type=\"checkbox\"") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "checked=\"\"") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "Task done") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "Task open") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "[x] Task") == null);
+    try testing.expect(std.mem.find(u8, out, "type=\"checkbox\"") != null);
+    try testing.expect(std.mem.find(u8, out, "checked=\"\"") != null);
+    try testing.expect(std.mem.find(u8, out, "Task done") != null);
+    try testing.expect(std.mem.find(u8, out, "Task open") != null);
+    try testing.expect(std.mem.find(u8, out, "[x] Task") == null);
 }
 
 test "multiple fenced blocks" {
@@ -410,15 +410,15 @@ test "multiple fenced blocks" {
     defer testing.allocator.free(out);
     var n: usize = 0;
     var rest: []const u8 = out;
-    while (std.mem.indexOf(u8, rest, "<pre")) |i| {
+    while (std.mem.find(u8, rest, "<pre")) |i| {
         n += 1;
         rest = rest[i + 4 ..];
     }
     try testing.expectEqual(@as(usize, 2), n);
-    try testing.expect(std.mem.indexOf(u8, out, "language-js") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "language-ts") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "console.log(1);") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "type Point") != null);
+    try testing.expect(std.mem.find(u8, out, "language-js") != null);
+    try testing.expect(std.mem.find(u8, out, "language-ts") != null);
+    try testing.expect(std.mem.find(u8, out, "console.log(1);") != null);
+    try testing.expect(std.mem.find(u8, out, "type Point") != null);
 }
 
 // Ensure lang module exports Markdown

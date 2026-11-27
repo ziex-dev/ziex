@@ -112,8 +112,8 @@ fn renderSection(out: *Out, component: AsyncComponent) void {
 /// Stream method that renders HTML while collecting async components
 /// Writes placeholders for @async={.stream} components and returns them for parallel rendering
 pub fn stream(self: zx.Component, allocator: std.mem.Allocator, writer: *std.Io.Writer, options: RenderOptions) ![]AsyncComponent {
-    var async_components = std.array_list.Managed(AsyncComponent).init(allocator);
-    errdefer async_components.deinit();
+    var async_components: AsyncCollector = .{ .allocator = allocator };
+    errdefer async_components.list.deinit(allocator);
 
     var counter: u32 = 0;
     try render(self, writer, .{
@@ -123,12 +123,17 @@ pub fn stream(self: zx.Component, allocator: std.mem.Allocator, writer: *std.Io.
         .base_path = options.base_path,
         .io = options.io,
     });
-    return async_components.toOwnedSlice();
+    return async_components.list.toOwnedSlice(allocator);
 }
+
+const AsyncCollector = struct {
+    list: std.ArrayList(AsyncComponent) = .empty,
+    allocator: std.mem.Allocator,
+};
 
 pub const RenderOptions = struct {
     escaping: ?zx.BuiltinAttribute.Escaping = .html,
-    async_components: ?*std.array_list.Managed(AsyncComponent) = null,
+    async_components: ?*AsyncCollector = null,
     async_counter: ?*u32 = null,
     base_path: ?[]const u8 = null,
     section: ?*Section = null,
@@ -179,9 +184,9 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
                         if (caching.key) |custom_key| {
                             // TODO: figure out a better way generate unique stable component id
                             // for now we will just use the custom key directly as the cache key
-                            break :key_blk try std.fmt.bufPrint(&key_buf, "cmp:{s}", .{custom_key});
+                            break :key_blk try std.mem.print(&key_buf, "cmp:{s}", .{custom_key});
                         } else {
-                            break :key_blk try std.fmt.bufPrint(&key_buf, "cmp:{x}:{x}", .{
+                            break :key_blk try std.mem.print(&key_buf, "cmp:{x}:{x}", .{
                                 @intFromPtr(func.vtable.call),
                                 @intFromPtr(func.data),
                             });
@@ -240,7 +245,8 @@ pub fn render(self: zx.Component, writer: *std.Io.Writer, options: RenderOptions
                 try writer.writeAll("</div>");
 
                 // Collect for async rendering
-                try options.async_components.?.append(.{
+                const collector = options.async_components.?;
+                try collector.list.append(collector.allocator, .{
                     .id = async_id,
                     .component = self,
                 });

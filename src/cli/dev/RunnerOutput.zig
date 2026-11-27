@@ -156,7 +156,7 @@ fn forward(state: *State, file: Io.File, bytes: []const u8) void {
 fn forwardableLen(state: *const State, bytes: []const u8, final: bool) usize {
     const spinner = state.spinner orelse return bytes.len;
     if (final or !spinner.isSpinning() or bytes.len >= max_held_partial_line) return bytes.len;
-    return if (std.mem.lastIndexOfScalar(u8, bytes, '\n')) |i| i + 1 else 0;
+    return if (std.mem.findScalarLast(u8, bytes, '\n')) |i| i + 1 else 0;
 }
 
 fn drainBuffered(state: *State, reader: *Io.Reader, file: Io.File, final: bool) void {
@@ -175,7 +175,7 @@ fn drainStdout(state: *State, reader: *Io.Reader, final: bool) void {
 fn drainStderr(state: *State, reader: *Io.Reader, final: bool) void {
     if (!state.first_line_captured.load(.acquire)) {
         const bytes = reader.buffered();
-        const newline = std.mem.indexOfScalar(u8, bytes, '\n');
+        const newline = std.mem.findScalar(u8, bytes, '\n');
         if (newline == null and !final) return;
         if (newline == null and bytes.len == 0) return;
 
@@ -216,7 +216,7 @@ fn drainStderrLines(state: *State, reader: *Io.Reader, final: bool) void {
     defer out.deinit(allocator);
 
     const bytes = reader.buffered();
-    const complete = if (std.mem.lastIndexOfScalar(u8, bytes, '\n')) |i| i + 1 else 0;
+    const complete = if (std.mem.findScalarLast(u8, bytes, '\n')) |i| i + 1 else 0;
     var lines = std.mem.splitScalar(u8, bytes[0..complete -| 1], '\n');
     if (complete > 0) while (lines.next()) |line| {
         switch (state.leaks.feed(line) catch .pass) {
@@ -291,7 +291,7 @@ fn appendLeakSummary(state: *State, out: *std.ArrayList(u8)) void {
             group.col = loc.col;
         }
         const place = (@as(u64, loc.line) << 32) | loc.col;
-        if (std.mem.indexOfScalar(u64, group.places.items, place) == null) group.places.append(allocator, place) catch {};
+        if (std.mem.findScalar(u64, group.places.items, place) == null) group.places.append(allocator, place) catch {};
     }
 
     // Same locations as last time (counts vary with traffic): one-line reminder.
@@ -374,9 +374,9 @@ fn leakLocation(state: *State, frames: []const LeakReport.Frame) ?LeakLocation {
 
 fn projectPath(state: *State, file: []const u8, user_only: bool) ?[]u8 {
     const allocator = state.allocator;
-    const abs = std.fs.path.resolve(allocator, &.{ state.cwd, file }) catch return null;
+    const abs = std.Io.Dir.path.resolveAlloc(allocator, &.{ state.cwd, file }) catch return null;
     defer allocator.free(abs);
-    if (abs.len <= state.cwd.len or !std.mem.startsWith(u8, abs, state.cwd) or !std.fs.path.isSep(abs[state.cwd.len])) return null;
+    if (abs.len <= state.cwd.len or !std.mem.startsWith(u8, abs, state.cwd) or !std.Io.Dir.path.isSep(abs[state.cwd.len])) return null;
     const rel = abs[state.cwd.len + 1 ..];
     if (user_only and (std.mem.startsWith(u8, rel, "zig-pkg") or std.mem.startsWith(u8, rel, ".zig-cache"))) return null;
     return allocator.dupe(u8, rel) catch null;

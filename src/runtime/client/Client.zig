@@ -306,14 +306,14 @@ pub fn render(self: *Client, cmp: ComponentMeta) !void {
 fn instanceKey(self: *Client, cmp_id: []const u8, occurrence: usize) ![]const u8 {
     if (occurrence == 0) return cmp_id;
     var buf: [128]u8 = undefined;
-    const key = try std.fmt.bufPrint(&buf, "{s}#{d}", .{ cmp_id, occurrence });
+    const key = try std.mem.print(&buf, "{s}#{d}", .{ cmp_id, occurrence });
     if (self.vtrees.getKey(key)) |existing| return existing;
     return try self.allocator.dupe(u8, key);
 }
 
 /// Splits an instance key from `instanceKey` back into id and occurrence.
 pub fn parseInstanceKey(key: []const u8) struct { id: []const u8, occurrence: usize } {
-    const hash = std.mem.lastIndexOfScalar(u8, key, '#') orelse return .{ .id = key, .occurrence = 0 };
+    const hash = std.mem.findScalarLast(u8, key, '#') orelse return .{ .id = key, .occurrence = 0 };
     const occurrence = std.fmt.parseInt(usize, key[hash + 1 ..], 10) catch return .{ .id = key, .occurrence = 0 };
     return .{ .id = key[0..hash], .occurrence = occurrence };
 }

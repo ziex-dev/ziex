@@ -18,7 +18,7 @@ test "fuzz: html escape/unescape roundtrip" {
             defer back.deinit();
 
             try html.escapeAttr(&w.writer, input);
-            for (w.written()) |c| try std.testing.expect(std.mem.indexOfScalar(u8, "<>\"'", c) == null);
+            for (w.written()) |c| try std.testing.expect(std.mem.findScalar(u8, "<>\"'", c) == null);
             try html.unescape(&back.writer, w.written());
             try std.testing.expectEqualSlices(u8, input, back.written());
 
@@ -81,7 +81,7 @@ test "fuzz: email address parse" {
             const addr = zx.Email.Address.parse(input) catch return;
             // Anything accepted must be safe to put in a header.
             for (addr.email) |c| try std.testing.expect(c > ' ' and c != 0x7f);
-            if (addr.name) |n| try std.testing.expect(std.mem.indexOfAny(u8, n, "\r\n") == null);
+            if (addr.name) |n| try std.testing.expect(std.mem.findAny(u8, n, "\r\n") == null);
         }
     }.run, .{ .corpus = util.seeds(&.{ "a@b.com", "Name <a@b.com>", "\"Q\" <x@y>", "<>" }) });
 }
@@ -103,12 +103,12 @@ test "fuzz: route pattern matching" {
             if (!zx.Router.tryExtractParams(pattern, path, &m)) return;
             try std.testing.expect(m.param_count <= m.params.len);
             for (m.params[0..m.param_count]) |p| {
-                try std.testing.expect(std.mem.indexOfScalar(u8, p.value, '/') == null);
-                try std.testing.expect(std.mem.indexOf(u8, path, p.value) != null);
+                try std.testing.expect(std.mem.findScalar(u8, p.value, '/') == null);
+                try std.testing.expect(std.mem.find(u8, path, p.value) != null);
             }
             // A static pattern only matches itself (modulo the edge slashes). Route
             // patterns come from the file tree, so they never contain empty segments.
-            if (std.mem.indexOfAny(u8, pattern, ":*") == null and std.mem.indexOf(u8, pattern, "//") == null) {
+            if (std.mem.findAny(u8, pattern, ":*") == null and std.mem.find(u8, pattern, "//") == null) {
                 try std.testing.expectEqualStrings(trimOne(pattern), trimOne(path));
             }
         }

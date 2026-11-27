@@ -58,7 +58,7 @@ pub fn buildStatic(ctx: CommandContext, args: anytype) !void {
     }
 
     // Read install manifest for executable path and page routes.
-    const manifest_path = try std.fs.path.join(ctx.allocator, &.{ install_prefix, "manifest", "app.zon" });
+    const manifest_path = try std.Io.Dir.path.join(ctx.allocator, &.{ install_prefix, "manifest", "app.zon" });
     defer ctx.allocator.free(manifest_path);
 
     const manifest_source = std.Io.Dir.cwd().readFileAlloc(io, manifest_path, ctx.allocator, .unlimited) catch |err| {
@@ -121,7 +121,7 @@ pub fn buildStatic(ctx: CommandContext, args: anytype) !void {
     //     else => {},
     // };
 
-    const staticdir = try std.fs.path.join(ctx.allocator, &.{ install_prefix, "static" });
+    const staticdir = try std.Io.Dir.path.join(ctx.allocator, &.{ install_prefix, "static" });
     defer ctx.allocator.free(staticdir);
 
     log.debug("Exporting app! binpath={s} rootdir={s}", .{ exe_path, install_prefix });
@@ -136,7 +136,7 @@ pub fn buildStatic(ctx: CommandContext, args: anytype) !void {
             const route = Server.SerilizableAppMeta.Route{
                 .path = entry.path,
                 .has_notfound = entry.notfound_import != null,
-                .is_dynamic = std.mem.indexOf(u8, entry.path, ":") != null or std.mem.indexOf(u8, entry.path, "*") != null,
+                .is_dynamic = std.mem.find(u8, entry.path, ":") != null or std.mem.find(u8, entry.path, "*") != null,
             };
 
             log.debug("Export route {s} dynamic={} notfound={}", .{ route.path, route.is_dynamic, route.has_notfound });
@@ -391,10 +391,10 @@ fn processRoute(
     const response_text = aw.written();
     log.debug("Fetched {s} kind={s} status={} body_len={d}", .{ route.path, @tagName(export_type), response.head.status, response_text.len });
 
-    const output_path = try std.fs.path.join(allocator, &.{ outdir, export_path.path });
+    const output_path = try std.Io.Dir.path.join(allocator, &.{ outdir, export_path.path });
     defer allocator.free(output_path);
 
-    const output_dir = std.fs.path.dirname(output_path);
+    const output_dir = std.Io.Dir.path.dirname(output_path);
     if (output_dir) |dir| {
         try std.Io.Dir.cwd().createDirPath(io, dir);
     }
@@ -411,36 +411,36 @@ fn processRoute(
 fn formatRouteDisplayPath(allocator: std.mem.Allocator, route_path: []const u8) ![]const u8 {
     const stripped = if (route_path.len > 0 and route_path[0] == '/') route_path[1..] else route_path;
 
-    var out = std.array_list.Managed(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
 
     var first = true;
     var i: usize = 0;
     while (i <= stripped.len) {
         const end = if (i < stripped.len)
-            std.mem.indexOfScalarPos(u8, stripped, i, '/') orelse stripped.len
+            std.mem.findScalarPos(u8, stripped, i, '/') orelse stripped.len
         else
             stripped.len;
         const seg = stripped[i..end];
 
-        if (!first) try out.append('/');
+        if (!first) try out.append(allocator, '/');
         first = false;
 
         if (seg.len > 0 and seg[0] == ':') {
-            try out.append('[');
-            try out.appendSlice(seg[1..]);
-            try out.append(']');
+            try out.append(allocator, '[');
+            try out.appendSlice(allocator, seg[1..]);
+            try out.append(allocator, ']');
         } else if (seg.len == 1 and seg[0] == '*') {
-            try out.appendSlice("[..]");
+            try out.appendSlice(allocator, "[..]");
         } else {
-            try out.appendSlice(seg);
+            try out.appendSlice(allocator, seg);
         }
 
         if (end == stripped.len) break;
         i = end + 1;
     }
 
-    return out.toOwnedSlice();
+    return out.toOwnedSlice(allocator);
 }
 
 fn responseHeaderEquals(head: std.http.Client.Response.Head, name: []const u8, value: []const u8) bool {
@@ -479,7 +479,7 @@ fn resolveExportFilePath(allocator: std.mem.Allocator, route_path: []const u8, e
             }
         }
         try path_components.append(allocator, "404.html");
-        return .{ .path = try std.fs.path.join(allocator, path_components.items), .owned = true };
+        return .{ .path = try std.Io.Dir.path.join(allocator, path_components.items), .owned = true };
     }
 
     if (std.mem.eql(u8, route_path, "/")) {
@@ -502,24 +502,24 @@ fn resolveExportFilePath(allocator: std.mem.Allocator, route_path: []const u8, e
     if (route_path[route_path.len - 1] == '/') {
         // For paths ending in "/", create directory/index.html structure
         try path_components.append(allocator, "index.html");
-        return .{ .path = try std.fs.path.join(allocator, path_components.items), .owned = true };
+        return .{ .path = try std.Io.Dir.path.join(allocator, path_components.items), .owned = true };
     }
 
     // Get the last component (filename)
     const last_component = path_components.items[path_components.items.len - 1];
     // Add .html extension if it doesn't have one
-    if (std.fs.path.extension(last_component).len == 0) {
+    if (std.Io.Dir.path.extension(last_component).len == 0) {
         const last_with_ext = try allocator.print("{s}.html", .{last_component});
         defer allocator.free(last_with_ext);
 
         // Replace the last component with the one that has .html extension
         _ = path_components.pop();
         try path_components.append(allocator, last_with_ext);
-        return .{ .path = try std.fs.path.join(allocator, path_components.items), .owned = true };
+        return .{ .path = try std.Io.Dir.path.join(allocator, path_components.items), .owned = true };
     }
 
     // Path already has an extension, join all components
-    return .{ .path = try std.fs.path.join(allocator, path_components.items), .owned = true };
+    return .{ .path = try std.Io.Dir.path.join(allocator, path_components.items), .owned = true };
 }
 
 /// Fetch static params from server via x-zx-static-data header
@@ -574,44 +574,44 @@ fn fetchStaticParams(io: std.Io, allocator: std.mem.Allocator, host: []const u8,
     };
 
     // Expand dynamic paths
-    var expanded = std.array_list.Managed([]const u8).init(allocator);
+    var expanded: std.ArrayList([]const u8) = .empty;
     errdefer {
         for (expanded.items) |path| allocator.free(path);
-        expanded.deinit();
+        expanded.deinit(allocator);
     }
 
     for (parsed) |param_set| {
         const expanded_path = expandDynamicPath(allocator, route_path, param_set) catch continue;
-        expanded.append(expanded_path) catch {
+        expanded.append(allocator, expanded_path) catch {
             allocator.free(expanded_path);
             continue;
         };
     }
 
     if (expanded.items.len == 0) {
-        expanded.deinit();
+        expanded.deinit(allocator);
         return .{ .items = &.{}, .allocator = null };
     }
 
-    const items = try expanded.toOwnedSlice();
+    const items = try expanded.toOwnedSlice(allocator);
     return .{ .items = items, .allocator = allocator };
 }
 
 /// Replace `:param` and `*` dynamic segments in a route path with actual values.
 fn expandDynamicPath(allocator: std.mem.Allocator, route_path: []const u8, params: []const options_mod.StaticParam) ![]const u8 {
-    var out = std.array_list.Managed(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
 
     var i: usize = 0;
     var first = true;
     while (i <= route_path.len) {
         const end = if (i < route_path.len)
-            std.mem.indexOfScalarPos(u8, route_path, i, '/') orelse route_path.len
+            std.mem.findScalarPos(u8, route_path, i, '/') orelse route_path.len
         else
             route_path.len;
         const seg = route_path[i..end];
 
-        if (!first) try out.append('/');
+        if (!first) try out.append(allocator, '/');
         first = false;
 
         const replacement: ?[]const u8 = if (seg.len > 0 and seg[0] == ':')
@@ -622,16 +622,16 @@ fn expandDynamicPath(allocator: std.mem.Allocator, route_path: []const u8, param
             null;
 
         if (replacement) |value| {
-            try out.appendSlice(value);
+            try out.appendSlice(allocator, value);
         } else {
-            try out.appendSlice(seg);
+            try out.appendSlice(allocator, seg);
         }
 
         if (end == route_path.len) break;
         i = end + 1;
     }
 
-    return out.toOwnedSlice();
+    return out.toOwnedSlice(allocator);
 }
 
 fn killExportApp(child: *std.process.Child, io: std.Io) void {

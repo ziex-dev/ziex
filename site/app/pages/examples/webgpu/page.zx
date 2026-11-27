@@ -140,7 +140,7 @@ fn frame(args: []const js.Value) void {
     frames += 1;
     if (frames == 1 or frames % 30 == 0) {
         var buf: [64]u8 = undefined;
-        status(std.fmt.bufPrint(&buf, "Rendering with WebGPU · frame {d}", .{frames}) catch "Rendering with WebGPU");
+        status(std.mem.print(&buf, "Rendering with WebGPU · frame {d}", .{frames}) catch "Rendering with WebGPU");
     }
     _ = web.window().requestAnimationFrame(.fromFn(frame, .{ .once = true }));
 }

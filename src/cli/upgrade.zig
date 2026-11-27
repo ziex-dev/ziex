@@ -21,7 +21,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
                 break :blk [_][:0]const u8{ "powershell", "-c", "irm " ++ zx_info.homepage["https://".len..] ++ "/install.ps1 | iex" };
             } else {
                 const prefix = if (std.mem.startsWith(u8, version, "v")) "" else "v";
-                maybe_cmd_str = try std.fmt.allocPrintSentinel(ctx.allocator, "& ([scriptblock]::Create((irm {s}/install.ps1))) -Version '{s}{s}'", .{ zx_info.homepage["https://".len..], prefix, version }, 0);
+                maybe_cmd_str = try ctx.allocator.printSentinel("& ([scriptblock]::Create((irm {s}/install.ps1))) -Version '{s}{s}'", .{ zx_info.homepage["https://".len..], prefix, version }, 0);
                 break :blk [_][:0]const u8{ "powershell", "-c", maybe_cmd_str.? };
             }
         },
@@ -30,7 +30,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
                 break :blk [_][:0]const u8{ "bash", "-c", "curl -fsSL " ++ zx_info.homepage ++ "/install | bash" };
             } else {
                 const prefix = if (std.mem.startsWith(u8, version, "v")) "" else "v";
-                maybe_cmd_str = try std.fmt.allocPrintSentinel(ctx.allocator, "curl -fsSL {s}/install | bash -s -- {s}{s}", .{ zx_info.homepage, prefix, version }, 0);
+                maybe_cmd_str = try ctx.allocator.printSentinel("curl -fsSL {s}/install | bash -s -- {s}{s}", .{ zx_info.homepage, prefix, version }, 0);
                 break :blk [_][:0]const u8{ "bash", "-c", maybe_cmd_str.? };
             }
         },

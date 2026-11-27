@@ -96,7 +96,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
             if (template.name != null and template.name.? != template_name) continue;
         }
 
-        const output_path = try std.fs.path.join(ctx.allocator, &.{ init_path, template.path });
+        const output_path = try std.Io.Dir.path.join(ctx.allocator, &.{ init_path, template.path });
         defer ctx.allocator.free(output_path);
 
         // Skip if file exists and existing flag is set
@@ -111,7 +111,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
             if (file_exists) continue;
         }
 
-        if (std.fs.path.dirname(output_path)) |parent_dir| {
+        if (std.Io.Dir.path.dirname(output_path)) |parent_dir| {
             try std.Io.Dir.cwd().createDirPath(io, parent_dir);
         }
 
@@ -152,7 +152,7 @@ fn detectExeName(io: std.Io, allocator: std.mem.Allocator, init_path: []const u8
 }
 
 fn scanMetaExeName(io: std.Io, allocator: std.mem.Allocator, init_path: []const u8) ![]const u8 {
-    const bin_dir_path = try std.fs.path.join(allocator, &.{ init_path, "zig-out", "bin" });
+    const bin_dir_path = try std.Io.Dir.path.join(allocator, &.{ init_path, "zig-out", "bin" });
     defer allocator.free(bin_dir_path);
 
     var dir = try std.Io.Dir.cwd().openDir(io, bin_dir_path, .{ .iterate = true });
@@ -170,14 +170,14 @@ fn scanMetaExeName(io: std.Io, allocator: std.mem.Allocator, init_path: []const 
 }
 
 fn parseZonName(io: std.Io, allocator: std.mem.Allocator, init_path: []const u8) ![]const u8 {
-    const zon_path = try std.fs.path.join(allocator, &.{ init_path, "build.zig.zon" });
+    const zon_path = try std.Io.Dir.path.join(allocator, &.{ init_path, "build.zig.zon" });
     defer allocator.free(zon_path);
 
     const data = try std.Io.Dir.cwd().readFileAlloc(io, zon_path, allocator, .limited(64 * 1024));
     defer allocator.free(data);
 
     const needle = ".name";
-    var idx = std.mem.indexOf(u8, data, needle) orelse return error.NameNotFound;
+    var idx = std.mem.find(u8, data, needle) orelse return error.NameNotFound;
     idx += needle.len;
     while (idx < data.len and (data[idx] == ' ' or data[idx] == '=')) idx += 1;
     if (idx >= data.len or data[idx] != '.') return error.NameNotFound;
@@ -193,7 +193,7 @@ fn renderDockerTemplate(allocator: std.mem.Allocator, content: []const u8, bin_n
     defer allocator.free(with_bin);
 
     var port_buf: [16]u8 = undefined;
-    const port_str = std.fmt.bufPrint(&port_buf, "{d}", .{default_port}) catch unreachable;
+    const port_str = std.mem.print(&port_buf, "{d}", .{default_port}) catch unreachable;
     return std.mem.replaceOwned(u8, allocator, with_bin, "$PORT", port_str);
 }
 

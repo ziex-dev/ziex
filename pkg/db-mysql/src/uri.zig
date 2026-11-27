@@ -90,7 +90,7 @@ pub fn parse(gpa: std.mem.Allocator, url: []const u8) !Config {
         const query = try q.toRawMaybeAlloc(a);
         var it = std.mem.tokenizeScalar(u8, query, '&');
         while (it.next()) |pair| {
-            const eq = std.mem.indexOfScalar(u8, pair, '=') orelse continue;
+            const eq = std.mem.findScalar(u8, pair, '=') orelse continue;
             const key = pair[0..eq];
             const value = pair[eq + 1 ..];
             if (eqlAny(key, &.{ "sslmode", "ssl-mode", "ssl_mode" })) {

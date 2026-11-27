@@ -25,9 +25,9 @@ const flag_at = 0x40;
 // One browser's cookie jar and an in-memory store, behind both vtables.
 const Host = struct {
     arena: std.mem.Allocator,
-    cookies: std.StringArrayHashMapUnmanaged([]const u8) = .empty,
-    sessions: std.StringArrayHashMapUnmanaged(Auth.Account) = .empty,
-    keys: std.StringArrayHashMapUnmanaged(Auth.Passkey) = .empty,
+    cookies: std.array_hash_map.String([]const u8) = .empty,
+    sessions: std.array_hash_map.String(Auth.Account) = .empty,
+    keys: std.array_hash_map.String(Auth.Passkey) = .empty,
     allowed: []const u8 = "42",
     origin: []const u8 = "https://example.com",
     // What the fake provider sends back.
@@ -95,7 +95,7 @@ const Host = struct {
 
     fn fetch(ud: ?*anyopaque, _: std.mem.Allocator, request: Oauth.Request) anyerror![]const u8 {
         if (std.mem.eql(u8, request.url, Oauth.providers.github.token_url)) {
-            if (std.mem.indexOf(u8, request.body.?, "&code_verifier=") == null) return error.MissingVerifier;
+            if (std.mem.find(u8, request.body.?, "&code_verifier=") == null) return error.MissingVerifier;
             return from(ud).access_token;
         }
         return from(ud).user;
@@ -348,7 +348,7 @@ test "urls > endpoints, start, login and error codes" {
     try expectEqualStrings("https://example.com/account/passkey/remove", try auth.url(arena, .@"passkey/remove"));
     try expectEqualStrings("https://example.com/sign-in", try auth.loginUrl(arena, null));
     const url = try auth.startOAuth(arena, "github", null);
-    try expect(std.mem.indexOf(u8, url, "redirect_uri=https%3A%2F%2Fexample.com%2Faccount%2Fcallback%2Fgithub") != null);
+    try expect(std.mem.find(u8, url, "redirect_uri=https%3A%2F%2Fexample.com%2Faccount%2Fcallback%2Fgithub") != null);
 
     try expectEqualStrings("expired", Auth.errorCode(error.Expired));
     try expectEqualStrings("not_allowed", Auth.errorCode(error.NotAllowed));
@@ -423,7 +423,7 @@ test "oauth > basic client auth keeps the secret out of the body" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const req = try Oauth.tokenRequest(arena, Oauth.providers.x, .{ .client_id = "id:1", .client_secret = "s&2" }, "c", "https://x.test/cb", "v");
-    try expect(std.mem.indexOf(u8, req.body.?, "client_secret") == null);
+    try expect(std.mem.find(u8, req.body.?, "client_secret") == null);
     var auth: ?[]const u8 = null;
     for (req.headers) |h| if (std.mem.eql(u8, h.name, "Authorization")) {
         auth = h.value;
@@ -432,7 +432,7 @@ test "oauth > basic client auth keeps the secret out of the body" {
     try expectEqualStrings("Basic aWQlM0ExOnMlMjYy", auth.?);
 
     const post = try Oauth.tokenRequest(arena, Oauth.providers.github, .{ .client_id = "id", .client_secret = "s" }, "c", "https://x.test/cb", "v");
-    try expect(std.mem.indexOf(u8, post.body.?, "&client_secret=s&") != null);
+    try expect(std.mem.find(u8, post.body.?, "&client_secret=s&") != null);
     for (post.headers) |h| try expect(!std.mem.eql(u8, h.name, "Authorization"));
 }
 
@@ -441,7 +441,7 @@ test "oauth > an empty scope is left out" {
     defer arena_state.deinit();
     const flow: Oauth.Flow = .init(io, "spotify", "/");
     const url = try Oauth.authorizeUrl(arena_state.allocator(), Oauth.providers.spotify, .{ .client_id = "id", .client_secret = "" }, "https://x.test/cb", flow);
-    try expect(std.mem.indexOf(u8, url, "scope=") == null);
+    try expect(std.mem.find(u8, url, "scope=") == null);
 }
 
 test "oauth > Flow round-trips and binds state and provider" {
@@ -478,7 +478,7 @@ const Fake = struct {
     }
 
     fn clientData(arena: std.mem.Allocator, kind: []const u8, challenge: []const u8, origin: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(arena,
+        return arena.print(
             \\{{"type":"{s}","challenge":"{s}","origin":"{s}","crossOrigin":false}}
         , .{ kind, challenge, origin });
     }
@@ -509,7 +509,7 @@ const Fake = struct {
             &.{ 0xa0, 0x68 },                       "authData",
             &.{ 0x59, 0, @intCast(auth_data.len) }, auth_data,
         });
-        return std.fmt.allocPrint(arena,
+        return arena.print(
             \\{{"id":"{s}","name":" Laptop ","response":{{"clientDataJSON":"{s}","attestationObject":"{s}"}}}}
         , .{
             try WebAuthn.encode(arena, &cred_id),
@@ -761,7 +761,7 @@ test "jwt > round-trips with each algorithm" {
         const token = try Jwt.encode(arena, Claims{ .sub = "user-1", .exp = now + 60, .aud = "app" }, key);
         const claims = try Jwt.decode(arena, Claims, token, key.verifyingKey(), .{ .now = now, .audience = "app" });
         try expectEqualStrings("user-1", claims.sub);
-        try expect(std.mem.indexOf(u8, token, "aXNz") == null); // null `iss` left out
+        try expect(std.mem.find(u8, token, "aXNz") == null); // null `iss` left out
     }
 }
 
@@ -791,9 +791,9 @@ test "jwt > tampering, claims and malformed tokens" {
     const token = try Jwt.encode(arena, Claims{ .sub = "a", .exp = now + 60, .iss = "me", .aud = "app" }, .{ .HS256 = secret });
 
     const other = try Jwt.encode(arena, Claims{ .sub = "b", .exp = now + 60 }, .{ .HS256 = secret });
-    const first = std.mem.indexOfScalar(u8, token, '.').?;
-    const sig = std.mem.lastIndexOfScalar(u8, token, '.').?;
-    const swapped = try std.mem.concat(arena, u8, &.{ token[0..first], other[first..std.mem.lastIndexOfScalar(u8, other, '.').?], token[sig..] });
+    const first = std.mem.findScalar(u8, token, '.').?;
+    const sig = std.mem.findScalarLast(u8, token, '.').?;
+    const swapped = try std.mem.concat(arena, u8, &.{ token[0..first], other[first..std.mem.findScalarLast(u8, other, '.').?], token[sig..] });
     try expectError(error.BadSignature, Jwt.decode(arena, Claims, swapped, key, .{ .now = now }));
 
     try expectError(error.Expired, Jwt.decode(arena, Claims, token, key, .{ .now = now + 60 + 30 }));
@@ -832,7 +832,7 @@ fn setCookies(arena: std.mem.Allocator, res: zx.testing.FetchResult) ![]const []
 fn cookiePair(arena: std.mem.Allocator, res: zx.testing.FetchResult, name: []const u8) !?[]const u8 {
     for (try setCookies(arena, res)) |c| {
         if (!std.mem.startsWith(u8, c, name) or c[name.len] != '=') continue;
-        const pair = c[0 .. std.mem.indexOfScalar(u8, c, ';') orelse c.len];
+        const pair = c[0 .. std.mem.findScalar(u8, c, ';') orelse c.len];
         if (pair.len > name.len + 1) return pair;
     }
     return null;
@@ -859,19 +859,19 @@ test "http > sign in through a provider, guard a route, sign out" {
     res = try harness.fetch(arena, .{ .path = "/auth/start/fake?next=/auth/me" });
     try expectEqual(303, res.status);
     const location = res.header("location").?;
-    try expect(std.mem.indexOf(u8, location, "/auth/provider/authorize?response_type=code&client_id=client&") != null);
-    const state = location[std.mem.indexOf(u8, location, "&state=").? + 7 ..][0..32];
+    try expect(std.mem.find(u8, location, "/auth/provider/authorize?response_type=code&client_id=client&") != null);
+    const state = location[std.mem.find(u8, location, "&state=").? + 7 ..][0..32];
     const flow = (try cookiePair(arena, res, "auth_state")).?;
     const flow_attrs = (try setCookies(arena, res))[0];
-    try expect(std.mem.indexOf(u8, flow_attrs, "HttpOnly") != null);
-    try expect(std.mem.indexOf(u8, flow_attrs, "Path=/") != null);
+    try expect(std.mem.find(u8, flow_attrs, "HttpOnly") != null);
+    try expect(std.mem.find(u8, flow_attrs, "Path=/") != null);
 
     // A callback without the cookie is refused, and so is a bad code.
-    res = try harness.fetch(arena, .{ .path = try std.fmt.allocPrint(arena, "/auth/callback/fake?state={s}&code=good", .{state}) });
+    res = try harness.fetch(arena, .{ .path = try arena.print("/auth/callback/fake?state={s}&code=good", .{state}) });
     try expectEqual(303, res.status);
     try expectEqualStrings("/auth/login?err=expired", res.header("location").?);
     res = try harness.fetch(arena, .{
-        .path = try std.fmt.allocPrint(arena, "/auth/callback/fake?state={s}&code=bad", .{state}),
+        .path = try arena.print("/auth/callback/fake?state={s}&code=bad", .{state}),
         .headers = &.{.{ .name = "Cookie", .value = flow }},
     });
     try expectEqual(303, res.status);
@@ -880,18 +880,18 @@ test "http > sign in through a provider, guard a route, sign out" {
     // The real callback: token exchange and user lookup go to the provider.
     res = try harness.fetch(arena, .{ .path = "/auth/start/fake?next=/auth/me" });
     const location2 = res.header("location").?;
-    const state2 = location2[std.mem.indexOf(u8, location2, "&state=").? + 7 ..][0..32];
+    const state2 = location2[std.mem.find(u8, location2, "&state=").? + 7 ..][0..32];
     const flow2 = (try cookiePair(arena, res, "auth_state")).?;
     res = try harness.fetch(arena, .{
-        .path = try std.fmt.allocPrint(arena, "/auth/callback/fake?state={s}&code=good", .{state2}),
+        .path = try arena.print("/auth/callback/fake?state={s}&code=good", .{state2}),
         .headers = &.{.{ .name = "Cookie", .value = flow2 }},
     });
     try expectEqual(303, res.status);
     try expectEqualStrings("/auth/me", res.header("location").?);
     const session = (try cookiePair(arena, res, "auth_session")).?;
     for (try setCookies(arena, res)) |c| if (std.mem.startsWith(u8, c, "auth_session=")) {
-        try expect(std.mem.indexOf(u8, c, "HttpOnly") != null);
-        try expect(std.mem.indexOf(u8, c, "SameSite=Lax") != null);
+        try expect(std.mem.find(u8, c, "HttpOnly") != null);
+        try expect(std.mem.find(u8, c, "SameSite=Lax") != null);
     };
 
     res = try harness.fetch(arena, .{ .path = "/auth/me", .headers = &.{.{ .name = "Cookie", .value = session }} });

@@ -89,7 +89,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
     const ziex_js_root: LazyPath = blk: {
         const from_source = client.bindings.build != null;
-        const ziex_js_dep = zx_dep.builder.lazyDependency("ziex_js", .{
+        const ziex_js_dep = zx_dep.builder.dependencyLazy("ziex_js", .{
             .optimize = optimize,
             .target = target,
             .@"from-source" = from_source,
@@ -100,7 +100,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
                 (if (features.sqlite) |s| s.client != null else false),
             .@"feature-sqlite" = if (features.sqlite) |s| s.server != null else false,
             .@"feature-wasm-client" = build_client_wasm,
-        }) orelse break :blk b.path(".");
+        }) catch break :blk b.path(".");
         break :blk ziex_js_dep.namedWriteFiles("ziex_js").getDirectory();
     };
 
@@ -117,16 +117,16 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         .zig_path = zig_path,
         .zx_module_path = blk: {
             const dep_root = zx_dep.builder.root.root_dir.path orelse ".";
-            const joined = if (std.fs.path.isAbsolute(dep_root))
+            const joined = if (std.Io.Dir.path.isAbsolute(dep_root))
                 b.pathJoin(&.{ dep_root, "src", "root.zig" })
             else
-                std.fs.path.resolve(b.allocator, &.{
+                std.Io.Dir.path.resolveAlloc(b.allocator, &.{
                     b.root.root_dir.path orelse ".",
                     dep_root,
                     "src",
                     "root.zig",
                 }) catch b.pathJoin(&.{ dep_root, "src", "root.zig" });
-            break :blk std.fs.path.resolve(b.allocator, &.{joined}) catch joined;
+            break :blk std.Io.Dir.path.resolveAlloc(b.allocator, &.{joined}) catch joined;
         },
     };
 
@@ -169,12 +169,12 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     const transpile_cmd = cliRun(b, zx_cli, opts);
     transpile_cmd.setName("translate-zx");
     transpile_cmd.addArg("transpile");
-    transpile_cmd.addDirectoryArg(opts.site_path);
+    transpile_cmd.addDirectoryArg2(opts.site_path, .{});
     // transpile_cmd.addArg("--verbose");
     transpile_cmd.addArg("--outdir");
-    transpile_cmd.addDirectoryArg(transpile_store);
+    transpile_cmd.addDirectoryArg2(transpile_store, .{});
     transpile_cmd.addArg("--dep-file");
-    _ = transpile_cmd.addDepFileOutputArg("transpile.d");
+    _ = transpile_cmd.addDepFileOutputArg2("transpile.d", .{});
     if (opts.base_path) |bp| {
         transpile_cmd.addArgs(&.{ "--base-path", bp });
     }
@@ -182,7 +182,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     transpile_cmd.addArgs(&.{ "--map", "inline" });
     // Persistent transpile cache (mtime + Transpile.shape); survives zig-cache invalidation.
     transpile_cmd.addArgs(&.{"--cache-dir"});
-    transpile_cmd.addDirectoryArg(transpile_store);
+    transpile_cmd.addDirectoryArg2(transpile_store, .{});
     transpile_cmd.expectExitCode(0);
     // Imports are tracked by the dep file; the route list covers added/removed routes.
     transpile_cmd.addArg("--roots");
@@ -203,7 +203,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         if (b.root.access(b.graph.io, site_sub_path, .{})) |_| {
             b.dependOnDirectoryContents(opts.site_path);
         } else |_| {
-            b.dependOnDirectoryContents(b.path(std.fs.path.dirname(site_sub_path) orelse ""));
+            b.dependOnDirectoryContents(b.path(std.Io.Dir.path.dirname(site_sub_path) orelse ""));
         }
 
         const public_dir = opts.site_path.path(b, "public");
@@ -308,37 +308,37 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     transpile_cmd.addFileArg(manifest_seed);
 
     transpile_cmd.addArg("--manifest");
-    const base_manifest_path = transpile_cmd.addOutputFileArg("app.zon");
+    const base_manifest_path = transpile_cmd.addOutputFileArg2("app.zon", .{});
     transpile_cmd.addArgs(&.{"--exe-path"});
     transpile_cmd.addArg(b.fmt("bin/{s}", .{exe.out_filename}));
     exe.step.dependOn(&transpile_cmd.step);
 
     // --- Ziex Site Main Executable --- //
-    var user_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
+    var user_imports: std.ArrayList(std.Build.Module.Import) = .empty;
     var import_it = exe.root_module.import_table.iterator();
     while (import_it.next()) |entry| {
-        try user_imports.append(.{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
+        try user_imports.append(b.allocator, .{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
     }
 
-    var imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
+    var imports: std.ArrayList(std.Build.Module.Import) = .empty;
     for (user_imports.items) |import| {
-        try imports.append(import);
+        try imports.append(b.allocator, import);
     }
 
     // Copy all imports from the original zx_module
     var zx_import_it = zx_module.import_table.iterator();
     while (zx_import_it.next()) |entry| {
         if (!std.mem.eql(u8, entry.key_ptr.*, "app")) {
-            try imports.append(.{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
+            try imports.append(b.allocator, .{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
         }
     }
 
     // Build imports for the "app" module (app.zig needs access to zx and all other imports)
-    var meta_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
+    var meta_imports: std.ArrayList(std.Build.Module.Import) = .empty;
     for (imports.items) |import| {
-        try meta_imports.append(import);
+        try meta_imports.append(b.allocator, import);
     }
-    try meta_imports.append(.{ .name = "zx", .module = zx_module });
+    try meta_imports.append(b.allocator, .{ .name = "zx", .module = zx_module });
 
     // Inject the real generated app module into zx and directly into the user's root module
     const app_module = b.createModule(.{
@@ -396,7 +396,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         if (incremental) wasm_exe.incremental = true;
 
         // Create a site-specific wasm module (same approach as server module)
-        var wasm_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
+        var wasm_imports: std.ArrayList(std.Build.Module.Import) = .empty;
         for (user_imports.items) |import| {
             if (std.mem.eql(u8, import.name, "zx")) continue;
 
@@ -406,7 +406,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             else
                 import.module;
 
-            try wasm_imports.append(.{ .name = import.name, .module = wasm_module });
+            try wasm_imports.append(b.allocator, .{ .name = import.name, .module = wasm_module });
             app_main.addImport(import.name, wasm_module);
         }
 
@@ -414,7 +414,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
 
         var wasm_import_it = zx_wasm_module.?.import_table.iterator();
         while (wasm_import_it.next()) |entry| {
-            try wasm_imports.append(.{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
+            try wasm_imports.append(b.allocator, .{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
         }
 
         const wasm_app_module = b.createModule(.{
@@ -425,11 +425,11 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         });
 
         // Build imports for wasm app
-        var wasm_app_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
+        var wasm_app_imports: std.ArrayList(std.Build.Module.Import) = .empty;
         for (wasm_imports.items) |import| {
-            try wasm_app_imports.append(import);
+            try wasm_app_imports.append(b.allocator, import);
         }
-        try wasm_app_imports.append(.{ .name = "zx", .module = wasm_app_module });
+        try wasm_app_imports.append(b.allocator, .{ .name = "zx", .module = wasm_app_module });
 
         const wasm_meta_module = b.createModule(.{
             .root_source_file = transpile_store.path(b, "app.zig"),
@@ -438,7 +438,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         wasm_app_module.addImport("app", wasm_meta_module);
         const zons = b.addWriteFiles();
         transpile_cmd.addArg("--client-dir");
-        transpile_cmd.addDirectoryArg(zons.getDirectory());
+        transpile_cmd.addDirectoryArg2(zons.getDirectory(), .{});
         clients.?.* = .{
             .b = b,
             .zons = zons,
@@ -473,19 +473,19 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         var worker_entries: std.ArrayList(u8) = .empty;
         if (worker_paths.len > 0) {
             const zx_worker = zx_worker_module.?;
-            var worker_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
-            try worker_imports.appendSlice(user_wasm_imports);
+            var worker_imports: std.ArrayList(std.Build.Module.Import) = .empty;
+            try worker_imports.appendSlice(b.allocator, user_wasm_imports);
             var it = zx_worker.import_table.iterator();
-            while (it.next()) |entry| try worker_imports.append(.{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
+            while (it.next()) |entry| try worker_imports.append(b.allocator, .{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
             const worker_zx = b.createModule(.{
                 .root_source_file = zx_worker.root_source_file,
                 .target = wasm_target,
                 .optimize = zx_worker.optimize,
                 .imports = worker_imports.items,
             });
-            var worker_app_imports = std.array_list.Managed(std.Build.Module.Import).init(b.allocator);
-            try worker_app_imports.appendSlice(user_wasm_imports);
-            try worker_app_imports.append(.{ .name = "zx", .module = worker_zx });
+            var worker_app_imports: std.ArrayList(std.Build.Module.Import) = .empty;
+            try worker_app_imports.appendSlice(b.allocator, user_wasm_imports);
+            try worker_app_imports.append(b.allocator, .{ .name = "zx", .module = worker_zx });
             const worker_app = b.createModule(.{
                 .root_source_file = transpile_store.path(b, "app.zig"),
                 .imports = worker_app_imports.items,
@@ -589,7 +589,7 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         prerender_cmd.addArgs(&.{ "build", "--static", "--prerendered-only", "--zig-path", opts.zig_path });
         if (optimize) |mode| prerender_cmd.addArgs(&.{ "--build-args", b.fmt("-Doptimize={s}", .{@tagName(mode)}) });
         prerender_cmd.addArg("--outdir");
-        prerender_cmd.addDirectoryArg(static_lazypath);
+        prerender_cmd.addDirectoryArg2(static_lazypath, .{});
         prerender_cmd.has_side_effects = true;
 
         // Run after every other write into static/ so prerendered output lands last.
@@ -695,7 +695,7 @@ const Clients = struct {
     wasm_zx: *Module,
     wasm_app: *Module,
     target: std.Build.ResolvedTarget,
-    optimize: ?std.builtin.OptimizeMode,
+    optimize: ?std.lang.Optimize,
     stub_mode: ServerOnlyStubMode,
     added: std.AutoHashMapUnmanaged(*Module, void) = .empty,
     wasm: std.AutoHashMapUnmanaged(*Module, *Module) = .empty,
@@ -888,7 +888,7 @@ fn addWorker(
     b: *std.Build,
     rel: []const u8,
     target: std.Build.ResolvedTarget,
-    optimize: ?std.builtin.OptimizeMode,
+    optimize: ?std.lang.Optimize,
     zx_module: *std.Build.Module,
     app_module: *std.Build.Module,
 ) *std.Build.Step.Compile {
@@ -939,8 +939,8 @@ fn addWorkerAsset(
     stable: bool,
 ) LazyPath {
     // `pages/examples/worker/worker.zig` -> `examples/worker`.
-    const dir = std.fs.path.dirname(rel) orelse "";
-    const route = if (std.mem.indexOfScalar(u8, dir, '/')) |i| dir[i + 1 ..] else "";
+    const dir = std.Io.Dir.path.dirname(rel) orelse "";
+    const route = if (std.mem.findScalar(u8, dir, '/')) |i| dir[i + 1 ..] else "";
     const sub = if (route.len == 0) "_" else b.fmt("_/{s}", .{route});
     const stem = if (is_dev_build) "worker.dev" else "worker";
 
@@ -949,12 +949,12 @@ fn addWorkerAsset(
     run.addArgs(&.{ "app", "asset" });
     run.addFileArg(exe.getEmittedBin());
     run.addArg("--outdir");
-    const out = run.addOutputDirectoryArg("asset");
+    const out = run.addOutputDirectoryArg2("asset", .{});
     run.addArgs(&.{ "--file-stem", stem, "--ext", ".wasm", "--clean" });
     run.addArgs(&.{ "--href-stem", html_util.prefixPathWithBasePath(b.allocator, opts.base_path, b.fmt("/assets/{s}/{s}", .{ sub, stem })) });
     if (stable) run.addArg("--no-hash");
     run.addArg("--href-out");
-    const href = run.addOutputFileArg("href");
+    const href = run.addOutputFileArg2("href", .{});
     run.expectExitCode(0);
 
     const install = b.addInstallDirectory(.{
@@ -1131,8 +1131,10 @@ fn makeServerOnlyStubModule(b: *std.Build, name: []const u8, mode: ServerOnlyStu
 
 fn findZxInPath(b: *std.Build, expected_version: []const u8) ?[]const u8 {
     const zx_path = b.findProgram(.{ .names = &.{"zx"} }) orelse return null;
-    var exit_code: u8 = undefined;
-    const stdout = b.runAllowFail(&.{ zx_path, "version" }, &exit_code, .ignore) catch return null;
+    const stdout = switch (b.runFallible(&.{ zx_path, "version" }, .{ .stderr_behavior = .ignore })) {
+        .success => |out| out,
+        else => return null,
+    };
     const trimmed = std.mem.trim(u8, stdout, &std.ascii.whitespace);
     if (!std.mem.eql(u8, trimmed, expected_version)) return null;
     return zx_path;
@@ -1153,7 +1155,7 @@ fn addStaticAssetCopy(
     run.addArgs(&.{ "app", "asset" });
     run.addFileArg(src);
     run.addArg("--outdir");
-    const asset_output_dir = run.addOutputDirectoryArg("asset");
+    const asset_output_dir = run.addOutputDirectoryArg2("asset", .{});
     run.addArgs(&.{ "--file-stem", file_stem, "--ext", file_ext });
     if (clean_dest) run.addArg("--clean");
     if (no_hash) run.addArg("--no-hash");
@@ -1196,13 +1198,13 @@ fn addStaticAssetRun(
     run.addArgs(&.{ "app", "asset" });
     run.addFileArg(src);
     run.addArg("--outdir");
-    const asset_output_dir = run.addOutputDirectoryArg("asset");
+    const asset_output_dir = run.addOutputDirectoryArg2("asset", .{});
     run.addArg("--href-stem");
     run.addArg(href_stem);
     run.addArg("--manifest");
     run.addFileArg(manifest_in);
     run.addArg("--manifest-out");
-    const manifest_out = run.addOutputFileArg("app.zon");
+    const manifest_out = run.addOutputFileArg2("app.zon", .{});
     run.addArgs(&.{ "--file-stem", file_stem, "--ext", file_ext, "--kind", injection_kind });
     if (clean_dest) run.addArg("--clean");
     if (no_hash) run.addArg("--no-hash");

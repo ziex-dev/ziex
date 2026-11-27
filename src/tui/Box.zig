@@ -86,10 +86,10 @@ pub fn printCliError(comptime issue_url: []const u8, err_name: []const u8) void 
 
     // Build the lines with runtime values
     var report_buf: [256]u8 = undefined;
-    const report_line = std.fmt.bufPrint(&report_buf, "Please report it at {s}", .{issue_url}) catch "Please report it at the repository";
+    const report_line = std.mem.print(&report_buf, "Please report it at {s}", .{issue_url}) catch "Please report it at the repository";
 
     var details_buf: [256]u8 = undefined;
-    const details_line = std.fmt.bufPrint(&details_buf, "Details: {s}", .{err_name}) catch "Details: unknown";
+    const details_line = std.mem.print(&details_buf, "Details: {s}", .{err_name}) catch "Details: unknown";
 
     print(Style.err, title, &.{ report_line, details_line });
 }

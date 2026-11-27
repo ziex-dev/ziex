@@ -6,7 +6,7 @@ const html_hover = html.hover;
 const html_complete = html.complete;
 
 fn offsetOf(src: []const u8, needle: []const u8, into: u32) u32 {
-    const idx = std.mem.indexOf(u8, src, needle).?;
+    const idx = std.mem.find(u8, src, needle).?;
     return @intCast(idx + into);
 }
 
@@ -23,9 +23,9 @@ test "hover > element tag name" {
     // Point at the "div" in the start tag.
     const off = offsetOf(src, "<div", 1);
     const md = (try html_hover.hoverMarkdown(arena, src, off)) orelse return error.NoHover;
-    try testing.expect(std.mem.indexOf(u8, md, "<div>") != null);
-    try testing.expect(std.mem.indexOf(u8, md, "no special meaning") != null);
-    try testing.expect(std.mem.indexOf(u8, md, "MDN Reference") != null);
+    try testing.expect(std.mem.find(u8, md, "<div>") != null);
+    try testing.expect(std.mem.find(u8, md, "no special meaning") != null);
+    try testing.expect(std.mem.find(u8, md, "MDN Reference") != null);
 }
 
 test "hover > global attribute name" {
@@ -40,8 +40,8 @@ test "hover > global attribute name" {
     ;
     const off = offsetOf(src, "class=", 1);
     const md = (try html_hover.hoverMarkdown(arena, src, off)) orelse return error.NoHover;
-    try testing.expect(std.mem.indexOf(u8, md, "class") != null);
-    try testing.expect(std.mem.indexOf(u8, md, "space-separated list of the classes") != null);
+    try testing.expect(std.mem.find(u8, md, "class") != null);
+    try testing.expect(std.mem.find(u8, md, "space-separated list of the classes") != null);
 }
 
 test "hover > element-specific attribute name" {
@@ -56,10 +56,10 @@ test "hover > element-specific attribute name" {
     ;
     const off = offsetOf(src, "href=", 1);
     const md = (try html_hover.hoverMarkdown(arena, src, off)) orelse return error.NoHover;
-    try testing.expect(std.mem.indexOf(u8, md, "href") != null);
-    try testing.expect(std.mem.indexOf(u8, md, "hyperlink points to") != null);
+    try testing.expect(std.mem.find(u8, md, "href") != null);
+    try testing.expect(std.mem.find(u8, md, "hyperlink points to") != null);
     // The enclosing tag should be reflected.
-    try testing.expect(std.mem.indexOf(u8, md, "<a>") != null);
+    try testing.expect(std.mem.find(u8, md, "<a>") != null);
 }
 
 test "hover > unknown element returns null" {
@@ -102,7 +102,7 @@ test "hover > void element self-closing tag" {
     ;
     const off = offsetOf(src, "<br", 1);
     const md = (try html_hover.hoverMarkdown(arena, src, off)) orelse return error.NoHover;
-    try testing.expect(std.mem.indexOf(u8, md, "<br>") != null);
+    try testing.expect(std.mem.find(u8, md, "<br>") != null);
 }
 
 test "hover > builtin attribute @allocator" {
@@ -117,8 +117,8 @@ test "hover > builtin attribute @allocator" {
     ;
     const off = offsetOf(src, "@allocator", 1);
     const md = (try html_hover.hoverMarkdown(arena, src, off)) orelse return error.NoHover;
-    try testing.expect(std.mem.indexOf(u8, md, "@allocator") != null);
-    try testing.expect(std.mem.indexOf(u8, md, "builtin") != null);
+    try testing.expect(std.mem.find(u8, md, "@allocator") != null);
+    try testing.expect(std.mem.find(u8, md, "builtin") != null);
 }
 
 test "hover > builtin shorthand @{allocator}" {
@@ -133,7 +133,7 @@ test "hover > builtin shorthand @{allocator}" {
     ;
     const off = offsetOf(src, "@{allocator}", 2);
     const md = (try html_hover.hoverMarkdown(arena, src, off)) orelse return error.NoHover;
-    try testing.expect(std.mem.indexOf(u8, md, "@allocator") != null);
+    try testing.expect(std.mem.find(u8, md, "@allocator") != null);
 }
 
 test "hover > attribute shorthand {class}" {
@@ -148,7 +148,7 @@ test "hover > attribute shorthand {class}" {
     ;
     const off = offsetOf(src, "{class}", 1);
     const md = (try html_hover.hoverMarkdown(arena, src, off)) orelse return error.NoHover;
-    try testing.expect(std.mem.indexOf(u8, md, "class") != null);
+    try testing.expect(std.mem.find(u8, md, "class") != null);
 }
 
 test "completion > tag name after <" {
@@ -306,7 +306,7 @@ test "hover > lowercase button still shows html docs" {
     ;
     const off = offsetOf(src, "<button", 1);
     const md = (try html_hover.hoverMarkdown(arena, src, off)) orelse return error.NoHover;
-    try testing.expect(std.mem.indexOf(u8, md, "<button>") != null);
+    try testing.expect(std.mem.find(u8, md, "<button>") != null);
 }
 
 fn completionLabels(arena: std.mem.Allocator, src: []const u8, offset: u32) ![]const []const u8 {
@@ -543,10 +543,10 @@ test "text > diagnostic columns are re-encoded" {
 
     try testing.expect(result.diagnostics.items.len > 0);
     const d = result.diagnostics.items[0];
-    try testing.expect(std.mem.indexOf(u8, d.message, "blnk") != null);
+    try testing.expect(std.mem.find(u8, d.message, "blnk") != null);
 
     // tree-sitter columns count bytes; `é` makes them one ahead of utf-16.
-    const tag_col: u32 = @intCast(std.mem.indexOf(u8, src, "blnk").? - (std.mem.indexOf(u8, src, "\n").? + 1));
+    const tag_col: u32 = @intCast(std.mem.find(u8, src, "blnk").? - (std.mem.find(u8, src, "\n").? + 1));
     try testing.expectEqual(tag_col, d.start_column);
 
     const start = lsp_text.byteColumnToPosition(src, d.start_line, d.start_column, .@"utf-16");
@@ -641,7 +641,7 @@ test "markup tokens cover the Zig inside .zx markup" {
     ;
     const tokens = try html.markup_tokens.markupTokens(arena, src);
     var seen: std.ArrayList([]const u8) = .empty;
-    for (tokens) |t| try seen.append(arena, try std.fmt.allocPrint(arena, "{s}:{t}", .{ src[t.start..t.end], t.kind }));
+    for (tokens) |t| try seen.append(arena, try arena.print("{s}:{t}", .{ src[t.start..t.end], t.kind }));
     const joined = try std.mem.join(arena, " ", seen.items);
     try testing.expectEqualStrings("allocator:variable for:keyword items:variable t:parameter t:variable t:variable", joined);
 }

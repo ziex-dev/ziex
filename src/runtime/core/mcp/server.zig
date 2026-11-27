@@ -200,7 +200,7 @@ pub fn Server(comptime Context: type) type {
             } else return .{ .invalid = "Unknown tool" };
 
             const result = reg.handler(context, p.object.get("arguments")) catch |err|
-                return .{ .result = try types.ToolResult.err(allocator, try std.fmt.allocPrint(allocator, "Tool error: {s}", .{@errorName(err)})) };
+                return .{ .result = try types.ToolResult.err(allocator, try allocator.print("Tool error: {s}", .{@errorName(err)})) };
             return .{ .result = result };
         }
     };

@@ -74,7 +74,7 @@ pub const Writer = struct {
 
     fn cstr(self: *Writer, value: []const u8) !void {
         // an embedded NUL would truncate the field on the server
-        if (std.mem.indexOfScalar(u8, value, 0) != null) return error.InvalidNul;
+        if (std.mem.findScalar(u8, value, 0) != null) return error.InvalidNul;
         try self.raw(value);
         try self.byte(0);
     }
@@ -235,7 +235,7 @@ pub const Cursor = struct {
 
     pub fn cstr(self: *Cursor) Error![]const u8 {
         const rest = self.remaining();
-        const end = std.mem.indexOfScalar(u8, rest, 0) orelse return Error.ProtocolViolation;
+        const end = std.mem.findScalar(u8, rest, 0) orelse return Error.ProtocolViolation;
         self.pos += end + 1;
         return rest[0..end];
     }
@@ -362,11 +362,11 @@ pub fn parameterOids(gpa: std.mem.Allocator, body: []const u8) ![]u32 {
 /// Affected-row count from a CommandComplete tag such as `INSERT 0 3` or `UPDATE 2`.
 pub fn commandRows(tag: []const u8) u64 {
     const counted = [_][]const u8{ "INSERT", "UPDATE", "DELETE", "MERGE", "SELECT", "MOVE", "FETCH", "COPY" };
-    const space = std.mem.indexOfScalar(u8, tag, ' ') orelse return 0;
+    const space = std.mem.findScalar(u8, tag, ' ') orelse return 0;
     const word = tag[0..space];
     for (counted) |name| {
         if (std.mem.eql(u8, word, name)) {
-            const last = std.mem.lastIndexOfScalar(u8, tag, ' ').?;
+            const last = std.mem.findScalarLast(u8, tag, ' ').?;
             return std.fmt.parseInt(u64, tag[last + 1 ..], 10) catch 0;
         }
     }

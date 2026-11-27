@@ -77,9 +77,9 @@ pub fn encode(arena: std.mem.Allocator, claims: anytype, key: SigningKey) Error!
 // (unknown fields ignored).
 pub fn decode(arena: std.mem.Allocator, comptime Claims: type, token: []const u8, key: VerifyingKey, validation: Validation) Error!Claims {
     if (token.len > max_len) return error.Malformed;
-    const first = std.mem.indexOfScalar(u8, token, '.') orelse return error.Malformed;
-    const second = first + 1 + (std.mem.indexOfScalar(u8, token[first + 1 ..], '.') orelse return error.Malformed);
-    if (std.mem.indexOfScalar(u8, token[second + 1 ..], '.') != null) return error.Malformed;
+    const first = std.mem.findScalar(u8, token, '.') orelse return error.Malformed;
+    const second = first + 1 + (std.mem.findScalar(u8, token[first + 1 ..], '.') orelse return error.Malformed);
+    if (std.mem.findScalar(u8, token[second + 1 ..], '.') != null) return error.Malformed;
 
     const header = std.json.parseFromSliceLeaky(struct {
         alg: []const u8,

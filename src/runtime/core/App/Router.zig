@@ -134,7 +134,7 @@ pub fn matchRoute(path: []const u8, opts: FindRouteOptions) ?RouteMatch {
             var current = path;
             while (true) {
                 if (findBestRouteMatch(current, opts)) |m| return m;
-                if (std.mem.lastIndexOfScalar(u8, current[0 .. @max(current.len, 1) - 1], '/')) |last_slash| {
+                if (std.mem.findScalarLast(u8, current[0 .. @max(current.len, 1) - 1], '/')) |last_slash| {
                     current = if (last_slash == 0) "/" else current[0..last_slash];
                 } else {
                     if (!std.mem.eql(u8, current, "/")) {
@@ -187,7 +187,7 @@ pub fn patternMatchScore(pattern: []const u8) usize {
 
     var pat_pos: usize = 0;
     while (pat_pos < pat.len) {
-        const pat_end = std.mem.indexOfScalarPos(u8, pat, pat_pos, '/') orelse pat.len;
+        const pat_end = std.mem.findScalarPos(u8, pat, pat_pos, '/') orelse pat.len;
         const pseg = pat[pat_pos..pat_end];
 
         if (pseg.len == 1 and pseg[0] == '*') {
@@ -229,7 +229,7 @@ pub fn tryExtractParams(pattern: []const u8, path: []const u8, match: *RouteMatc
     var url_pos: usize = 0;
 
     while (pat_pos < pat.len) {
-        const pat_end = std.mem.indexOfScalarPos(u8, pat, pat_pos, '/') orelse pat.len;
+        const pat_end = std.mem.findScalarPos(u8, pat, pat_pos, '/') orelse pat.len;
         const pseg = pat[pat_pos..pat_end];
         const is_last = (pat_end == pat.len);
 
@@ -238,14 +238,14 @@ pub fn tryExtractParams(pattern: []const u8, path: []const u8, match: *RouteMatc
             if (is_last) return true;
             // Intermediate glob: matches exactly one URL segment
             if (url_pos >= url.len) return false;
-            const url_end = std.mem.indexOfScalarPos(u8, url, url_pos, '/') orelse url.len;
+            const url_end = std.mem.findScalarPos(u8, url, url_pos, '/') orelse url.len;
             url_pos = url_end + 1;
             pat_pos = pat_end + 1;
             continue;
         }
 
         if (url_pos >= url.len) return false;
-        const url_end = std.mem.indexOfScalarPos(u8, url, url_pos, '/') orelse url.len;
+        const url_end = std.mem.findScalarPos(u8, url, url_pos, '/') orelse url.len;
         const useg = url[url_pos..url_end];
 
         if (pseg.len > 0 and pseg[0] == ':') {
@@ -398,7 +398,7 @@ pub fn applyLayoutsForPath(
 
     var current_path = path;
     while (current_path.len > 1) {
-        if (std.mem.lastIndexOfScalar(u8, current_path[0 .. current_path.len - 1], '/')) |last_slash| {
+        if (std.mem.findScalarLast(u8, current_path[0 .. current_path.len - 1], '/')) |last_slash| {
             if (last_slash == 0) {
                 if (path_count < paths_to_check.len) {
                     paths_to_check[path_count] = "/";

@@ -73,7 +73,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         break :blk .{ name, url };
     };
 
-    if (std.fs.path.dirname(dest_dir)) |parent| {
+    if (std.Io.Dir.path.dirname(dest_dir)) |parent| {
         try std.Io.Dir.cwd().createDirPath(io, parent);
     }
 
@@ -82,7 +82,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
     }
     try std.Io.Dir.cwd().createDirPath(io, dest_dir);
 
-    const dest_path = try std.fs.path.join(allocator, &.{ dest_dir, dest_name });
+    const dest_path = try std.Io.Dir.path.join(allocator, &.{ dest_dir, dest_name });
     if (content) |bytes| {
         try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = dest_path, .data = bytes });
     } else {
@@ -95,7 +95,7 @@ pub fn run(ctx: CommandContext, args: anytype) !void {
         const wasm = try std.Io.Dir.cwd().readFileAlloc(io, src_path, allocator, .unlimited);
         const glue = try webglue.generate(allocator, wasm);
         const stem = dest_name[0 .. dest_name.len - file_ext.len];
-        const glue_path = try std.fs.path.join(allocator, &.{ dest_dir, try allocator.print("{s}.web.js", .{stem}) });
+        const glue_path = try std.Io.Dir.path.join(allocator, &.{ dest_dir, try allocator.print("{s}.web.js", .{stem}) });
         try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = glue_path, .data = glue });
     }
 

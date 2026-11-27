@@ -78,7 +78,7 @@ fn run(_: *zx.client.Event.Stateful) void {
     const get_dynamic = now() - t;
 
     var buf: [512]u8 = undefined;
-    const out = std.fmt.bufPrint(&buf,
+    const out = std.mem.print(&buf,
         \\{{"n":{d},"fillRect":[{d:.2},{d:.2}],"fillStyle":[{d:.2},{d:.2}],"setAttribute":[{d:.2},{d:.2}],"width":[{d:.2},{d:.2}],"sum":{d}}}
     , .{ n, fill_direct, fill_dynamic, style_direct, style_dynamic, attr_direct, attr_dynamic, get_direct, get_dynamic, sum }) catch return;
     el.setTextContent(""); // keep the result element the only output

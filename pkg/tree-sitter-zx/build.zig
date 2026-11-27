@@ -68,10 +68,7 @@ pub fn build(b: *std.Build) !void {
     });
     tests.root_module.addImport(library_name, module);
 
-    // Fetch tree-sitter lazily when available so tests work across build API versions.
-    if (b.lazyDependency("tree_sitter", .{})) |ts_dep| {
-        tests.root_module.addImport("tree_sitter", ts_dep.module("tree_sitter"));
-    }
+    tests.root_module.addImport("tree_sitter", b.dependency("tree_sitter", .{}).module("tree_sitter"));
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run unit tests");

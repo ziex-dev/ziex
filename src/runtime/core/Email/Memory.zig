@@ -30,7 +30,7 @@ pub fn sent(m: *const Memory) []const Email.Message {
 }
 
 pub fn last(m: *const Memory) ?Email.Message {
-    return m.messages.getLastOrNull();
+    return m.messages.last();
 }
 
 pub fn clear(m: *Memory) void {
@@ -52,5 +52,5 @@ fn send(userdata: ?*anyopaque, gpa: std.mem.Allocator, message: Email.Message) E
     if (m.log) std.log.scoped(.zx_email).info("#{d} {f} -> {d} recipient(s): {s}", .{
         n, message.from, message.to.len + message.cc.len + message.bcc.len, message.subject,
     });
-    return .{ .id = try std.fmt.allocPrint(gpa, "memory-{d}", .{n}) };
+    return .{ .id = try gpa.print("memory-{d}", .{n}) };
 }

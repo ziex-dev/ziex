@@ -168,9 +168,9 @@ fn mgfXor(dst: []u8, seed: []const u8) void {
 }
 
 fn pemToDer(out: []u8, pem: []const u8) Error![]const u8 {
-    const begin = std.mem.indexOf(u8, pem, "-----BEGIN") orelse return Error.InvalidPublicKey;
-    const header_end = std.mem.indexOfScalarPos(u8, pem, begin, '\n') orelse return Error.InvalidPublicKey;
-    const footer = std.mem.indexOfPos(u8, pem, header_end, "-----END") orelse return Error.InvalidPublicKey;
+    const begin = std.mem.find(u8, pem, "-----BEGIN") orelse return Error.InvalidPublicKey;
+    const header_end = std.mem.findScalarPos(u8, pem, begin, '\n') orelse return Error.InvalidPublicKey;
+    const footer = std.mem.findPos(u8, pem, header_end, "-----END") orelse return Error.InvalidPublicKey;
 
     var packed_b64: [4096]u8 = undefined;
     var n: usize = 0;
@@ -298,7 +298,7 @@ fn decryptForTest(cipher: []const u8) ![]u8 {
     var l_hash: [hash_len]u8 = undefined;
     Sha1.hash("", &l_hash, .{});
     try t.expectEqualSlices(u8, &l_hash, db[0..hash_len]);
-    const one = std.mem.indexOfScalarPos(u8, db, hash_len, 1) orelse return error.BadPadding;
+    const one = std.mem.findScalarPos(u8, db, hash_len, 1) orelse return error.BadPadding;
     return t.allocator.dupe(u8, db[one + 1 ..]);
 }
 

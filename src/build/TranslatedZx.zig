@@ -12,7 +12,7 @@ pub const Options = struct {
     /// The `.zx` / `.mdzx` / `.md` source file to transpile.
     root_source_file: std.Build.LazyPath,
     target: ?std.Build.ResolvedTarget = null,
-    optimize: ?std.builtin.OptimizeMode = null,
+    optimize: ?std.lang.Optimize = null,
 };
 
 /// Create a `TranslatedZx` by running the host `zx transpile` CLI over
@@ -25,7 +25,7 @@ pub fn create(
     const self = b.allocator.create(TranslatedZx) catch @panic("OOM");
 
     const basename = rootBasename(opts.root_source_file);
-    const ext = std.fs.path.extension(basename);
+    const ext = std.Io.Dir.path.extension(basename);
     const stem = if (ext.len > 0 and basename.len > ext.len)
         basename[0 .. basename.len - ext.len]
     else
@@ -40,9 +40,9 @@ pub fn create(
     run.addFileArg(opts.root_source_file);
 
     run.addArg("--outdir");
-    const output_dir = run.addOutputDirectoryArg("translated");
+    const output_dir = run.addOutputDirectoryArg2("translated", .{});
     run.addArg("--dep-file");
-    _ = run.addDepFileOutputArg("transpile.d");
+    _ = run.addDepFileOutputArg2("transpile.d", .{});
     run.addArgs(&.{ "--map", "inline" });
 
     self.* = .{
@@ -83,5 +83,5 @@ fn rootBasename(lp: std.Build.LazyPath) []const u8 {
         .relative => |r| r.sub_path,
         .generated => |g| if (g.sub_path.len != 0) g.sub_path else "generated.zx",
     };
-    return std.fs.path.basename(sub_path);
+    return std.Io.Dir.path.basename(sub_path);
 }

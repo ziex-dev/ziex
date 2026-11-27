@@ -1,4 +1,4 @@
-const pkg_find_paths = [_][]const u8{ "package.json", "site" ++ std.fs.path.sep_str ++ "package.json" };
+const pkg_find_paths = [_][]const u8{ "package.json", "site" ++ std.Io.Dir.path.sep_str ++ "package.json" };
 pub const PackageJson = struct {
     name: ?[]const u8 = null,
     version: ?[]const u8 = null,
@@ -26,7 +26,7 @@ pub const PackageJson = struct {
                     else => return err,
                 };
 
-                pkg_final_path = try std.fs.path.join(allocator, &.{pkg_find_path});
+                pkg_final_path = try std.Io.Dir.path.join(allocator, &.{pkg_find_path});
                 break :blk package_json_str;
             }
             return error.PackageJsonNotFound;
@@ -66,7 +66,7 @@ pub const PackageJson = struct {
             }
         }
         if (self.pkg_path) |pkg_path| {
-            const dir_from_pkg_path = std.fs.path.dirname(pkg_path) orelse return .npm;
+            const dir_from_pkg_path = std.Io.Dir.path.dirname(pkg_path) orelse return .npm;
             const cwd = std.Io.Dir.cwd().openDir(io, dir_from_pkg_path, .{}) catch return .npm;
 
             // Check for lockfiles
@@ -82,7 +82,7 @@ pub const PackageJson = struct {
 };
 
 pub fn checkEsbuildBin(io: std.Io, allocator: std.mem.Allocator, pkg_rootdir: []const u8) bool {
-    const esbuild_bin_path = std.fs.path.join(allocator, &.{ pkg_rootdir, "node_modules", ".bin", "esbuild" }) catch return false;
+    const esbuild_bin_path = std.Io.Dir.path.join(allocator, &.{ pkg_rootdir, "node_modules", ".bin", "esbuild" }) catch return false;
     defer allocator.free(esbuild_bin_path);
 
     return if (std.Io.Dir.cwd().statFile(io, esbuild_bin_path, .{}) catch null) |_| true else false;
@@ -103,7 +103,7 @@ pub fn buildjs(ctx: CommandContext, binpath: []const u8, is_dev: bool, verbose: 
     log.debug("Found and parsed package.json in ./{s}", .{package_json.pkg_path orelse "na"});
 
     const pkg_path = package_json.pkg_path orelse return error.PkgPathNotFound;
-    const pkg_rootdir = std.fs.path.dirname(pkg_path) orelse ".";
+    const pkg_rootdir = std.Io.Dir.path.dirname(pkg_path) orelse ".";
 
     const pm = package_json.getPackageManager(io);
     log.debug("Package manager: {s}", .{@tagName(pm)});
@@ -146,7 +146,7 @@ pub fn buildjs(ctx: CommandContext, binpath: []const u8, is_dev: bool, verbose: 
         log.debug("Esbuild binary found", .{});
     }
 
-    const outfile_arg = try std.fmt.allocPrintSentinel(ctx.allocator, "--outfile={s}/assets/main.js", .{rootdir}, 0);
+    const outfile_arg = try ctx.allocator.printSentinel("--outfile={s}/assets/main.js", .{rootdir}, 0);
     const main_tsx_arg = package_json.main orelse "site/main.tsx";
     defer ctx.allocator.free(outfile_arg);
 
@@ -156,7 +156,7 @@ pub fn buildjs(ctx: CommandContext, binpath: []const u8, is_dev: bool, verbose: 
     log.debug("Building main.tsx: in package.json: {s}", .{package_json.main orelse "na"});
     log.debug("Outfile: {s}", .{outfile_arg});
 
-    const esbuild_bin_path = std.fs.path.join(ctx.allocator, &.{ pkg_rootdir, "node_modules", ".bin", "esbuild" }) catch return error.EsbuildBinNotFound;
+    const esbuild_bin_path = std.Io.Dir.path.join(ctx.allocator, &.{ pkg_rootdir, "node_modules", ".bin", "esbuild" }) catch return error.EsbuildBinNotFound;
     defer ctx.allocator.free(esbuild_bin_path);
     var esbuild_args = std.ArrayList([]const u8).empty;
     try esbuild_args.append(ctx.allocator, esbuild_bin_path);
@@ -272,7 +272,7 @@ fn parseEsbuildOutput(stdout: []const u8) !EsbuildOutput {
             } else if (line_count == 1) {
                 // Second found one is time
                 // Look for "Done in" pattern
-                if (std.mem.indexOf(u8, trimmed_line, "Done in")) |done_idx| {
+                if (std.mem.find(u8, trimmed_line, "Done in")) |done_idx| {
                     const time_start = done_idx + 7; // "Done in" is 7 chars
                     if (time_start < trimmed_line.len) {
                         time = std.mem.trim(u8, trimmed_line[time_start..], " \t\r");

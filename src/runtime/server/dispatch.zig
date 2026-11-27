@@ -18,7 +18,7 @@ pub const DispatchResult = union(enum) {
 
 fn parseActionId(request: zx.server.Request) !u32 {
     const content_type = request.headers.get("content-type") orelse "";
-    const is_multipart = std.mem.indexOf(u8, content_type, "multipart/form-data") != null;
+    const is_multipart = std.mem.find(u8, content_type, "multipart/form-data") != null;
 
     const action_id = blk: {
         // Multi-part Form

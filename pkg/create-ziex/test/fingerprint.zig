@@ -42,7 +42,7 @@ pub fn main() !void {
     if (std.mem.eql(u8, cmd, "generate")) {
         const fp = Fingerprint.generate(name);
         var buf: [20]u8 = undefined;
-        const out = std.fmt.bufPrint(&buf, "0x{x:0>16}\n", .{fp.int()}) catch unreachable;
+        const out = std.mem.print(&buf, "0x{x:0>16}\n", .{fp.int()}) catch unreachable;
         try stdout.writeAll(out);
     } else if (std.mem.eql(u8, cmd, "validate")) {
         if (args.len < 4) {

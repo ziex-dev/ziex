@@ -1,17 +1,17 @@
 const std = @import("std");
 
 pub fn getValueColor(value: []const u8) []const u8 {
-    if (std.mem.indexOf(u8, value, "fn") != null) return "value-function";
+    if (std.mem.find(u8, value, "fn") != null) return "value-function";
     if (std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "false")) return "value-boolean";
     if (std.mem.startsWith(u8, value, "\"")) return "value-string";
     return "value-default";
 }
 
 pub fn isMultilineStringValue(value: []const u8) bool {
-    if (std.mem.indexOfScalar(u8, value, '\n') != null) return true;
+    if (std.mem.findScalar(u8, value, '\n') != null) return true;
     if (!std.mem.startsWith(u8, value, "\"")) return false;
-    return std.mem.indexOf(u8, value, "\\n") != null or
-        std.mem.indexOf(u8, value, "\\r") != null;
+    return std.mem.find(u8, value, "\\n") != null or
+        std.mem.find(u8, value, "\\r") != null;
 }
 
 pub fn decodeJsonString(allocator: std.mem.Allocator, value: []const u8) []const u8 {

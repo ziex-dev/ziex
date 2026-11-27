@@ -59,7 +59,7 @@ pub fn zlsView(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
     while (i < out.len) {
         switch (out[i]) {
             '/' => if (i + 1 < out.len and out[i + 1] == '/') {
-                i = std.mem.indexOfScalarPos(u8, out, i, '\n') orelse out.len;
+                i = std.mem.findScalarPos(u8, out, i, '\n') orelse out.len;
                 continue;
             },
             '"' => {
@@ -68,15 +68,15 @@ pub fn zlsView(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
             },
             '\'' => {
                 // Only a real char literal ('a', '\n', '\x41'); a lone apostrophe in text stays.
-                const end = std.mem.indexOfScalarPos(u8, out, i + 1, '\'') orelse out.len;
-                if (end < out.len and end - i <= 10 and std.mem.indexOfScalar(u8, out[i..end], '\n') == null) {
+                const end = std.mem.findScalarPos(u8, out, i + 1, '\'') orelse out.len;
+                if (end < out.len and end - i <= 10 and std.mem.findScalar(u8, out[i..end], '\n') == null) {
                     i = end + 1;
                     continue;
                 }
             },
             '`' => {
-                const end = std.mem.indexOfScalarPos(u8, out, i + 1, '`') orelse break;
-                if (std.mem.indexOfScalar(u8, out[i..end], '\n') == null) {
+                const end = std.mem.findScalarPos(u8, out, i + 1, '`') orelse break;
+                if (std.mem.findScalar(u8, out[i..end], '\n') == null) {
                     out[i] = '"';
                     out[end] = '"';
                     for (out[i + 1 .. end]) |*c| if (c.* == '"' or c.* == '\\') {

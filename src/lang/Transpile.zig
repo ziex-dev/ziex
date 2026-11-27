@@ -14,7 +14,7 @@ const NodeKind = Parse.NodeKind;
 pub const shape: []const u8 = "0.1.0";
 
 ast: *Ast,
-output: std.array_list.Managed(u8),
+output: std.ArrayList(u8),
 sourcemap_builder: sourcemap.Builder,
 current_line: i32 = 0,
 current_column: i32 = 0,
@@ -65,7 +65,7 @@ pub const ClientComponentMetadata = struct {
         hasher.update(path);
         if (index) |idx| {
             var idx_buf: [20]u8 = undefined;
-            const idx_str = std.fmt.bufPrint(&idx_buf, "{d}", .{idx}) catch unreachable;
+            const idx_str = std.mem.print(&idx_buf, "{d}", .{idx}) catch unreachable;
             hasher.update(idx_str);
         }
         var digest: [16]u8 = undefined;
@@ -107,7 +107,7 @@ pub fn init(ast: *Ast, allocator: std.mem.Allocator, options: Options) Transpile
     builder.source = options.path orelse "";
     return .{
         .ast = ast,
-        .output = std.array_list.Managed(u8).init(allocator),
+        .output = .empty,
         .sourcemap_builder = builder,
         .track_mappings = options.sourcemap,
         .file_path = options.path,
@@ -117,7 +117,7 @@ pub fn init(ast: *Ast, allocator: std.mem.Allocator, options: Options) Transpile
 }
 
 pub fn deinit(self: *Transpile) void {
-    self.output.deinit();
+    self.output.deinit(self.allocator);
     self.sourcemap_builder.deinit();
     self.client_components.deinit(self.allocator);
     if (self.zx_name_owned) self.allocator.free(self.zx_name);
@@ -128,7 +128,7 @@ pub fn run(self: *Transpile) !void {
 }
 
 fn write(self: *Transpile, bytes: []const u8) !void {
-    try self.output.appendSlice(bytes);
+    try self.output.appendSlice(self.allocator, bytes);
     self.updatePosition(bytes);
 }
 
@@ -136,13 +136,13 @@ fn write(self: *Transpile, bytes: []const u8) !void {
 /// Dunder helpers: `"_{s}_children_"` → `__zx_children_` or `__zx1_children_`.
 fn print(self: *Transpile, comptime fmt: []const u8, args: anytype) !void {
     var buf: [128]u8 = undefined;
-    const formatted = std.fmt.bufPrint(&buf, fmt, args) catch return error.OutOfMemory;
+    const formatted = std.mem.print(&buf, fmt, args) catch return error.OutOfMemory;
     try self.write(formatted);
 }
 
 fn printM(self: *Transpile, comptime fmt: []const u8, args: anytype, source_byte: u32) !void {
     var buf: [128]u8 = undefined;
-    const formatted = std.fmt.bufPrint(&buf, fmt, args) catch return error.OutOfMemory;
+    const formatted = std.mem.print(&buf, fmt, args) catch return error.OutOfMemory;
     try self.writeM(formatted, source_byte);
 }
 
@@ -294,7 +294,7 @@ fn pickZxName(allocator: std.mem.Allocator, used: []const []const u8) error{OutO
         const candidate = if (n == 0)
             "_zx"
         else
-            std.fmt.bufPrint(&buf, "_zx{d}", .{n}) catch return error.OutOfMemory;
+            std.mem.print(&buf, "_zx{d}", .{n}) catch return error.OutOfMemory;
 
         if (!zxNameConflicts(candidate, used)) {
             if (n == 0) return .{ "_zx", false };
@@ -607,7 +607,7 @@ fn transpileBlock(self: *Transpile, node: ts.Node) !void {
                 // Get unique block index for this inline ZX expression
                 const block_idx = self.nextBlockIndex();
                 var idx_buf: [16]u8 = undefined;
-                const idx_str = std.fmt.bufPrint(&idx_buf, "{d}", .{block_idx}) catch unreachable;
+                const idx_str = std.mem.print(&idx_buf, "{d}", .{block_idx}) catch unreachable;
 
                 // Check if element has @allocator attribute
                 const allocator_value = try self.getAllocatorAttribute(child);
@@ -738,7 +738,7 @@ fn transpileFragment(self: *Transpile, node: ts.Node, is_root: bool) !void {
 
     // Collect all zx_child nodes from the fragment
     var children = std.ArrayList(ts.Node).empty;
-    defer children.deinit(self.output.allocator);
+    defer children.deinit(self.allocator);
 
     var end_tag_start_byte: u32 = node.endByte();
     var end_tag_end_byte: u32 = node.endByte();
@@ -748,7 +748,7 @@ fn transpileFragment(self: *Transpile, node: ts.Node, is_root: bool) !void {
         const child = node.child(i) orelse continue;
         const kind = NodeKind.fromNode(child);
         if (kind == .zx_child) {
-            try children.append(self.output.allocator, child);
+            try children.append(self.allocator, child);
         } else if (kind == .zx_end_tag) {
             end_tag_start_byte = child.startByte();
             end_tag_end_byte = child.endByte();
@@ -814,18 +814,18 @@ fn transpileFragment(self: *Transpile, node: ts.Node, is_root: bool) !void {
 
 fn isCustomComponent(tag: []const u8) bool {
     // Namespaced components (e.g., components.Button, icons.GitHub) are always custom
-    if (std.mem.indexOfScalar(u8, tag, '.') != null) return true;
+    if (std.mem.findScalar(u8, tag, '.') != null) return true;
     return tag.len > 0 and std.ascii.isUpper(tag[0]);
 }
 
 /// Hyphenated tags are web components (not ZX components / HTML enum tags).
 fn isWebComponent(tag: []const u8) bool {
-    return tag.len > 0 and !isCustomComponent(tag) and std.mem.indexOfScalar(u8, tag, '-') != null;
+    return tag.len > 0 and !isCustomComponent(tag) and std.mem.findScalar(u8, tag, '-') != null;
 }
 
 /// Extract the component display name from a tag (part after the last dot, or the full tag)
 fn componentDisplayName(tag: []const u8) []const u8 {
-    if (std.mem.lastIndexOfScalar(u8, tag, '.')) |dot_pos| {
+    if (std.mem.findScalarLast(u8, tag, '.')) |dot_pos| {
         return tag[dot_pos + 1 ..];
     }
     return tag;
@@ -853,7 +853,7 @@ pub fn normalizeText(source: []const u8, node_start: u32, node_end: u32) ?Normal
 
     const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
     if (trimmed.len == 0) {
-        if (std.mem.indexOfAny(u8, text, "\n\r") != null or preceded_by_newline) return null;
+        if (std.mem.findAny(u8, text, "\n\r") != null or preceded_by_newline) return null;
         return .{ .text = text };
     }
 
@@ -862,8 +862,8 @@ pub fn normalizeText(source: []const u8, node_start: u32, node_end: u32) ?Normal
     const leading = text[0..content_start];
     const trailing = text[content_end..];
 
-    const strip_leading = preceded_by_newline or std.mem.indexOfAny(u8, leading, "\n\r") != null;
-    const strip_trailing = followed_by_newline or std.mem.indexOfAny(u8, trailing, "\n\r") != null;
+    const strip_leading = preceded_by_newline or std.mem.findAny(u8, leading, "\n\r") != null;
+    const strip_trailing = followed_by_newline or std.mem.findAny(u8, trailing, "\n\r") != null;
 
     const start: usize = if (strip_leading) content_start else 0;
     const end: usize = if (strip_trailing) content_end else text.len;
@@ -943,7 +943,7 @@ fn transpileSelfClosing(self: *Transpile, node: ts.Node, is_root: bool) !void {
     var tag_name: ?[]const u8 = null;
     var tag_name_byte: u32 = node.startByte();
     var attributes = std.ArrayList(ZxAttribute).empty;
-    defer attributes.deinit(self.output.allocator);
+    defer attributes.deinit(self.allocator);
 
     // Parse the self-closing element
     const child_count = node.childCount();
@@ -959,7 +959,7 @@ fn transpileSelfClosing(self: *Transpile, node: ts.Node, is_root: bool) !void {
             .zx_attribute, .zx_builtin_attribute, .zx_regular_attribute, .zx_shorthand_attribute, .zx_builtin_shorthand_attribute, .zx_spread_attribute => {
                 const attr = try self.parseAttribute(child);
                 if (attr.isValid()) {
-                    try attributes.append(self.output.allocator, attr);
+                    try attributes.append(self.allocator, attr);
                 }
             },
             else => {},
@@ -982,9 +982,9 @@ fn transpileFullElement(self: *Transpile, node: ts.Node, is_root: bool, parent_p
     var tag_name: ?[]const u8 = null;
     var tag_name_byte: u32 = node.startByte();
     var attributes = std.ArrayList(ZxAttribute).empty;
-    defer attributes.deinit(self.output.allocator);
+    defer attributes.deinit(self.allocator);
     var children = std.ArrayList(ts.Node).empty;
-    defer children.deinit(self.output.allocator);
+    defer children.deinit(self.allocator);
 
     var end_tag_start_byte: u32 = node.endByte();
     var end_tag_end_byte: u32 = node.endByte();
@@ -1010,14 +1010,14 @@ fn transpileFullElement(self: *Transpile, node: ts.Node, is_root: bool, parent_p
                         .zx_attribute, .zx_builtin_attribute, .zx_regular_attribute, .zx_shorthand_attribute, .zx_builtin_shorthand_attribute, .zx_spread_attribute => {
                             const attr = try self.parseAttribute(tag_child);
                             if (attr.isValid()) {
-                                try attributes.append(self.output.allocator, attr);
+                                try attributes.append(self.allocator, attr);
                             }
                         },
                         else => {},
                     }
                 }
             },
-            .zx_child => try children.append(self.output.allocator, child),
+            .zx_child => try children.append(self.allocator, child),
             .zx_end_tag => {
                 end_tag_start_byte = child.startByte();
                 end_tag_end_byte = child.endByte();
@@ -1173,22 +1173,22 @@ fn writeCustomComponent(self: *Transpile, _: ts.Node, tag: []const u8, tag_name_
         try self.write(".{ .src = @src() },\n");
 
         var spreads = std.ArrayList(ZxAttribute).empty;
-        defer spreads.deinit(self.output.allocator);
+        defer spreads.deinit(self.allocator);
         var regular_props = std.ArrayList(ZxAttribute).empty;
-        defer regular_props.deinit(self.output.allocator);
+        defer regular_props.deinit(self.allocator);
         var builtin_attrs = std.ArrayList(ZxAttribute).empty;
-        defer builtin_attrs.deinit(self.output.allocator);
+        defer builtin_attrs.deinit(self.allocator);
 
         for (attributes) |attr| {
             if (attr.is_builtin) {
                 // Collect builtin attributes for the options parameter
-                try builtin_attrs.append(self.output.allocator, attr);
+                try builtin_attrs.append(self.allocator, attr);
                 continue;
             }
             if (attr.is_spread) {
-                try spreads.append(self.output.allocator, attr);
+                try spreads.append(self.allocator, attr);
             } else {
-                try regular_props.append(self.output.allocator, attr);
+                try regular_props.append(self.allocator, attr);
             }
         }
 
@@ -1764,7 +1764,7 @@ fn transpileFor(self: *Transpile, node: ts.Node) !void {
         // Get unique index for this block to avoid conflicts with nested loops
         const block_idx = self.nextBlockIndex();
         var idx_buf: [16]u8 = undefined;
-        const idx_str = std.fmt.bufPrint(&idx_buf, "{d}", .{block_idx}) catch unreachable;
+        const idx_str = std.mem.print(&idx_buf, "{d}", .{block_idx}) catch unreachable;
 
         try self.print("{s}_for_blk_", .{self.zx_name});
         try self.write(idx_str);
@@ -1895,7 +1895,7 @@ fn transpileWhile(self: *Transpile, node: ts.Node) !void {
         // Get unique index for this block to avoid conflicts with nested loops
         const block_idx = self.nextBlockIndex();
         var idx_buf: [16]u8 = undefined;
-        const idx_str = std.fmt.bufPrint(&idx_buf, "{d}", .{block_idx}) catch unreachable;
+        const idx_str = std.mem.print(&idx_buf, "{d}", .{block_idx}) catch unreachable;
 
         // Generate: _zx_whl_blk_N: { var __zx_list_N = std.ArrayList(@import("zx").Component).init(_zx.getAlloc()); while (cond) |payload| : (cont) { __zx_list_N.append(...); } else |err| { ... }; break :_zx_whl_blk_N ...; }
         try self.printM("{s}_whl_blk_", .{self.zx_name}, node.startByte());
@@ -2253,9 +2253,9 @@ fn writeAttributes(self: *Transpile, attributes: []const ZxAttribute, in_functio
 /// Transpile a template string for component props to _zx.propf("format", .{ values })
 fn transpileTemplateStringProp(self: *Transpile, template_node: ts.Node) error{OutOfMemory}!void {
     var format_parts = std.ArrayList(u8).empty;
-    defer format_parts.deinit(self.output.allocator);
+    defer format_parts.deinit(self.allocator);
     var substitutions = std.ArrayList(ts.Node).empty;
-    defer substitutions.deinit(self.output.allocator);
+    defer substitutions.deinit(self.allocator);
 
     const template_start = template_node.startByte();
     const template_end = template_node.endByte();
@@ -2273,34 +2273,34 @@ fn transpileTemplateStringProp(self: *Transpile, template_node: ts.Node) error{O
 
         // Capture any gap (like spaces) between previous position and this child
         if (current_pos < child_start and child_start <= self.ast.source.len) {
-            try format_parts.appendSlice(self.output.allocator, self.ast.source[current_pos..child_start]);
+            try format_parts.appendSlice(self.allocator, self.ast.source[current_pos..child_start]);
         }
 
         switch (child_kind) {
             .zx_template_content => {
                 // Add text content to format string
                 const text = try self.ast.getNodeText(child);
-                try format_parts.appendSlice(self.output.allocator, text);
+                try format_parts.appendSlice(self.allocator, text);
             },
             .zx_template_substitution => {
                 // Tree-sitter may include leading whitespace in the substitution node.
                 // Find the actual '{' position and capture any text before it.
                 const sub_source = self.ast.source[child_start..child_end];
-                const brace_pos = std.mem.indexOfScalar(u8, sub_source, '{');
+                const brace_pos = std.mem.findScalar(u8, sub_source, '{');
                 if (brace_pos) |pos| {
                     if (pos > 0) {
                         // There's text before the '{' (like a space)
-                        try format_parts.appendSlice(self.output.allocator, sub_source[0..pos]);
+                        try format_parts.appendSlice(self.allocator, sub_source[0..pos]);
                     }
                 }
 
                 // Replace with {s} and save the expression node
-                try format_parts.appendSlice(self.output.allocator, "{s}");
+                try format_parts.appendSlice(self.allocator, "{s}");
 
                 // Get the expression using field name
                 const expr_node = child.childByFieldName("expression");
                 if (expr_node) |expr| {
-                    try substitutions.append(self.output.allocator, expr);
+                    try substitutions.append(self.allocator, expr);
                 }
             },
             else => {},
@@ -2311,7 +2311,7 @@ fn transpileTemplateStringProp(self: *Transpile, template_node: ts.Node) error{O
 
     // Capture any remaining content before closing backtick (unlikely but safe)
     if (current_pos < template_end - 1 and template_end <= self.ast.source.len) {
-        try format_parts.appendSlice(self.output.allocator, self.ast.source[current_pos .. template_end - 1]);
+        try format_parts.appendSlice(self.allocator, self.ast.source[current_pos .. template_end - 1]);
     }
 
     // Write _zx.propf("format", .{ values })
@@ -2334,9 +2334,9 @@ fn transpileTemplateStringProp(self: *Transpile, template_node: ts.Node) error{O
 fn transpileTemplateStringAttr(self: *Transpile, attr: ZxAttribute, template_node: ts.Node) error{OutOfMemory}!void {
     // Collect template content and substitutions
     var format_parts = std.ArrayList(u8).empty;
-    defer format_parts.deinit(self.output.allocator);
+    defer format_parts.deinit(self.allocator);
     var substitutions = std.ArrayList(ts.Node).empty;
-    defer substitutions.deinit(self.output.allocator);
+    defer substitutions.deinit(self.allocator);
 
     const template_start = template_node.startByte();
     const template_end = template_node.endByte();
@@ -2354,34 +2354,34 @@ fn transpileTemplateStringAttr(self: *Transpile, attr: ZxAttribute, template_nod
 
         // Capture any gap (like spaces) between previous position and this child
         if (current_pos < child_start and child_start <= self.ast.source.len) {
-            try format_parts.appendSlice(self.output.allocator, self.ast.source[current_pos..child_start]);
+            try format_parts.appendSlice(self.allocator, self.ast.source[current_pos..child_start]);
         }
 
         switch (child_kind) {
             .zx_template_content => {
                 // Add text content to format string
                 const text = try self.ast.getNodeText(child);
-                try format_parts.appendSlice(self.output.allocator, text);
+                try format_parts.appendSlice(self.allocator, text);
             },
             .zx_template_substitution => {
                 // Tree-sitter may include leading whitespace in the substitution node.
                 // Find the actual '{' position and capture any text before it.
                 const sub_source = self.ast.source[child_start..child_end];
-                const brace_pos = std.mem.indexOfScalar(u8, sub_source, '{');
+                const brace_pos = std.mem.findScalar(u8, sub_source, '{');
                 if (brace_pos) |pos| {
                     if (pos > 0) {
                         // There's text before the '{' (like a space)
-                        try format_parts.appendSlice(self.output.allocator, sub_source[0..pos]);
+                        try format_parts.appendSlice(self.allocator, sub_source[0..pos]);
                     }
                 }
 
                 // Replace with {s} and save the expression node
-                try format_parts.appendSlice(self.output.allocator, "{s}");
+                try format_parts.appendSlice(self.allocator, "{s}");
 
                 // Get the expression using field name
                 const expr_node = child.childByFieldName("expression");
                 if (expr_node) |expr| {
-                    try substitutions.append(self.output.allocator, expr);
+                    try substitutions.append(self.allocator, expr);
                 }
             },
             else => {},
@@ -2392,7 +2392,7 @@ fn transpileTemplateStringAttr(self: *Transpile, attr: ZxAttribute, template_nod
 
     // Capture any remaining content before closing backtick (unlikely but safe)
     if (current_pos < template_end - 1 and template_end <= self.ast.source.len) {
-        try format_parts.appendSlice(self.output.allocator, self.ast.source[current_pos .. template_end - 1]);
+        try format_parts.appendSlice(self.allocator, self.ast.source[current_pos .. template_end - 1]);
     }
 
     // Write _zx.attrf("name", "format", .{ values })

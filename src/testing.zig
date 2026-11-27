@@ -221,7 +221,7 @@ fn writeRequest(w: *std.Io.Writer, opts: FetchOptions) !void {
 }
 
 fn parseHttpResponse(arena: Allocator, raw: []const u8) !FetchResult {
-    const header_end = std.mem.indexOf(u8, raw, "\r\n\r\n") orelse return error.IncompleteResponse;
+    const header_end = std.mem.find(u8, raw, "\r\n\r\n") orelse return error.IncompleteResponse;
     const head = raw[0..header_end];
     const body = raw[header_end + 4 ..];
 
@@ -235,7 +235,7 @@ fn parseHttpResponse(arena: Allocator, raw: []const u8) !FetchResult {
     var headers: std.ArrayList(Header) = .empty;
     while (lines.next()) |line| {
         if (line.len == 0) break;
-        const sep = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+        const sep = std.mem.findScalar(u8, line, ':') orelse continue;
         try headers.append(arena, .{
             .name = line[0..sep],
             .value = std.mem.trim(u8, line[sep + 1 ..], " \t"),
@@ -325,7 +325,7 @@ fn fetchWasm(io: std.Io, arena: Allocator, opts: FetchOptions) !FetchResult {
 }
 
 fn splitPath(path: []const u8) struct { []const u8, []const u8 } {
-    if (std.mem.indexOfScalar(u8, path, '?')) |q| {
+    if (std.mem.findScalar(u8, path, '?')) |q| {
         return .{ path[0..q], path[q..] };
     }
     return .{ path, "" };
@@ -346,7 +346,7 @@ fn readChunk(stream: std.Io.net.Stream, io: std.Io, buf: []u8) !usize {
 }
 
 fn httpResponseComplete(raw: []const u8) bool {
-    const header_end = std.mem.indexOf(u8, raw, "\r\n\r\n") orelse return false;
+    const header_end = std.mem.find(u8, raw, "\r\n\r\n") orelse return false;
     const head = raw[0..header_end];
     const body = raw[header_end + 4 ..];
 

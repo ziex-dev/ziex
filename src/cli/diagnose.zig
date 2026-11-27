@@ -47,7 +47,7 @@ fn formatErrorFromStdin(io: std.Io, allocator: std.mem.Allocator, writer: *std.I
                     continue;
                 }
             } else if (last_diag.caret_line == null) {
-                if (std.mem.indexOfAny(u8, line, "^~") != null) {
+                if (std.mem.findAny(u8, line, "^~") != null) {
                     last_diag.caret_line = try allocator.dupe(u8, line);
                     line_writer.clearRetainingCapacity();
                     continue;

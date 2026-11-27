@@ -196,7 +196,7 @@ fn runnerFrame(r: *Runner, args: []const js.Value) void {
             removeClass(r.wrap, "is-flipped");
         }
         var buf: [48]u8 = undefined;
-        style(r.wrap, "transform", std.fmt.bufPrint(&buf, "translateX({d:.1}px)", .{r.x}) catch "");
+        style(r.wrap, "transform", std.mem.print(&buf, "translateX({d:.1}px)", .{r.x}) catch "");
 
         if (!fleeing and t >= r.next_pause_at) {
             r.paused = true;
@@ -579,7 +579,7 @@ const Crawler = struct {
         const x = p.x - @sin(rad) * sink;
         const y = p.y + @cos(rad) * sink;
         var buf: [160]u8 = undefined;
-        const transform = std.fmt.bufPrint(&buf, "translate({d}px, {d}px) rotate({d}deg) scaleX({d})", .{ x - size * foot_x, y - size * aspect * foot_y, p.a, c.facing }) catch return;
+        const transform = std.mem.print(&buf, "translate({d}px, {d}px) rotate({d}deg) scaleX({d})", .{ x - size * foot_x, y - size * aspect * foot_y, p.a, c.facing }) catch return;
         for (c.layers) |l| style(l.el, "transform", transform);
     }
 
@@ -741,7 +741,7 @@ fn layer(stage: web.HTMLElement, svg: []const u8, z: u8, name: []const u8) Layer
     defer doc.deinit();
     const el = doc.createElement("div", null);
     var buf: [64]u8 = undefined;
-    el.setClassName(std.fmt.bufPrint(&buf, "ziggy-crawler ziggy-crawler--{s}", .{name}) catch "ziggy-crawler");
+    el.setClassName(std.mem.print(&buf, "ziggy-crawler ziggy-crawler--{s}", .{name}) catch "ziggy-crawler");
     if (std.mem.eql(u8, name, "back")) {
         el.setAttribute("role", "img");
         el.setAttribute("aria-label", "Ziggy the Ziguana");
@@ -756,11 +756,11 @@ fn layer(stage: web.HTMLElement, svg: []const u8, z: u8, name: []const u8) Layer
         .{ "position", "absolute" },
         .{ "left", "0" },
         .{ "top", "0" },
-        .{ "width", std.fmt.bufPrint(&b1, "{d}px", .{size}) catch "" },
-        .{ "height", std.fmt.bufPrint(&b2, "{d}px", .{size * aspect}) catch "" },
-        .{ "transform-origin", std.fmt.bufPrint(&b3, "{d}px {d}px", .{ size * foot_x, size * aspect * foot_y }) catch "" },
+        .{ "width", std.mem.print(&b1, "{d}px", .{size}) catch "" },
+        .{ "height", std.mem.print(&b2, "{d}px", .{size * aspect}) catch "" },
+        .{ "transform-origin", std.mem.print(&b3, "{d}px {d}px", .{ size * foot_x, size * aspect * foot_y }) catch "" },
         .{ "cursor", "pointer" },
-        .{ "z-index", std.fmt.bufPrint(&b4, "{d}", .{z}) catch "" },
+        .{ "z-index", std.mem.print(&b4, "{d}", .{z}) catch "" },
         .{ "will-change", "transform" },
     };
     for (props) |kv| style(el, kv[0], kv[1]);

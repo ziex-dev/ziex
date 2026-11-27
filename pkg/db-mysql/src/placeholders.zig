@@ -58,14 +58,14 @@ pub fn rewrite(gpa: std.mem.Allocator, sql: []const u8) !?Rewritten {
         switch (c) {
             '\'', '"' => i = skipQuoted(sql, i, c, true),
             '`' => i = skipQuoted(sql, i, '`', false),
-            '#' => i = std.mem.indexOfScalarPos(u8, sql, i, '\n') orelse sql.len,
+            '#' => i = std.mem.findScalarPos(u8, sql, i, '\n') orelse sql.len,
             '-' => if (i + 1 < sql.len and sql[i + 1] == '-' and (i + 2 == sql.len or std.ascii.isWhitespace(sql[i + 2]) or std.ascii.isControl(sql[i + 2]))) {
-                i = std.mem.indexOfScalarPos(u8, sql, i, '\n') orelse sql.len;
+                i = std.mem.findScalarPos(u8, sql, i, '\n') orelse sql.len;
             } else {
                 i += 1;
             },
             '/' => if (i + 1 < sql.len and sql[i + 1] == '*') {
-                i = if (std.mem.indexOfPos(u8, sql, i + 2, "*/")) |end| end + 2 else sql.len;
+                i = if (std.mem.findPos(u8, sql, i + 2, "*/")) |end| end + 2 else sql.len;
             } else {
                 i += 1;
             },

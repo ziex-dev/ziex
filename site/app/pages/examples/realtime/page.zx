@@ -203,7 +203,7 @@ fn onWsMessage(_: *zx.websocket.Client, event: zx.websocket.MessageEvent) void {
     var author: []const u8 = "";
     var text: []const u8 = data;
 
-    if (std.mem.indexOf(u8, data, ": ")) |colon_idx| {
+    if (std.mem.find(u8, data, ": ")) |colon_idx| {
         author = zx.allocator.dupe(u8, data[0..colon_idx]) catch return;
         text = zx.allocator.dupe(u8, data[colon_idx + 2 ..]) catch return;
     } else {
@@ -230,7 +230,7 @@ fn onWsMessage(_: *zx.websocket.Client, event: zx.websocket.MessageEvent) void {
 fn handleTypingEvent(data: []const u8) void {
     // typing:{username}:{draft} — empty draft clears
     const rest = data["typing:".len..];
-    const sep = std.mem.indexOfScalar(u8, rest, ':') orelse return;
+    const sep = std.mem.findScalar(u8, rest, ':') orelse return;
     const name = rest[0..sep];
     const draft = rest[sep + 1 ..];
     if (name.len == 0 or std.mem.eql(u8, name, current_username)) return;

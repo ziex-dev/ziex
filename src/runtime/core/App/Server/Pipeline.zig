@@ -471,7 +471,7 @@ pub const web = struct {
     }
 
     pub fn target(url: []const u8) struct { path: []const u8, search: []const u8 } {
-        if (std.mem.indexOfScalar(u8, url, '?')) |p| {
+        if (std.mem.findScalar(u8, url, '?')) |p| {
             return .{ .path = url[0..p], .search = url[p..] };
         }
         return .{ .path = url, .search = "" };
@@ -488,7 +488,7 @@ pub const web = struct {
     }
 
     pub fn mime(path: []const u8) []const u8 {
-        const ext = std.fs.path.extension(path);
+        const ext = std.Io.Dir.path.extension(path);
         if (std.mem.eql(u8, ext, ".html")) return "text/html";
         if (std.mem.eql(u8, ext, ".css")) return "text/css";
         if (std.mem.eql(u8, ext, ".js")) return "text/javascript";
@@ -508,7 +508,7 @@ pub const web = struct {
     ) !?[]const u8 {
         const rel = if (pathname.len > 0 and pathname[0] == '/') pathname[1..] else pathname;
         if (rel.len == 0) return null;
-        const file_path = std.fs.path.join(arena, &.{ staticdir, rel }) catch return null;
+        const file_path = std.Io.Dir.path.join(arena, &.{ staticdir, rel }) catch return null;
         return std.Io.Dir.cwd().readFileAlloc(io, file_path, arena, .unlimited) catch null;
     }
 };

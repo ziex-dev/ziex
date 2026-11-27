@@ -210,7 +210,7 @@ test "api > bad credentials fail at open" {
     var parsed = try zx.Db.Postgres.uri.parse(t.allocator, url);
     defer parsed.deinit();
 
-    const bad = try std.fmt.allocPrint(t.allocator, "postgres://{s}:definitely-wrong@{s}:{d}/{s}?sslmode={s}", .{
+    const bad = try t.allocator.print("postgres://{s}:definitely-wrong@{s}:{d}/{s}?sslmode={s}", .{
         parsed.user, parsed.host, parsed.port, parsed.database, @tagName(parsed.sslmode),
     });
     defer t.allocator.free(bad);
@@ -243,8 +243,8 @@ test "api > session is encrypted when sslmode requires it" {
 fn urlWith(param: []const u8) ![]u8 {
     const url = try testUrl();
     defer t.allocator.free(url);
-    const sep: u8 = if (std.mem.indexOfScalar(u8, url, '?') == null) '?' else '&';
-    return std.fmt.allocPrint(t.allocator, "{s}{c}{s}", .{ url, sep, param });
+    const sep: u8 = if (std.mem.findScalar(u8, url, '?') == null) '?' else '&';
+    return t.allocator.print("{s}{c}{s}", .{ url, sep, param });
 }
 
 fn preparedCount(database: Db) !i64 {
@@ -286,7 +286,7 @@ test "api > statement cache is bounded and can be disabled" {
         var database = try Postgres.open(t.allocator, t.io, url, .{ .max_pool_size = 1 });
         defer database.deinit();
         for (1..6) |i| {
-            const sql = try std.fmt.allocPrint(t.allocator, "SELECT {d} + $1 AS v", .{i});
+            const sql = try t.allocator.print("SELECT {d} + $1 AS v", .{i});
             defer t.allocator.free(sql);
             _ = try database.run(sql, .{1});
         }

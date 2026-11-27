@@ -197,7 +197,7 @@ fn isByteSlice(comptime T: type) bool {
 }
 
 fn fieldLooksLikeUri(comptime name: []const u8) bool {
-    return std.mem.eql(u8, name, "uri") or std.mem.indexOf(u8, name, "Uri") != null;
+    return std.mem.eql(u8, name, "uri") or std.mem.find(u8, name, "Uri") != null;
 }
 
 fn remapUrisInValue(handler: *Handler, value: anytype) void {
@@ -249,13 +249,13 @@ fn uriToPath(uri: []const u8) ?[]const u8 {
 /// For each @import("*.zx") in source, ensure the referenced .zx file is opened in the backing LSP.
 fn openZxImportsInBacking(handler: *Handler, arena: std.mem.Allocator, document_uri: []const u8, source: []const u8) void {
     const doc_path = uriToPath(document_uri) orelse return;
-    const doc_dir = std.fs.path.dirname(doc_path) orelse return;
+    const doc_dir = std.Io.Dir.path.dirname(doc_path) orelse return;
 
     const needle = "@import(\"";
     var pos: usize = 0;
-    while (std.mem.indexOfPos(u8, source, pos, needle)) |start| {
+    while (std.mem.findPos(u8, source, pos, needle)) |start| {
         const path_start = start + needle.len;
-        if (std.mem.indexOfPos(u8, source, path_start, "\")")) |path_end| {
+        if (std.mem.findPos(u8, source, path_start, "\")")) |path_end| {
             const import_path = source[path_start..path_end];
             if (std.mem.endsWith(u8, import_path, ".zx")) {
                 handler.ensureZxFileOpenInBacking(arena, doc_dir, import_path);
@@ -266,7 +266,7 @@ fn openZxImportsInBacking(handler: *Handler, arena: std.mem.Allocator, document_
 }
 
 fn ensureZxFileOpenInBacking(handler: *Handler, arena: std.mem.Allocator, doc_dir: []const u8, rel_path: []const u8) void {
-    const joined = std.fs.path.join(handler.allocator, &.{ doc_dir, rel_path }) catch return;
+    const joined = std.Io.Dir.path.join(handler.allocator, &.{ doc_dir, rel_path }) catch return;
     defer handler.allocator.free(joined);
 
     const resolved_path = switch (builtin.os.tag) {

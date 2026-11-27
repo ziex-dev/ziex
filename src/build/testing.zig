@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub const Options = struct {
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
     app: std.Build.LazyPath,
     manifest: std.Build.LazyPath,
     enable_httpz: bool = true,
@@ -38,9 +38,7 @@ pub fn configure(b: *std.Build, zx_mod: *std.Build.Module, opts: Options) *std.B
     zx_mod.addOptions("app_opts", app_opts);
 
     if (opts.enable_httpz) {
-        if (b.lazyDependency("httpz", .{ .target = opts.target, .optimize = opts.optimize })) |httpz_dep| {
-            zx_mod.addImport("httpz", httpz_dep.module("httpz"));
-        }
+        zx_mod.addImport("httpz", b.dependency("httpz", .{ .target = opts.target, .optimize = opts.optimize }).module("httpz"));
     }
 
     const app_mod = b.createModule(.{

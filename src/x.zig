@@ -34,11 +34,11 @@ const Options = struct {
 };
 
 pub const ComptimeOptions = struct {
-    src: ?std.builtin.SourceLocation = null,
+    src: ?std.lang.SourceLocation = null,
 };
 
 pub const InitOptions = struct {
-    src: ?std.builtin.SourceLocation = null,
+    src: ?std.lang.SourceLocation = null,
 };
 
 fn componentId(comptime options: InitOptions) Id {
@@ -203,7 +203,7 @@ const Context = struct {
     /// Returns null for values that should omit the attribute (false booleans, null optionals)
     ///
     /// `src` is the attribute's call-site `@src()` (emitted by the transpiler).
-    pub fn attr(self: *Context, comptime src: ?std.builtin.SourceLocation, comptime name: []const u8, val: anytype) ?Element.Attribute {
+    pub fn attr(self: *Context, comptime src: ?std.lang.SourceLocation, comptime name: []const u8, val: anytype) ?Element.Attribute {
         const T = @TypeOf(val);
 
         if (comptime isStatePointer(T)) {
@@ -686,7 +686,7 @@ pub const Id = enum(u64) {
     /// ```
     /// is how new widgets get their id, and can be used to make a unique id without
     /// making a widget.
-    pub fn extendId(start: ?Id, comptime src: std.builtin.SourceLocation, id_extra: usize) Id {
+    pub fn extendId(start: ?Id, comptime src: std.lang.SourceLocation, id_extra: usize) Id {
         const cp = std.fmt.comptimePrint;
         var hash = fnv.init();
         if (start) |s| hash.value = s.asU64();
@@ -694,24 +694,24 @@ pub const Id = enum(u64) {
         hash.update(cp("{d}", .{src.line}));
         hash.update(cp("{d}", .{src.column}));
         var buf: [40]u8 = undefined;
-        hash.update(std.fmt.bufPrint(&buf, "{d}", .{id_extra}) catch unreachable);
+        hash.update(std.mem.print(&buf, "{d}", .{id_extra}) catch unreachable);
         return @fromBackingInt(@intCast(hash.final()));
     }
 
-    /// Runtime variant of `extendId` that hashes a runtime `std.builtin.SourceLocation`.
+    /// Runtime variant of `extendId` that hashes a runtime `std.lang.SourceLocation`.
     /// Produces the same id as `extendId` for an equivalent `src`/`id_extra`, so a
     /// component-block id (built at comptime) and an instance id derived from a
     /// runtime `@src()` value hash consistently.
-    pub fn extend(start: ?Id, src: std.builtin.SourceLocation, id_extra: usize) Id {
+    pub fn extend(start: ?Id, src: std.lang.SourceLocation, id_extra: usize) Id {
         var hash = fnv.init();
         if (start) |s| {
             hash.value = s.asU64();
         }
         hash.update(src.file);
         var buf: [40]u8 = undefined;
-        hash.update(std.fmt.bufPrint(&buf, "{d}", .{src.line}) catch unreachable);
-        hash.update(std.fmt.bufPrint(&buf, "{d}", .{src.column}) catch unreachable);
-        hash.update(std.fmt.bufPrint(&buf, "{d}", .{id_extra}) catch unreachable);
+        hash.update(std.mem.print(&buf, "{d}", .{src.line}) catch unreachable);
+        hash.update(std.mem.print(&buf, "{d}", .{src.column}) catch unreachable);
+        hash.update(std.mem.print(&buf, "{d}", .{id_extra}) catch unreachable);
         return @fromBackingInt(@intCast(hash.final()));
     }
 

@@ -76,7 +76,7 @@ fn path(fs: *const Fs, arena: std.mem.Allocator, key: []const u8, ext: []const u
     w.writeAll(fs.root) catch return error.OutOfMemory;
     var it = std.mem.splitScalar(u8, key, '/');
     while (it.next()) |segment| {
-        w.writeByte(std.fs.path.sep) catch return error.OutOfMemory;
+        w.writeByte(std.Io.Dir.path.sep) catch return error.OutOfMemory;
         const start = w.end;
         encodeSegment(w, segment) catch return error.OutOfMemory;
         if (w.end - start > max_segment_len) return error.InvalidKey;
@@ -87,7 +87,7 @@ fn path(fs: *const Fs, arena: std.mem.Allocator, key: []const u8, ext: []const u
 
 // The directory holding every key that starts with `prefix`, and that prefix as a key.
 fn prefixDir(fs: *const Fs, arena: std.mem.Allocator, prefix: []const u8) Bucket.Error!struct { dir: []const u8, key: []const u8 } {
-    const slash = std.mem.lastIndexOfScalar(u8, prefix, '/') orelse return .{ .dir = fs.root, .key = "" };
+    const slash = std.mem.findScalarLast(u8, prefix, '/') orelse return .{ .dir = fs.root, .key = "" };
     const key = prefix[0 .. slash + 1];
     const dir = try fs.path(arena, key[0..slash], "");
     return .{ .dir = dir, .key = key };
@@ -213,8 +213,8 @@ fn delete(userdata: ?*anyopaque, key: []const u8) Bucket.Error!void {
     cwd.deleteFile(fs.io, try fs.path(arena, key, meta_ext)) catch {};
 
     // Drops directories the key leaves empty, up to `root`.
-    var dir = std.fs.path.dirname(object) orelse return;
-    while (dir.len > fs.root.len) : (dir = std.fs.path.dirname(dir) orelse return) {
+    var dir = std.Io.Dir.path.dirname(object) orelse return;
+    while (dir.len > fs.root.len) : (dir = std.Io.Dir.path.dirname(dir) orelse return) {
         cwd.deleteDir(fs.io, dir) catch return;
     }
 }
@@ -258,7 +258,7 @@ fn list(userdata: ?*anyopaque, gpa: std.mem.Allocator, opts: Bucket.ListOptions)
         };
         if (objects.items.len + prefixes.items.len >= opts.limit) break;
 
-        if (opts.delimiter) |d| if (std.mem.indexOf(u8, key[opts.prefix.len..], d)) |at| {
+        if (opts.delimiter) |d| if (std.mem.find(u8, key[opts.prefix.len..], d)) |at| {
             const rolled = key[0 .. opts.prefix.len + at + d.len];
             try prefixes.append(a, rolled);
             while (i < keys.items.len and std.mem.startsWith(u8, keys.items[i], rolled)) : (i += 1) last = keys.items[i];
@@ -281,7 +281,7 @@ fn list(userdata: ?*anyopaque, gpa: std.mem.Allocator, opts: Bucket.ListOptions)
 fn decodeKey(arena: std.mem.Allocator, base: []const u8, rel: []const u8) ![]const u8 {
     var out: std.Io.Writer.Allocating = .init(arena);
     try out.writer.writeAll(base);
-    var it = std.mem.splitScalar(u8, rel, std.fs.path.sep);
+    var it = std.mem.splitScalar(u8, rel, std.Io.Dir.path.sep);
     var first = true;
     while (it.next()) |segment| {
         if (!first) try out.writer.writeByte('/');

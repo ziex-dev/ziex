@@ -76,48 +76,48 @@ pub fn commitTo(self: *const Manifest, io: std.Io, path: []const u8) !void {
     var aw = std.Io.Writer.Allocating.init(std.heap.page_allocator);
     defer aw.deinit();
     try std.zon.stringify.serializeArbitraryDepth(self.app(), .{ .whitespace = true }, &aw.writer);
-    if (std.fs.path.dirname(path)) |dir| {
+    if (std.Io.Dir.path.dirname(path)) |dir| {
         try std.Io.Dir.cwd().createDirPath(io, dir);
     }
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = aw.written() });
 }
 
 pub fn mergeBuildInjections(self: *Manifest, build_injections: []const AddElementOptions) !void {
-    var injections = std.array_list.Managed(AddElementOptions).init(self.allocator);
-    errdefer injections.deinit();
+    var injections: std.ArrayList(AddElementOptions) = .empty;
+    errdefer injections.deinit(self.allocator);
 
     for (self.injections) |injection| {
-        if (!isManagedBuildInjection(injection)) try injections.append(injection);
+        if (!isManagedBuildInjection(injection)) try injections.append(self.allocator, injection);
     }
     for (build_injections) |injection| {
-        try injections.append(try dupeInjection(self.allocator, injection));
+        try injections.append(self.allocator, try dupeInjection(self.allocator, injection));
     }
 
-    self.injections = try injections.toOwnedSlice();
+    self.injections = try injections.toOwnedSlice(self.allocator);
 }
 
 pub fn upsertWasmlinkInjection(self: *Manifest, injection: AddElementOptions) !void {
-    var injections = std.array_list.Managed(AddElementOptions).init(self.allocator);
-    errdefer injections.deinit();
+    var injections: std.ArrayList(AddElementOptions) = .empty;
+    errdefer injections.deinit(self.allocator);
 
     for (self.injections) |existing| {
-        if (!isWasmlinkInjection(existing)) try injections.append(existing);
+        if (!isWasmlinkInjection(existing)) try injections.append(self.allocator, existing);
     }
-    try injections.append(try dupeInjection(self.allocator, injection));
+    try injections.append(self.allocator, try dupeInjection(self.allocator, injection));
 
-    self.injections = try injections.toOwnedSlice();
+    self.injections = try injections.toOwnedSlice(self.allocator);
 }
 
 pub fn upsertJsglueInjection(self: *Manifest, injection: AddElementOptions) !void {
-    var injections = std.array_list.Managed(AddElementOptions).init(self.allocator);
-    errdefer injections.deinit();
+    var injections: std.ArrayList(AddElementOptions) = .empty;
+    errdefer injections.deinit(self.allocator);
 
     for (self.injections) |existing| {
-        if (!isJsglueInjection(existing)) try injections.append(existing);
+        if (!isJsglueInjection(existing)) try injections.append(self.allocator, existing);
     }
-    try injections.append(try dupeInjection(self.allocator, injection));
+    try injections.append(self.allocator, try dupeInjection(self.allocator, injection));
 
-    self.injections = try injections.toOwnedSlice();
+    self.injections = try injections.toOwnedSlice(self.allocator);
 }
 
 pub fn setRoutes(self: *Manifest, routes: []const RouteEntry) !void {

@@ -193,10 +193,10 @@ pub fn watchBuildOutput(watcher: *BuildWatcher) !void {
         watcher.mutex.unlock();
 
         // Check for error indicators in the output
-        if (std.mem.indexOf(u8, chunk, "error:") != null or
-            std.mem.indexOf(u8, chunk, "Error:") != null or
-            std.mem.indexOf(u8, chunk, "stderr") != null or
-            std.mem.indexOf(u8, chunk, "ERROR:") != null)
+        if (std.mem.find(u8, chunk, "error:") != null or
+            std.mem.find(u8, chunk, "Error:") != null or
+            std.mem.find(u8, chunk, "stderr") != null or
+            std.mem.find(u8, chunk, "ERROR:") != null)
         {
             watcher.mutex.lock();
             watcher.current_build_has_errors = true;
@@ -223,12 +223,12 @@ pub fn watchBuildOutput(watcher: *BuildWatcher) !void {
 
         if (pattern_buf.items.len > 1024) {
             const keep_from = pattern_buf.items.len - 512;
-            std.mem.copyForwards(u8, pattern_buf.items[0..512], pattern_buf.items[keep_from..]);
+            @memmove(pattern_buf.items[0..512], pattern_buf.items[keep_from..]);
             pattern_buf.shrinkRetainingCapacity(512);
         }
 
         // Detect build completion via "Build Summary:"
-        if (std.mem.indexOf(u8, pattern_buf.items, "Build Summary:") != null) {
+        if (std.mem.find(u8, pattern_buf.items, "Build Summary:") != null) {
             const now = std.Io.Clock.awake.now(std.testing.io).nanoseconds;
             log.debug("Build Summary detected", .{});
 

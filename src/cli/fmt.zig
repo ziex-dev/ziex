@@ -157,7 +157,7 @@ fn formatDir(
         // Construct full path relative to current working directory
         // Normalize path by removing leading ./ if present
         const normalized_path = if (std.mem.startsWith(u8, path, "./")) path[2..] else path;
-        const full_path = try std.fs.path.join(allocator, &.{ normalized_path, entry.path });
+        const full_path = try std.Io.Dir.path.join(allocator, &.{ normalized_path, entry.path });
         defer allocator.free(full_path);
 
         // Read file using entry.dir (which is the directory containing the file)

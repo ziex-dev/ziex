@@ -377,7 +377,7 @@ const QueryCache = struct {
             if (pair.len == 0) continue;
             if (self.count >= self.keys.len) break;
             const i = self.count;
-            if (std.mem.indexOfScalar(u8, pair, '=')) |eq| {
+            if (std.mem.findScalar(u8, pair, '=')) |eq| {
                 self.keys[i] = formDecode(allocator, pair[0..eq]) catch pair[0..eq];
                 self.values[i] = formDecode(allocator, pair[eq + 1 ..]) catch pair[eq + 1 ..];
             } else {
@@ -417,9 +417,9 @@ const MultiCache = struct {
 
     fn getBoundary(ct: []const u8) ?[]const u8 {
         const needle = "boundary=";
-        const idx = std.mem.indexOf(u8, ct, needle) orelse return null;
+        const idx = std.mem.find(u8, ct, needle) orelse return null;
         const rest = ct[idx + needle.len ..];
-        const end = std.mem.indexOfAny(u8, rest, "; \t\r\n") orelse rest.len;
+        const end = std.mem.findAny(u8, rest, "; \t\r\n") orelse rest.len;
         return if (end == 0) null else rest[0..end];
     }
 
@@ -467,7 +467,7 @@ const MultiCache = struct {
         const mf_body = b.body;
         var pos: usize = 0;
 
-        const first = std.mem.indexOf(u8, mf_body[pos..], delim) orelse return;
+        const first = std.mem.find(u8, mf_body[pos..], delim) orelse return;
         pos += first + delim.len;
         if (pos < mf_body.len and mf_body[pos] == '\r') pos += 1;
         if (pos < mf_body.len and mf_body[pos] == '\n') pos += 1;
@@ -481,7 +481,7 @@ const MultiCache = struct {
             var filename: ?[]const u8 = null;
 
             while (pos < mf_body.len) {
-                const line_end = std.mem.indexOf(u8, mf_body[pos..], "\r\n") orelse break;
+                const line_end = std.mem.find(u8, mf_body[pos..], "\r\n") orelse break;
                 const line = mf_body[pos .. pos + line_end];
                 pos += line_end + 2;
                 if (line.len == 0) break;
@@ -494,7 +494,7 @@ const MultiCache = struct {
                 }
             }
 
-            const part_end = std.mem.indexOf(u8, mf_body[pos..], delim) orelse break;
+            const part_end = std.mem.find(u8, mf_body[pos..], delim) orelse break;
             var part_body = mf_body[pos .. pos + part_end];
             if (part_body.len >= 2 and part_body[part_body.len - 2] == '\r' and part_body[part_body.len - 1] == '\n') {
                 part_body = part_body[0 .. part_body.len - 2];
@@ -521,7 +521,7 @@ fn formDecode(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     }
     const decoded = std.Uri.percentDecodeInPlace(buf);
     if (decoded.ptr != buf.ptr) {
-        std.mem.copyForwards(u8, buf[0..decoded.len], decoded);
+        @memmove(buf[0..decoded.len], decoded);
     }
     return try allocator.realloc(buf, decoded.len);
 }

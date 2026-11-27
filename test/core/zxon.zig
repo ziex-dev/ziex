@@ -575,10 +575,10 @@ test "serialize complex props" {
     const data = try encode(ComplexProps, props);
     defer testing.allocator.free(data);
     try testing.expect(std.mem.startsWith(u8, data, "[42,-100,0,"));
-    try testing.expect(std.mem.indexOf(u8, data, "\"Hello\"") != null);
-    try testing.expect(std.mem.indexOf(u8, data, "\"World\\n\"") != null);
-    try testing.expect(std.mem.indexOf(u8, data, "[10,true]") != null);
-    try testing.expect(std.mem.indexOf(u8, data, "[1,2,3]") != null);
+    try testing.expect(std.mem.find(u8, data, "\"Hello\"") != null);
+    try testing.expect(std.mem.find(u8, data, "\"World\\n\"") != null);
+    try testing.expect(std.mem.find(u8, data, "[10,true]") != null);
+    try testing.expect(std.mem.find(u8, data, "[1,2,3]") != null);
     try testing.expect(std.mem.endsWith(u8, data, ",1]"));
 }
 

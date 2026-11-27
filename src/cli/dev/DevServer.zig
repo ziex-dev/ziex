@@ -655,7 +655,7 @@ fn buildAppInfoJson(ds: *DevServer) ![]u8 {
     }
 
     if (ds.install_prefix.len > 0) {
-        const manifest_path = try std.fs.path.join(ds.gpa, &.{ ds.install_prefix, "manifest", "app.zon" });
+        const manifest_path = try std.Io.Dir.path.join(ds.gpa, &.{ ds.install_prefix, "manifest", "app.zon" });
         defer ds.gpa.free(manifest_path);
         if (std.Io.Dir.cwd().readFileAlloc(ds.io, manifest_path, ds.gpa, .unlimited)) |source| {
             defer ds.gpa.free(source);
@@ -829,7 +829,7 @@ fn proxyToInner(
     // for subsequent requests that might need to be intercepted by the DevServer.
 
     // Find the end of headers
-    const end_idx = std.mem.indexOf(u8, head_buffer, "\r\n\r\n") orelse head_buffer.len;
+    const end_idx = std.mem.find(u8, head_buffer, "\r\n\r\n") orelse head_buffer.len;
     var header_part = head_buffer[0..end_idx];
 
     var rewritten_owned: ?[]u8 = null;
@@ -845,12 +845,12 @@ fn proxyToInner(
     const keep_alive = "keep-alive";
     const close = "close";
 
-    if (std.mem.indexOf(u8, header_part, keep_alive) != null) {
+    if (std.mem.find(u8, header_part, keep_alive) != null) {
         const count = std.mem.count(u8, header_part, keep_alive);
         const new_len = header_part.len - (count * (keep_alive.len - close.len));
         try transformed.resize(ds.gpa, new_len);
         _ = std.mem.replace(u8, header_part, keep_alive, close, transformed.items);
-    } else if (std.mem.indexOf(u8, header_part, "Connection:") == null) {
+    } else if (std.mem.find(u8, header_part, "Connection:") == null) {
         try transformed.appendSlice(ds.gpa, header_part);
         try transformed.appendSlice(ds.gpa, "\r\nConnection: close");
     } else {
@@ -893,13 +893,13 @@ fn proxyToInner(
 }
 
 fn rewriteRequestTarget(allocator: Allocator, header_part: []const u8, new_target: []const u8) ![]u8 {
-    const line_end = std.mem.indexOf(u8, header_part, "\r\n") orelse return error.InvalidRequest;
+    const line_end = std.mem.find(u8, header_part, "\r\n") orelse return error.InvalidRequest;
     const first_line = header_part[0..line_end];
     const rest = header_part[line_end..];
 
-    const method_end = std.mem.indexOfScalar(u8, first_line, ' ') orelse return error.InvalidRequest;
+    const method_end = std.mem.findScalar(u8, first_line, ' ') orelse return error.InvalidRequest;
     const after_method = first_line[method_end + 1 ..];
-    const target_end = std.mem.indexOfScalar(u8, after_method, ' ') orelse return error.InvalidRequest;
+    const target_end = std.mem.findScalar(u8, after_method, ' ') orelse return error.InvalidRequest;
     const version = after_method[target_end + 1 ..];
 
     return allocator.print("{s} {s} {s}{s}", .{
@@ -961,7 +961,7 @@ fn copyStream(io: std.Io, src: std.Io.net.Stream, dst: std.Io.net.Stream) void {
 
 // Diagnostics integration
 fn handleOpenInEditor(ds: *DevServer, target: []const u8) !void {
-    const query_pos = std.mem.indexOf(u8, target, "?") orelse return;
+    const query_pos = std.mem.find(u8, target, "?") orelse return;
     const query = target[query_pos + 1 ..];
 
     var it = std.mem.splitScalar(u8, query, '&');
@@ -1005,8 +1005,8 @@ fn handleOpenInEditor(ds: *DevServer, target: []const u8) !void {
             if (maybe) |remapped| {
                 remapped_owned = remapped.file;
                 open_file = remapped.file;
-                open_line = std.fmt.bufPrint(&open_line_buf, "{d}", .{remapped.line}) catch l_str;
-                open_col = std.fmt.bufPrint(&open_col_buf, "{d}", .{remapped.col}) catch c_str;
+                open_line = std.mem.print(&open_line_buf, "{d}", .{remapped.line}) catch l_str;
+                open_col = std.mem.print(&open_col_buf, "{d}", .{remapped.col}) catch c_str;
                 log.debug("open-in-editor remapped {s}:{d} → {s}:{d}", .{ decoded_file, l_num, open_file, remapped.line });
             }
         } else |_| {}
@@ -1038,7 +1038,7 @@ fn urlDecode(allocator: std.mem.Allocator, encoded: []const u8) ![]u8 {
     errdefer allocator.free(buf);
     const decoded = std.Uri.percentDecodeInPlace(buf);
     if (decoded.ptr != buf.ptr) {
-        std.mem.copyForwards(u8, buf[0..decoded.len], decoded);
+        @memmove(buf[0..decoded.len], decoded);
     }
     return try allocator.realloc(buf, decoded.len);
 }

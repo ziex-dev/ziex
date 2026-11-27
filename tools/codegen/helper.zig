@@ -38,7 +38,7 @@ pub fn calcExprSource(allocator: std.mem.Allocator) ![]const u8 {
         \\    fn init(t: []const u8) Self {
         \\        var self: Self = undefined;
         \\        if (t.len > self.buf.len) @panic("calc expression too complex");
-        \\        std.mem.copyForwards(u8, self.buf[0..t.len], t);
+        \\        @memmove(self.buf[0..t.len], t);
         \\        self.len = @intCast(t.len);
         \\        return self;
         \\    }
@@ -53,13 +53,13 @@ pub fn calcExprSource(allocator: std.mem.Allocator) ![]const u8 {
         \\
         \\    fn unitLeaf(unit: Unit, value: f32) Self {
         \\        var temp: [64]u8 = undefined;
-        \\        const written = std.fmt.bufPrint(&temp, "{d}{s}", .{ value, unit.toString() }) catch @panic("calc expression too complex");
+        \\        const written = std.mem.print(&temp, "{d}{s}", .{ value, unit.toString() }) catch @panic("calc expression too complex");
         \\        return Self.leaf(written);
         \\    }
         \\
         \\    fn numberLeaf(value: f32) Self {
         \\        var temp: [64]u8 = undefined;
-        \\        const written = std.fmt.bufPrint(&temp, "{d}", .{value}) catch @panic("calc expression too complex");
+        \\        const written = std.mem.print(&temp, "{d}", .{value}) catch @panic("calc expression too complex");
         \\        return Self.leaf(written);
         \\    }
         \\
@@ -102,15 +102,15 @@ pub fn calcExprSource(allocator: std.mem.Allocator) ![]const u8 {
         \\        var i: usize = 0;
         \\        temp[i] = '(';
         \\        i += 1;
-        \\        std.mem.copyForwards(u8, temp[i..][0..lhs.len], lhs);
+        \\        @memmove(temp[i..][0..lhs.len], lhs);
         \\        i += lhs.len;
         \\        temp[i] = ' ';
         \\        i += 1;
-        \\        std.mem.copyForwards(u8, temp[i..][0..op_text.len], op_text);
+        \\        @memmove(temp[i..][0..op_text.len], op_text);
         \\        i += op_text.len;
         \\        temp[i] = ' ';
         \\        i += 1;
-        \\        std.mem.copyForwards(u8, temp[i..][0..rhs.len], rhs);
+        \\        @memmove(temp[i..][0..rhs.len], rhs);
         \\        i += rhs.len;
         \\        temp[i] = ')';
         \\        i += 1;

@@ -264,7 +264,7 @@ fn enumNames(comptime E: type) []const u8 {
 // Empty for zero-ish defaults (false, 0, "", null), which read as "unset",
 // and when the help text already documents its default.
 fn defaultText(comptime arg: Argument) []const u8 {
-    if (arg.count == .unlimited or std.mem.indexOf(u8, arg.help, "default") != null) return "";
+    if (arg.count == .unlimited or std.mem.find(u8, arg.help, "default") != null) return "";
     const value = arg.attrs.defaultValue(arg.type) orelse return "";
     return switch (@typeInfo(arg.type)) {
         .bool => if (value) "true" else "",

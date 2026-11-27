@@ -41,10 +41,10 @@ test "zxon > empty struct returns null" {
 test "json > serializes named fields" {
     const encoded = props.json(testing.allocator, props.coerce(Props, .{ .title = "Main", .count = 5 })).?;
     defer testing.allocator.free(encoded);
-    try testing.expect(std.mem.indexOf(u8, encoded, "\"title\"") != null);
-    try testing.expect(std.mem.indexOf(u8, encoded, "Main") != null);
-    try testing.expect(std.mem.indexOf(u8, encoded, "\"count\"") != null);
-    try testing.expect(std.mem.indexOf(u8, encoded, "5") != null);
+    try testing.expect(std.mem.find(u8, encoded, "\"title\"") != null);
+    try testing.expect(std.mem.find(u8, encoded, "Main") != null);
+    try testing.expect(std.mem.find(u8, encoded, "\"count\"") != null);
+    try testing.expect(std.mem.find(u8, encoded, "5") != null);
 }
 
 test "merged > override wins and adds new fields" {

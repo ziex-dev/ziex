@@ -84,10 +84,10 @@ const Source = struct {
 const Gen = struct {
     a: std.mem.Allocator,
     defs: std.StringHashMap(Def),
-    partials: std.StringHashMap(std.ArrayListUnmanaged(Json)),
-    includes: std.StringHashMap(std.ArrayListUnmanaged([]const u8)),
+    partials: std.StringHashMap(std.ArrayList(Json)),
+    includes: std.StringHashMap(std.ArrayList([]const u8)),
     // "Decl.name" (static prefixed "static ") -> overloads in declaration order.
-    overloads: std.StringHashMap(std.ArrayListUnmanaged(Json)),
+    overloads: std.StringHashMap(std.ArrayList(Json)),
     generated: std.StringHashMap(void),
     used_enums: std.StringHashMap(void),
     externs: std.StringHashMap(Extern),
@@ -95,7 +95,7 @@ const Gen = struct {
     // `impl_<Decl>` bodies: one wrapper per member, aliased by every interface that has it.
     impls: std.StringHashMap(std.Io.Writer.Allocating),
     // One call per wrapper for the native smoke test.
-    smoke: std.ArrayListUnmanaged([]const u8) = .empty,
+    smoke: std.ArrayList([]const u8) = .empty,
     decl_names: std.StringHashMap(std.StringHashMap(void)),
     failed: std.StringHashMap(void),
 
@@ -180,7 +180,7 @@ const Gen = struct {
 
     // ------------------------------------------------------------ members
 
-    fn ownSources(self: *Gen, name: []const u8, out: *std.ArrayListUnmanaged(Source)) !void {
+    fn ownSources(self: *Gen, name: []const u8, out: *std.ArrayList(Source)) !void {
         const d = self.def(name) orelse return;
         try self.appendMembers(name, d.json, out);
         if (self.partials.get(name)) |ps| for (ps.items) |p| try self.appendMembers(name, p, out);
@@ -192,7 +192,7 @@ const Gen = struct {
         };
     }
 
-    fn appendMembers(self: *Gen, decl: []const u8, j: Json, out: *std.ArrayListUnmanaged(Source)) !void {
+    fn appendMembers(self: *Gen, decl: []const u8, j: Json, out: *std.ArrayList(Source)) !void {
         const members = (j.object.get("members") orelse return).array;
         for (members.items) |m| {
             if (!exposedOnWindow(m)) continue;
@@ -203,7 +203,7 @@ const Gen = struct {
     fn collectOverloads(self: *Gen) !void {
         var it = self.generated.keyIterator();
         while (it.next()) |k| {
-            var srcs: std.ArrayListUnmanaged(Source) = .empty;
+            var srcs: std.ArrayList(Source) = .empty;
             try self.ownSources(k.*, &srcs);
             for (srcs.items) |s| {
                 const t = strField(s.m.object, "type");
@@ -236,14 +236,14 @@ const Gen = struct {
         extern_name: []const u8,
     };
 
-    fn flatten(self: *Gen, iface: []const u8, out: *std.ArrayListUnmanaged(Member), taken: *std.StringHashMap(void)) !void {
+    fn flatten(self: *Gen, iface: []const u8, out: *std.ArrayList(Member), taken: *std.StringHashMap(void)) !void {
         var cur: ?[]const u8 = iface;
         var guard: u8 = 0;
         while (cur) |name| : (guard += 1) {
             if (guard > 32) break;
             const d = self.def(name) orelse break;
             if (!self.generated.contains(name)) break;
-            var srcs: std.ArrayListUnmanaged(Source) = .empty;
+            var srcs: std.ArrayList(Source) = .empty;
             try self.ownSources(name, &srcs);
             for (srcs.items) |s| try self.addMember(s, name, out, taken);
             const inh = d.json.object.get("inheritance") orelse break;
@@ -251,7 +251,7 @@ const Gen = struct {
         }
     }
 
-    fn addMember(self: *Gen, s: Source, owner: []const u8, out: *std.ArrayListUnmanaged(Member), taken: *std.StringHashMap(void)) !void {
+    fn addMember(self: *Gen, s: Source, owner: []const u8, out: *std.ArrayList(Member), taken: *std.StringHashMap(void)) !void {
         const o = s.m.object;
         const t = strField(o, "type");
         const static = isStatic(s.m);
@@ -296,7 +296,7 @@ const Gen = struct {
     }
 
     // Child members shadow inherited ones with the same Zig name.
-    fn claim(self: *Gen, out: *std.ArrayListUnmanaged(Member), taken: *std.StringHashMap(void), m: Member) !void {
+    fn claim(self: *Gen, out: *std.ArrayList(Member), taken: *std.StringHashMap(void), m: Member) !void {
         var mm = m;
         if (isReserved(mm.zig)) mm.zig = try self.a.print("{s}_", .{mm.zig});
         if (taken.contains(mm.zig)) {
@@ -324,7 +324,7 @@ const Gen = struct {
     }
 
     fn emitInterface(self: *Gen, w: *std.Io.Writer, name: []const u8, namespace: bool) !void {
-        var members: std.ArrayListUnmanaged(Member) = .empty;
+        var members: std.ArrayList(Member) = .empty;
         var taken = std.StringHashMap(void).init(self.a);
         for ([_][]const u8{ "h", "deinit", "as", "object" }) |r| try taken.put(r, {});
         try self.flatten(name, &members, &taken);
@@ -393,7 +393,7 @@ const Gen = struct {
         const gop = try self.decl_names.getOrPut(decl);
         if (gop.found_existing) return gop.value_ptr;
         gop.value_ptr.* = .init(self.a);
-        var srcs: std.ArrayListUnmanaged(Source) = .empty;
+        var srcs: std.ArrayList(Source) = .empty;
         const d = self.def(decl) orelse return gop.value_ptr;
         try self.appendMembers(decl, d.json, &srcs);
         if (self.partials.get(decl)) |ps| for (ps.items) |p| try self.appendMembers(decl, p, &srcs);
@@ -421,27 +421,27 @@ const Gen = struct {
             else => return,
         };
         // IDL hex/negative literals are valid Zig; floats like `Infinity` are not.
-        if (std.mem.indexOfAny(u8, text, "IN") != null) return;
+        if (std.mem.findAny(u8, text, "IN") != null) return;
         try w.print("    pub const {f}: {s} = {s};\n", .{ ident(m.zig), zig_ty, text });
     }
 
     const Parts = struct {
-        zparams: std.ArrayListUnmanaged(u8) = .empty,
-        prelude: std.ArrayListUnmanaged(u8) = .empty,
-        cargs: std.ArrayListUnmanaged(u8) = .empty,
-        eparams: std.ArrayListUnmanaged(u8) = .empty,
-        sparams: std.ArrayListUnmanaged(u8) = .empty,
-        sargs: std.ArrayListUnmanaged(u8) = .empty,
-        smoke: std.ArrayListUnmanaged(u8) = .empty,
+        zparams: std.ArrayList(u8) = .empty,
+        prelude: std.ArrayList(u8) = .empty,
+        cargs: std.ArrayList(u8) = .empty,
+        eparams: std.ArrayList(u8) = .empty,
+        sparams: std.ArrayList(u8) = .empty,
+        sargs: std.ArrayList(u8) = .empty,
+        smoke: std.ArrayList(u8) = .empty,
         temps: bool = false,
         n: usize = 0,
 
-        fn sep(list: *std.ArrayListUnmanaged(u8), a: std.mem.Allocator) !void {
+        fn sep(list: *std.ArrayList(u8), a: std.mem.Allocator) !void {
             if (list.items.len > 0) try list.appendSlice(a, ", ");
         }
 
         // JS is shipped, so keep it compact.
-        fn sepJs(list: *std.ArrayListUnmanaged(u8), a: std.mem.Allocator) !void {
+        fn sepJs(list: *std.ArrayList(u8), a: std.mem.Allocator) !void {
             if (list.items.len > 0) try list.append(a, ',');
         }
     };
@@ -820,7 +820,7 @@ pub fn main(init: std.process.Init) !void {
     // Load every spec so types from outside the allowlist still resolve.
     var dir = try webref.openDir(io, "ed/idlparsed", .{ .iterate = true });
     defer dir.close(io);
-    var names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var names: std.ArrayList([]const u8) = .empty;
     var it = dir.iterate();
     while (try it.next(io)) |e| if (std.mem.endsWith(u8, e.name, ".json")) try names.append(a, try a.dupe(u8, e.name));
     std.mem.sort([]const u8, names.items, {}, lessStr);
@@ -861,7 +861,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     // Interfaces and namespaces defined in allowlisted specs.
-    var ifaces: std.ArrayListUnmanaged([]const u8) = .empty;
+    var ifaces: std.ArrayList([]const u8) = .empty;
     var dit = g.defs.iterator();
     while (dit.next()) |e| {
         const d = e.value_ptr.*;
@@ -881,7 +881,7 @@ pub fn main(init: std.process.Init) !void {
     for (ifaces.items) |n| try g.emitInterface(&body.writer, n, eql(g.def(n).?.kind, "namespace"));
 
     // Member wrappers, one struct per declaring interface or mixin.
-    var impl_names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var impl_names: std.ArrayList([]const u8) = .empty;
     var iit = g.impls.keyIterator();
     while (iit.next()) |k| try impl_names.append(a, k.*);
     std.mem.sort([]const u8, impl_names.items, {}, lessStr);
@@ -892,14 +892,14 @@ pub fn main(init: std.process.Init) !void {
     }
 
     // Enums referenced by generated members.
-    var enum_names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var enum_names: std.ArrayList([]const u8) = .empty;
     var eit = g.used_enums.keyIterator();
     while (eit.next()) |k| try enum_names.append(a, k.*);
     std.mem.sort([]const u8, enum_names.items, {}, lessStr);
     for (enum_names.items) |n| try g.emitEnum(&body.writer, n);
 
     // Externs (and zero-returning stubs for non-browser builds).
-    var ext_names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var ext_names: std.ArrayList([]const u8) = .empty;
     var xit = g.externs.keyIterator();
     while (xit.next()) |k| try ext_names.append(a, k.*);
     std.mem.sort([]const u8, ext_names.items, {}, lessStr);
@@ -1041,16 +1041,16 @@ pub fn main(init: std.process.Init) !void {
 // `EventType` for delegated `on<name>` template handlers.
 fn genEventTypes(g: *Gen, io: std.Io, webref: std.Io.Dir) ![]const u8 {
     const a = g.a;
-    var names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var names: std.ArrayList([]const u8) = .empty;
     var seen = std.StringHashMap(void).init(a);
     for (legacy_events) |n| {
         try names.append(a, n);
         try seen.put(n, {});
     }
 
-    var extra: std.ArrayListUnmanaged([]const u8) = .empty;
+    var extra: std.ArrayList([]const u8) = .empty;
     for ([_][]const u8{ "GlobalEventHandlers", "DocumentAndElementEventHandlers" }) |mixin| {
-        var srcs: std.ArrayListUnmanaged(Source) = .empty;
+        var srcs: std.ArrayList(Source) = .empty;
         const d = g.def(mixin) orelse continue;
         try g.appendMembers(mixin, d.json, &srcs);
         if (g.partials.get(mixin)) |ps| for (ps.items) |p| try g.appendMembers(mixin, p, &srcs);
@@ -1128,7 +1128,7 @@ fn genEventTypes(g: *Gen, io: std.Io, webref: std.Io.Dir) ![]const u8 {
         \\        return switch (self) {
         \\
     );
-    var nb: std.ArrayListUnmanaged([]const u8) = .empty;
+    var nb: std.ArrayList([]const u8) = .empty;
     for (names.items) |n| {
         if (eql(n, "focus") or eql(n, "blur")) continue;
         // Element scrolls don't bubble; only the document's does.

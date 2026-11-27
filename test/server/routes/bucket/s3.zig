@@ -11,7 +11,7 @@ const gpa = std.heap.smp_allocator;
 
 const Object = struct { body: []const u8, content_type: []const u8, owner: []const u8 };
 
-var objects: std.StringArrayHashMapUnmanaged(Object) = .empty;
+var objects: std.array_hash_map.String(Object) = .empty;
 var uploads: std.StringHashMapUnmanaged(std.ArrayList([]const u8)) = .empty;
 var next_upload: u32 = 0;
 var lock: std.atomic.Mutex = .unlocked;
@@ -32,10 +32,10 @@ pub fn Route(ctx: zx.RouteContext) !void {
 
     // `/s3/<bucket>[/<key>]`
     const rest = ctx.request.pathname["/s3/".len..];
-    const slash = std.mem.indexOfScalar(u8, rest, '/') orelse rest.len;
+    const slash = std.mem.findScalar(u8, rest, '/') orelse rest.len;
     const raw_key = if (slash < rest.len) rest[slash + 1 ..] else "";
     const key = try percentDecode(ctx.arena, raw_key);
-    const id = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ rest[0..slash], key });
+    const id = try gpa.print("{s}/{s}", .{ rest[0..slash], key });
 
     const q = &ctx.request.query;
     switch (ctx.request.method) {
@@ -45,12 +45,12 @@ pub fn Route(ctx: zx.RouteContext) !void {
             setHeaders(ctx, obj);
             if (ctx.request.headers.get("range")) |range| {
                 const spec = range["bytes=".len..];
-                const dash = std.mem.indexOfScalar(u8, spec, '-').?;
+                const dash = std.mem.findScalar(u8, spec, '-').?;
                 const start = try std.fmt.parseInt(usize, spec[0..dash], 10);
                 if (start >= obj.body.len) return fail(ctx, .range_not_satisfiable, "InvalidRange", "bad range");
                 const end = if (dash + 1 < spec.len) @min(obj.body.len - 1, try std.fmt.parseInt(usize, spec[dash + 1 ..], 10)) else obj.body.len - 1;
                 ctx.response.setStatus(.partial_content);
-                ctx.response.headers.set("content-range", try std.fmt.allocPrint(ctx.arena, "bytes {d}-{d}/{d}", .{ start, end, obj.body.len }));
+                ctx.response.headers.set("content-range", try ctx.arena.print("bytes {d}-{d}/{d}", .{ start, end, obj.body.len }));
                 return ctx.response.text(obj.body[start .. end + 1]);
             }
             ctx.response.text(obj.body);
@@ -69,7 +69,7 @@ pub fn Route(ctx: zx.RouteContext) !void {
                 const n = try std.fmt.parseInt(usize, q.get("partNumber").?, 10);
                 if (n != parts.items.len + 1) return fail(ctx, .bad_request, "InvalidPartOrder", "out of order");
                 try parts.append(gpa, try gpa.dupe(u8, body));
-                ctx.response.headers.set("etag", try std.fmt.allocPrint(ctx.arena, "\"part-{d}\"", .{n}));
+                ctx.response.headers.set("etag", try ctx.arena.print("\"part-{d}\"", .{n}));
                 return ctx.response.text("");
             }
             try store(id, try gpa.dupe(u8, body), ctx);
@@ -79,17 +79,17 @@ pub fn Route(ctx: zx.RouteContext) !void {
         .POST => {
             if (q.has("uploads")) {
                 next_upload += 1;
-                const upload_id = try std.fmt.allocPrint(gpa, "up+{d}/x", .{next_upload});
+                const upload_id = try gpa.print("up+{d}/x", .{next_upload});
                 try uploads.put(gpa, upload_id, .empty);
                 // Kept for the complete call: it carries no content-type of its own.
-                try store(try std.fmt.allocPrint(gpa, "pending:{s}", .{upload_id}), "", ctx);
-                return ctx.response.text(try std.fmt.allocPrint(ctx.arena, "<?xml version=\"1.0\"?><InitiateMultipartUploadResult><Bucket>b</Bucket><Key>{s}</Key><UploadId>{s}</UploadId></InitiateMultipartUploadResult>", .{ key, upload_id }));
+                try store(try gpa.print("pending:{s}", .{upload_id}), "", ctx);
+                return ctx.response.text(try ctx.arena.print("<?xml version=\"1.0\"?><InitiateMultipartUploadResult><Bucket>b</Bucket><Key>{s}</Key><UploadId>{s}</UploadId></InitiateMultipartUploadResult>", .{ key, upload_id }));
             }
             const upload_id = q.get("uploadId") orelse return fail(ctx, .bad_request, "InvalidRequest", "no upload");
             const parts = uploads.get(upload_id) orelse return fail(ctx, .not_found, "NoSuchUpload", "no upload");
             if (std.mem.count(u8, body, "<Part>") != parts.items.len) return fail(ctx, .bad_request, "InvalidPart", "part count");
             const joined = try std.mem.concat(gpa, u8, parts.items);
-            const pending = objects.get(try std.fmt.allocPrint(gpa, "pending:{s}", .{upload_id})).?;
+            const pending = objects.get(try gpa.print("pending:{s}", .{upload_id})).?;
             try objects.put(gpa, id, .{ .body = joined, .content_type = pending.content_type, .owner = pending.owner });
             _ = uploads.remove(upload_id);
             ctx.response.text("<?xml version=\"1.0\"?><CompleteMultipartUploadResult><ETag>\"done\"</ETag></CompleteMultipartUploadResult>");
@@ -152,7 +152,7 @@ fn list(ctx: zx.RouteContext, bucket: []const u8) !void {
     var last: []const u8 = "";
     while (i < keys.items.len and count < max) : (count += 1) {
         const key = keys.items[i];
-        if (delimiter) |d| if (std.mem.indexOf(u8, key[prefix.len..], d)) |at| {
+        if (delimiter) |d| if (std.mem.find(u8, key[prefix.len..], d)) |at| {
             const rolled = key[0 .. prefix.len + at + d.len];
             try w.writeAll("<CommonPrefixes><Prefix>");
             try escape(w, rolled);
@@ -160,7 +160,7 @@ fn list(ctx: zx.RouteContext, bucket: []const u8) !void {
             while (i < keys.items.len and std.mem.startsWith(u8, keys.items[i], rolled)) : (i += 1) last = keys.items[i];
             continue;
         };
-        const obj = objects.get(try std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ bucket, key })).?;
+        const obj = objects.get(try ctx.arena.print("{s}/{s}", .{ bucket, key })).?;
         try w.writeAll("<Contents><Key>");
         try escape(w, key);
         try w.print("</Key><LastModified>2009-10-12T17:50:30.123Z</LastModified><ETag>&quot;e{d}&quot;</ETag><Size>{d}</Size><StorageClass>STANDARD</StorageClass></Contents>", .{ count, obj.body.len });
@@ -187,7 +187,7 @@ fn escape(w: *std.Io.Writer, s: []const u8) !void {
 
 fn fail(ctx: zx.RouteContext, status: std.http.Status, code: []const u8, message: []const u8) void {
     ctx.response.setStatus(status);
-    ctx.response.text(std.fmt.allocPrint(ctx.arena, "<?xml version=\"1.0\"?><Error><Code>{s}</Code><Message>{s}</Message></Error>", .{ code, message }) catch "");
+    ctx.response.text(ctx.arena.print("<?xml version=\"1.0\"?><Error><Code>{s}</Code><Message>{s}</Message></Error>", .{ code, message }) catch "");
 }
 
 fn percentDecode(arena: std.mem.Allocator, s: []const u8) ![]const u8 {

@@ -14,7 +14,7 @@ fn withServer(comptime case: fn (arena: std.mem.Allocator, base: []const u8) any
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
-    const base = try std.fmt.allocPrint(arena.allocator(), "http://127.0.0.1:{d}/flag", .{harness.tcp.?.port});
+    const base = try arena.allocator().print("http://127.0.0.1:{d}/flag", .{harness.tcp.?.port});
     try case(arena.allocator(), base);
 }
 
@@ -122,7 +122,7 @@ test "memory > missing variant is a general error" {
 
 var kv_fs = zx.Kv.Fs{
     .io = io,
-    .subdir = "zig-out" ++ std.fs.path.sep_str ++ "test-data" ++ std.fs.path.sep_str ++ "flag",
+    .subdir = "zig-out" ++ std.Io.Dir.path.sep_str ++ "test-data" ++ std.Io.Dir.path.sep_str ++ "flag",
 };
 
 test "kv > definition roundtrip" {
@@ -168,7 +168,7 @@ test "kv > malformed definition is a parse error" {
 
 fn ofrep(base: []const u8, arena: std.mem.Allocator) !*Flag.Ofrep {
     const o = try arena.create(Flag.Ofrep);
-    o.* = .{ .io = io, .base_url = try std.fmt.allocPrint(arena, "{s}/ofrep/", .{base}), .api_key = "test-key" };
+    o.* = .{ .io = io, .base_url = try arena.print("{s}/ofrep/", .{base}), .api_key = "test-key" };
     return o;
 }
 
@@ -232,7 +232,7 @@ fn flagship(base: []const u8, arena: std.mem.Allocator) !*Flag.Flagship {
     const f = try arena.create(Flag.Flagship);
     f.* = .{
         .io = io,
-        .base_url = try std.fmt.allocPrint(arena, "{s}/flagship", .{base}),
+        .base_url = try arena.print("{s}/flagship", .{base}),
         .account_id = "acc",
         .app_id = "app",
         .api_token = "cf-token",

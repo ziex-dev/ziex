@@ -44,9 +44,9 @@ pub fn main(init_process: std.process.Init) !void {
         @import("../lsp/transport/Message.zig").setEnvironMap(init_process.environ_map);
     }
 
-    var dbg: if (use_debug_allocator) std.heap.DebugAllocator(.{}) else void =
-        if (use_debug_allocator) .init else {};
-    defer if (comptime use_debug_allocator) std.debug.assert(dbg.deinit() == .ok);
+    var dbg: if (use_debug_allocator) std.heap.SafeAllocator else void =
+        if (use_debug_allocator) .init(std.heap.page_allocator, .{}) else {};
+    defer if (comptime use_debug_allocator) std.debug.assert(dbg.deinit() == 0);
 
     const allocator: std.mem.Allocator = if (comptime use_debug_allocator)
         dbg.allocator()

@@ -35,7 +35,7 @@ pub fn data(self: Action, comptime T: type) T {
     var result: T = undefined;
     const type_struct = @typeInfo(T).@"struct";
 
-    if (std.mem.indexOf(u8, content_type, "multipart/form-data") != null) {
+    if (std.mem.find(u8, content_type, "multipart/form-data") != null) {
         const mfd = self.request.multiFormData();
         inline for (type_struct.field_names, type_struct.field_types) |field_name, field_type| {
             if (comptime field_type == File) {

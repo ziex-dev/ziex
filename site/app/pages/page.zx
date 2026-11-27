@@ -608,25 +608,25 @@ const BenchmarksSectionProps = struct {
 };
 
 fn buildBenchTabStyles(allocator: zx.Allocator, container_id: []const u8, tabs: []const BenchmarkTab) []const u8 {
-    var out = std.array_list.Managed(u8).init(allocator);
-    defer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
 
     for (tabs) |tab| {
-        out.appendSlice("#") catch unreachable;
-        out.appendSlice(container_id) catch unreachable;
-        out.appendSlice(":has(#") catch unreachable;
-        out.appendSlice(tab.id) catch unreachable;
-        out.appendSlice(":checked) .benchmarks-panel[data-tab=\"") catch unreachable;
-        out.appendSlice(tab.id) catch unreachable;
-        out.appendSlice("\"] { display: block; }\n") catch unreachable;
+        out.appendSlice(allocator, "#") catch unreachable;
+        out.appendSlice(allocator, container_id) catch unreachable;
+        out.appendSlice(allocator, ":has(#") catch unreachable;
+        out.appendSlice(allocator, tab.id) catch unreachable;
+        out.appendSlice(allocator, ":checked) .benchmarks-panel[data-tab=\"") catch unreachable;
+        out.appendSlice(allocator, tab.id) catch unreachable;
+        out.appendSlice(allocator, "\"] { display: block; }\n") catch unreachable;
 
-        out.appendSlice("#") catch unreachable;
-        out.appendSlice(container_id) catch unreachable;
-        out.appendSlice(":has(#") catch unreachable;
-        out.appendSlice(tab.id) catch unreachable;
-        out.appendSlice(":checked) label[for=\"") catch unreachable;
-        out.appendSlice(tab.id) catch unreachable;
-        out.appendSlice("\"] { color: #0c0f14; background: #4ade80; border-color: transparent; box-shadow: 0 8px 20px rgba(74, 222, 128, 0.25); }\n") catch unreachable;
+        out.appendSlice(allocator, "#") catch unreachable;
+        out.appendSlice(allocator, container_id) catch unreachable;
+        out.appendSlice(allocator, ":has(#") catch unreachable;
+        out.appendSlice(allocator, tab.id) catch unreachable;
+        out.appendSlice(allocator, ":checked) label[for=\"") catch unreachable;
+        out.appendSlice(allocator, tab.id) catch unreachable;
+        out.appendSlice(allocator, "\"] { color: #0c0f14; background: #4ade80; border-color: transparent; box-shadow: 0 8px 20px rgba(74, 222, 128, 0.25); }\n") catch unreachable;
     }
 
     return allocator.dupe(u8, out.items) catch unreachable;
@@ -850,17 +850,17 @@ fn CodePreviewExample(allocator: zx.Allocator, props: CodePreviewExampleProps) z
 }
 
 fn buildTabStyles(allocator: zx.Allocator, container_id: []const u8, tabs: []const CodeTab) ![]const u8 {
-    var out = std.array_list.Managed(u8).init(allocator);
-    defer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
 
     for (tabs) |tab| {
-        try out.appendSlice("#");
-        try out.appendSlice(container_id);
-        try out.appendSlice(":has(#");
-        try out.appendSlice(tab.id);
-        try out.appendSlice(":checked) .code-example-panel[data-tab=\"");
-        try out.appendSlice(tab.id);
-        try out.appendSlice("\"] { display: block; }\n");
+        try out.appendSlice(allocator, "#");
+        try out.appendSlice(allocator, container_id);
+        try out.appendSlice(allocator, ":has(#");
+        try out.appendSlice(allocator, tab.id);
+        try out.appendSlice(allocator, ":checked) .code-example-panel[data-tab=\"");
+        try out.appendSlice(allocator, tab.id);
+        try out.appendSlice(allocator, "\"] { display: block; }\n");
     }
 
     return try allocator.dupe(u8, out.items);
@@ -885,7 +885,7 @@ fn CodeWindowTabs(allocator: zx.Allocator, props: CodeWindowTabsProps) !zx.Compo
     const tab_urls = try allocator.alloc([]const u8, props.tabs.len);
     for (entries, tab_urls) |e, *u| u.* = if (together) "" else playgroundUrl(allocator, e.code, e.filename);
     const container_url = if (!together) "" else blk: {
-        var pair: std.ArrayListUnmanaged(share.Entry) = .empty;
+        var pair: std.ArrayList(share.Entry) = .empty;
         for (entries) |e| {
             if (std.mem.eql(u8, e.filename, "page.zx") or std.mem.eql(u8, e.filename, "layout.zx")) try pair.append(allocator, e);
         }

@@ -894,10 +894,10 @@ fn filePathFromUrl(url: []const u8) []const u8 {
 fn cleanupDatabaseFiles(path: []const u8) !void {
     try deleteIfExists(path);
 
-    var buf: [std.fs.max_path_bytes]u8 = undefined;
-    try deleteIfExists(try std.fmt.bufPrint(&buf, "{s}-wal", .{path}));
-    try deleteIfExists(try std.fmt.bufPrint(&buf, "{s}-shm", .{path}));
-    try deleteIfExists(try std.fmt.bufPrint(&buf, "{s}-journal", .{path}));
+    var buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    try deleteIfExists(try std.mem.print(&buf, "{s}-wal", .{path}));
+    try deleteIfExists(try std.mem.print(&buf, "{s}-shm", .{path}));
+    try deleteIfExists(try std.mem.print(&buf, "{s}-journal", .{path}));
 }
 
 fn deleteIfExists(path: []const u8) !void {

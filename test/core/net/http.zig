@@ -119,7 +119,7 @@ fn runCase(backend: Backend, comptime case: *const fn (*Client, []const u8) anye
     defer harness.stop();
 
     var base_buf: [32]u8 = undefined;
-    const base = try std.fmt.bufPrint(&base_buf, "http://127.0.0.1:{d}", .{harness.tcp.?.port});
+    const base = try std.mem.print(&base_buf, "http://127.0.0.1:{d}", .{harness.tcp.?.port});
 
     var client: Client = .{ .io = io, .allocator = gpa };
     defer client.deinit();
@@ -127,7 +127,7 @@ fn runCase(backend: Backend, comptime case: *const fn (*Client, []const u8) anye
 }
 
 fn url(buf: []u8, base: []const u8, path: []const u8) ![]const u8 {
-    return std.fmt.bufPrint(buf, "{s}{s}", .{ base, path });
+    return std.mem.print(buf, "{s}{s}", .{ base, path });
 }
 
 test "fetch > GET" {

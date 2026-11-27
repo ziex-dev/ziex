@@ -54,11 +54,11 @@ fn innerInitSingle(b: *std.Build, build_item: Build) !Output {
 
     // Zig-managed output directory (enables build caching)
     run.addArg("--outdir");
-    const outdir = run.addOutputDirectoryArg("dist");
+    const outdir = run.addOutputDirectoryArg2("dist", .{});
 
     // Dep file for transitive dependency tracking (rebuilds when imported files change)
     run.addArg("--dep-file");
-    _ = run.addDepFileOutputArg("dist.d");
+    _ = run.addDepFileOutputArg2("dist.d", .{});
 
     // Prefer an explicit path; otherwise the host @esbuild/* binary from this package's lazy deps.
     if (esbuild_path orelse resolveHostEsbuild(dep)) |bin| {
@@ -79,7 +79,7 @@ fn innerInitSingle(b: *std.Build, build_item: Build) !Output {
 }
 
 fn resolveHostEsbuild(plugin_dep: *std.Build.Dependency) ?std.Build.LazyPath {
-    const host_dep = plugin_dep.builder.lazyDependency(host_esbuild.depName(), .{}) orelse return null;
+    const host_dep = plugin_dep.builder.dependencyLazy(host_esbuild.depName(), .{}) catch return null;
     // zig fetch strips the npm tarball's top-level `package/` directory.
     return host_dep.path(plugin_dep.builder.fmt("{s}", .{host_esbuild.exeName()}));
 }
@@ -131,8 +131,7 @@ pub fn build(b: *std.Build) void {
 
     if (sync_deps_step) {
         const default_step = b.getInstallStep();
-        if (b.lazyDependency("esbuild", .{})) |esbuild_dep| {
-            plugin_system.addOptionalDependencyFetches(b, default_step, plugin_system.readNpmPackageJson(b, esbuild_dep));
-        }
+        const esbuild_dep = b.dependency("esbuild", .{});
+        plugin_system.addOptionalDependencyFetches(b, default_step, plugin_system.readNpmPackageJson(b, esbuild_dep));
     }
 }

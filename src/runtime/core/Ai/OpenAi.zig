@@ -227,5 +227,5 @@ fn headers(p: *const OpenAi, arena: std.mem.Allocator, api_key: ?[]const u8) Ai.
     const json: http.Header = .{ .name = "content-type", .value = "application/json" };
     const key = api_key orelse p.api_key orelse return arena.dupe(http.Header, &.{json});
     if (key.len == 0) return arena.dupe(http.Header, &.{json});
-    return arena.dupe(http.Header, &.{ json, .{ .name = "authorization", .value = try std.fmt.allocPrint(arena, "Bearer {s}", .{key}) } });
+    return arena.dupe(http.Header, &.{ json, .{ .name = "authorization", .value = try arena.print("Bearer {s}", .{key}) } });
 }

@@ -318,11 +318,11 @@ pub fn presign(b: Bucket, gpa: std.mem.Allocator, key: []const u8, opts: Presign
 
 pub fn validateKey(key: []const u8) Error!void {
     if (key.len == 0 or key.len > max_key_len) return error.InvalidKey;
-    if (std.mem.indexOfScalar(u8, key, 0) != null) return error.InvalidKey;
+    if (std.mem.findScalar(u8, key, 0) != null) return error.InvalidKey;
 }
 
 fn validValue(v: []const u8) bool {
-    return std.mem.indexOfAny(u8, v, "\r\n\x00") == null;
+    return std.mem.findAny(u8, v, "\r\n\x00") == null;
 }
 
 fn isTokenChar(c: u8) bool {

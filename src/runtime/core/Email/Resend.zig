@@ -80,10 +80,10 @@ fn send(userdata: ?*anyopaque, gpa: std.mem.Allocator, m: Email.Message) Email.E
 
     var headers: std.ArrayList(http.Header) = .empty;
     try headers.append(arena, .{ .name = "content-type", .value = "application/json" });
-    try headers.append(arena, .{ .name = "authorization", .value = try std.fmt.allocPrint(arena, "Bearer {s}", .{key}) });
+    try headers.append(arena, .{ .name = "authorization", .value = try arena.print("Bearer {s}", .{key}) });
     if (m.idempotency_key) |k| try headers.append(arena, .{ .name = "idempotency-key", .value = k });
 
-    const url = try std.fmt.allocPrint(arena, "{s}/emails", .{std.mem.trimEnd(u8, r.base_url, "/")});
+    const url = try arena.print("{s}/emails", .{std.mem.trimEnd(u8, r.base_url, "/")});
     var client: http.Client = .{ .io = r.io, .allocator = gpa };
     defer client.deinit();
     const res = try client.fetch(.{ .url = url, .method = .POST, .headers = headers.items, .payload = payload });
@@ -105,7 +105,7 @@ fn send(userdata: ?*anyopaque, gpa: std.mem.Allocator, m: Email.Message) Email.E
 }
 
 fn formatAddress(arena: std.mem.Allocator, a: Email.Address) std.mem.Allocator.Error![]const u8 {
-    return std.fmt.allocPrint(arena, "{f}", .{a});
+    return arena.print("{f}", .{a});
 }
 
 fn formatList(arena: std.mem.Allocator, list: []const Email.Address) std.mem.Allocator.Error!?[]const []const u8 {

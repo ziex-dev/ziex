@@ -42,7 +42,7 @@ fn endpoint(ctx: zx.RouteContext) !mcp.Endpoint {
         .io = ctx.io,
         .store = .{ .userdata = io, .vtable = &store },
         .options = .{
-            .origin = try std.fmt.allocPrint(ctx.arena, "http://127.0.0.1:{d}", .{port}),
+            .origin = try ctx.arena.print("http://127.0.0.1:{d}", .{port}),
             .path = "/secure/mcp",
             .consent_path = "/secure/consent",
         },
@@ -50,9 +50,9 @@ fn endpoint(ctx: zx.RouteContext) !mcp.Endpoint {
 }
 
 var mutex: std.Io.Mutex = .init;
-var clients: std.StringArrayHashMapUnmanaged(mcp.Endpoint.Client) = .empty;
-var codes: std.StringArrayHashMapUnmanaged(mcp.Endpoint.Grant) = .empty;
-var tokens: std.StringArrayHashMapUnmanaged(mcp.Endpoint.Grant) = .empty;
+var clients: std.array_hash_map.String(mcp.Endpoint.Client) = .empty;
+var codes: std.array_hash_map.String(mcp.Endpoint.Grant) = .empty;
+var tokens: std.array_hash_map.String(mcp.Endpoint.Grant) = .empty;
 const gpa = std.heap.page_allocator;
 
 const store: mcp.Endpoint.Store.VTable = .{

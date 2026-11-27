@@ -133,7 +133,7 @@ pub fn Merged(comptime Base: type, comptime Override: type) type {
 
     comptime var field_names: [field_count][:0]const u8 = undefined;
     comptime var field_types: [field_count]type = undefined;
-    comptime var field_attrs: [field_count]std.builtin.Type.Struct.FieldAttributes = undefined;
+    comptime var field_attrs: [field_count]std.lang.Type.Struct.FieldAttributes = undefined;
     comptime var idx: usize = 0;
 
     inline for (base.field_names, base.field_types, base.field_attrs) |bf_name, bf_type, bf_attr| {

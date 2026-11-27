@@ -12,7 +12,7 @@ var mu: std.Io.Mutex = .init;
 var cached: ?zx.Db = null;
 
 pub fn selectTable(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
-    return std.fmt.allocPrint(gpa, "SELECT * FROM \"{s}\" LIMIT 100;", .{name});
+    return gpa.print("SELECT * FROM \"{s}\" LIMIT 100;", .{name});
 }
 
 pub fn bootstrap(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) ![]const []const u8 {

@@ -135,7 +135,7 @@ fn makeFn(comptime params: []const type, comptime R: type, comptime Impl: type) 
 fn Handle(comptime M: type, comptime Field: fn (comptime [:0]const u8) type, comptime value: anytype) type {
     const names = functions(M);
     var types: [names.len]type = undefined;
-    var attrs: [names.len]std.builtin.Type.Struct.FieldAttributes = undefined;
+    var attrs: [names.len]std.lang.Type.Struct.FieldAttributes = undefined;
     for (names, &types, &attrs) |n, *t, *a| {
         t.* = Field(n);
         a.* = .{ .@"comptime" = true, .default_value_ptr = value(n) };

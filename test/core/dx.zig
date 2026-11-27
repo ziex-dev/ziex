@@ -236,7 +236,7 @@ test "sm > e2e error position maps back to correct zx token" {
     const map = result.sourcemap orelse return error.NoSourceMap;
     const zig = result.zx_source;
 
-    const expr_pos = std.mem.indexOf(u8, zig, "_zx.expr(greeting") orelse return error.TokenNotFound;
+    const expr_pos = std.mem.find(u8, zig, "_zx.expr(greeting") orelse return error.TokenNotFound;
     const greeting_pos = expr_pos + "_zx.expr(".len;
     const gen_lc = offsetToLineCol(zig, greeting_pos);
 
@@ -406,7 +406,7 @@ test "sm > e2e alloc init allocator expr remaps to @allocator value" {
     const map = result.sourcemap orelse return error.NoSourceMap;
     const zig = result.zx_source;
 
-    const alloc_init = std.mem.indexOf(u8, zig, "allocInit(") orelse return error.TokenNotFound;
+    const alloc_init = std.mem.find(u8, zig, "allocInit(") orelse return error.TokenNotFound;
     const arg_pos = alloc_init + "allocInit(".len;
     try testing.expect(std.mem.startsWith(u8, zig[arg_pos..], "ctx.arenad"));
     const gen_lc = offsetToLineCol(zig, arg_pos);
@@ -429,18 +429,18 @@ test "sm > e2e token remap for if expression condition" {
 
     // Find `if (is_logged_in)` in generated Zig (not the const decl).
     const search = "if (is_logged_in)";
-    const if_pos = std.mem.indexOf(u8, zig, search) orelse return error.TokenNotFound;
+    const if_pos = std.mem.find(u8, zig, search) orelse return error.TokenNotFound;
     const cond_pos = if_pos + "if (".len;
     const gen_lc = offsetToLineCol(zig, cond_pos);
     try expectRemap(map, gen_lc.line, gen_lc.column, source, "is_logged_in");
 
     // Tag `.p` should remap near `<p` or `</p>` / `p` in source.
-    const p_pos = std.mem.indexOf(u8, zig, ".p,") orelse return error.TokenNotFound;
+    const p_pos = std.mem.find(u8, zig, ".p,") orelse return error.TokenNotFound;
     const p_lc = offsetToLineCol(zig, p_pos);
     const mapped = map.generatedToSource(p_lc.line, p_lc.column).?;
     const src_off = sourcemap.lineColToOffset(source, mapped.source_line, mapped.source_column).?;
     const snip = source[src_off..@min(src_off + 5, source.len)];
-    try testing.expect(std.mem.indexOf(u8, snip, "p") != null or std.mem.indexOf(u8, snip, "<p") != null or std.mem.indexOf(u8, snip, "</p>") != null);
+    try testing.expect(std.mem.find(u8, snip, "p") != null or std.mem.find(u8, snip, "<p") != null or std.mem.find(u8, snip, "</p>") != null);
 }
 
 test "sm > e2e token remap for nested element tags" {
@@ -500,7 +500,7 @@ test "sm > diagnostics remap via embed" {
     try testing.expectEqualStrings("app/pages/page.zx", parsed.source);
 
     // Find missing_ident in generated zig and remap like Diagnostics would (1-based).
-    const ident_pos = std.mem.indexOf(u8, result.zx_source, "missing_ident") orelse return error.TokenNotFound;
+    const ident_pos = std.mem.find(u8, result.zx_source, "missing_ident") orelse return error.TokenNotFound;
     const gen_lc = offsetToLineCol(result.zx_source, ident_pos);
     const mapped = parsed.generatedToSource(gen_lc.line, gen_lc.column).?;
     const src_off = sourcemap.lineColToOffset(source, mapped.source_line, mapped.source_column).?;

@@ -310,7 +310,7 @@ pub fn Backend(Db: type) type {
             oid.* = types.Oid.unspecified;
             param.* = switch (value) {
                 .null => .null,
-                .integer => |v| .{ .text = try std.fmt.allocPrint(arena, "{d}", .{v}) },
+                .integer => |v| .{ .text = try arena.print("{d}", .{v}) },
                 .float => |v| blk: {
                     var buf: [64]u8 = undefined;
                     break :blk .{ .text = try arena.dupe(u8, try types.formatFloat(&buf, v)) };

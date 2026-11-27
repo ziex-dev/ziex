@@ -114,8 +114,8 @@ fn ZxDb(comptime cached: bool) type {
 }
 
 fn withParam(gpa: std.mem.Allocator, url: []const u8, param: []const u8) ![]u8 {
-    const sep: u8 = if (std.mem.indexOfScalar(u8, url, '?') == null) '?' else '&';
-    return std.fmt.allocPrint(gpa, "{s}{c}{s}", .{ url, sep, param });
+    const sep: u8 = if (std.mem.findScalar(u8, url, '?') == null) '?' else '&';
+    return gpa.print("{s}{c}{s}", .{ url, sep, param });
 }
 
 /// libmysqlclient; `prepared` keeps MYSQL_STMT handles open instead of prepare+close per call.
@@ -499,7 +499,7 @@ pub fn main(init: std.process.Init) !void {
 
 fn thousands(buf: *[32]u8, value: u64) []const u8 {
     var digits: [24]u8 = undefined;
-    const raw = std.fmt.bufPrint(&digits, "{d}", .{value}) catch unreachable;
+    const raw = std.mem.print(&digits, "{d}", .{value}) catch unreachable;
     var len: usize = 0;
     for (raw, 0..) |ch, i| {
         if (i > 0 and (raw.len - i) % 3 == 0) {

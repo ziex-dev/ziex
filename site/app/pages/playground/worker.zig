@@ -168,7 +168,7 @@ fn build(w: *std.Io.Writer, mode: Mode, files: []const File) !Build {
             const cwd = try Node.newDir(arena);
             try cwd.writePath(f.name, f.content);
             const out = try runZx(arena, cwd, &.{ "zx", "transpile", "--map", "inline", f.name }, w) orelse return error.BuildFailed;
-            const zig_name = try std.fmt.allocPrint(arena, "{s}.zig", .{f.name[0 .. f.name.len - ".zx".len]});
+            const zig_name = try arena.print("{s}.zig", .{f.name[0 .. f.name.len - ".zx".len]});
             try project.writePath(zig_name, out);
         },
         .app => {
@@ -322,10 +322,10 @@ var response: ?*Response = null;
 
 fn renderApp(a: std.mem.Allocator, w: *std.Io.Writer, app: *Build.App, raw_path: []const u8) !Preview {
     const path = if (raw_path.len == 0) "/" else raw_path;
-    const q = std.mem.indexOfScalar(u8, path, '?');
+    const q = std.mem.findScalar(u8, path, '?');
     const pathname = path[0 .. q orelse path.len];
     const search = if (q) |i| path[i..] else "";
-    const url = try std.fmt.allocPrint(a, "https://playground.local{s}", .{path});
+    const url = try a.print("https://playground.local{s}", .{path});
 
     var res: Response = .{ .log = w, .arena = a };
     response = &res;
@@ -363,10 +363,10 @@ fn previewDocument(a: std.mem.Allocator, html: []const u8, app: *Build.App) ![]c
     const origin = try assets.originAlloc();
     defer gpa.free(origin);
     const with_wasm = try std.mem.replaceOwned(u8, a, html, "__PLAYGROUND_CLIENT_WASM__", app.client_url);
-    const head_extra = try std.fmt.allocPrint(a, "<base href=\"{s}/\"><script>{s}</script>", .{ origin, app.glue });
+    const head_extra = try a.print("<base href=\"{s}/\"><script>{s}</script>", .{ origin, app.glue });
 
     if (std.ascii.findIgnoreCase(with_wasm, "<head")) |i| {
-        if (std.mem.indexOfScalarPos(u8, with_wasm, i, '>')) |end| {
+        if (std.mem.findScalarPos(u8, with_wasm, i, '>')) |end| {
             return std.mem.concat(a, u8, &.{ with_wasm[0 .. end + 1], head_extra, with_wasm[end + 1 ..] });
         }
     }

@@ -8,7 +8,7 @@ const Hub = PubSub.Hub;
 const Subscriber = PubSub.Subscriber;
 
 const MockConn = struct {
-    inbox: std.ArrayListUnmanaged([]u8) = .empty,
+    inbox: std.ArrayList([]u8) = .empty,
     allocator: Allocator,
     fail: bool = false,
 

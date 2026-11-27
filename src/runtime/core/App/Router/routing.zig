@@ -8,7 +8,7 @@ const Client = @import("../../http/Client.zig");
 pub const PageData = struct {
     const Store = struct {
         arena: std.mem.Allocator,
-        map: std.StringHashMapUnmanaged([]const u8) = .{},
+        map: std.StringHashMapUnmanaged([]const u8) = .empty,
     };
 
     _store: ?*Store = null,

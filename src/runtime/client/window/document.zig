@@ -343,8 +343,8 @@ pub fn findCommentMarker(self: Document, id: []const u8, occurrence: usize) erro
             const rest = text[start_prefix.len..];
             if (rest.len > 0 and rest[0] == ' ') {
                 // Skip the space and get JSON (object or array format)
-                const json_obj_start = std.mem.indexOf(u8, rest, "{");
-                const json_arr_start = std.mem.indexOf(u8, rest, "[");
+                const json_obj_start = std.mem.find(u8, rest, "{");
+                const json_arr_start = std.mem.find(u8, rest, "[");
                 // Find the first occurrence of either { or [
                 const json_start = if (json_obj_start != null and json_arr_start != null)
                     @min(json_obj_start.?, json_arr_start.?)

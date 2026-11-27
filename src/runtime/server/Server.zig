@@ -50,7 +50,7 @@ pub const SerilizableAppMeta = struct {
         var routes = try allocator.alloc(Route, meta.routes.len);
 
         for (meta.routes, 0..) |route, i| {
-            const is_dynamic = std.mem.indexOf(u8, route.path, ":") != null;
+            const is_dynamic = std.mem.find(u8, route.path, ":") != null;
             const kind, const methods = try getRouteKindAndMethods(allocator, route);
             routes[i] = Route{
                 .path = try allocator.dupe(u8, route.path),

@@ -156,7 +156,7 @@ fn collect(
     var sources: std.StringHashMapUnmanaged([]const u8) = .empty;
     for (diagnostics) |d| {
         if (d.kind != .@"error" or d.file.len == 0 or d.line == 0) continue;
-        const path = if (std.fs.path.isAbsolute(d.file)) d.file else try std.fs.path.join(a, &.{ root, d.file });
+        const path = if (std.Io.Dir.path.isAbsolute(d.file)) d.file else try std.Io.Dir.path.join(a, &.{ root, d.file });
         // Only project sources; errors left in dependencies have no editor file to land on.
         if (!std.mem.startsWith(u8, path, root)) continue;
 
@@ -167,7 +167,7 @@ fn collect(
         };
         const line: u32 = d.line - 1;
         const col: u32 = d.col -| 1;
-        const gop = try out.getOrPut(a, try std.fmt.allocPrint(a, "file://{s}", .{path}));
+        const gop = try out.getOrPut(a, try a.print("file://{s}", .{path}));
         if (!gop.found_existing) gop.value_ptr.* = .empty;
         try gop.value_ptr.append(a, .{
             .range = .{
@@ -202,13 +202,13 @@ fn send(self: *Checker, uri: []const u8) void {
 
 /// Nearest ancestor directory whose `build.zig` imports ziex.
 fn findRoot(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ?[]u8 {
-    var dir = std.fs.path.dirname(path);
-    while (dir) |d| : (dir = std.fs.path.dirname(d)) {
-        const build_zig = std.fs.path.join(allocator, &.{ d, "build.zig" }) catch return null;
+    var dir = std.Io.Dir.path.dirname(path);
+    while (dir) |d| : (dir = std.Io.Dir.path.dirname(d)) {
+        const build_zig = std.Io.Dir.path.join(allocator, &.{ d, "build.zig" }) catch return null;
         defer allocator.free(build_zig);
         const source = std.Io.Dir.cwd().readFileAlloc(io, build_zig, allocator, .limited(1 << 20)) catch continue;
         defer allocator.free(source);
-        if (std.mem.indexOf(u8, source, "@import(\"ziex\")") != null) return allocator.dupe(u8, d) catch null;
+        if (std.mem.find(u8, source, "@import(\"ziex\")") != null) return allocator.dupe(u8, d) catch null;
     }
     return null;
 }
