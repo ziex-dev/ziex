@@ -31,7 +31,7 @@ COPY site/app ./site/app
 COPY site/component ./site/component
 COPY pkg/ui ./pkg/ui
 COPY bench/ziex/app/pages/js-framework-benchmark/csr ./bench/ziex/app/pages/js-framework-benchmark/csr
-RUN cd site && zig build zx -- build
+RUN cd site && zig build --release=safe
 
 # Run App
 FROM alpine:3.24.4
