@@ -8,6 +8,7 @@ declare namespace Cloudflare {
 	interface Env {
 		KV: KVNamespace;
 		DB: D1Database;
+		DB_STUDIO: D1Database;
 		ASSETS: Fetcher;
 		CHAT_ROOM: DurableObjectNamespace /* ChatRoom */;
 	}

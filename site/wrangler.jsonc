@@ -26,7 +26,9 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_id": "0bec4fab-1cfe-4db7-b774-8feb0b2d44c3", // available in your Worker on env.DB
+		},
+		{
+			"binding": "DB_STUDIO",
 		}
 	],
 	"durable_objects": {
@@ -40,7 +42,9 @@
 	"migrations": [
 		{
 			"tag": "v1",
-			"new_sqlite_classes": ["ChatRoom"]
+			"new_sqlite_classes": [
+				"ChatRoom"
+			]
 		}
 	]
 }
