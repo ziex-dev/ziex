@@ -7,21 +7,11 @@ const http = @import("http.zig");
 
 userdata: ?*anyopaque = null,
 vtable: *const VTable,
-// Used when a message has no `from`.
-from: ?Address = null,
 
 pub const Resend = @import("Email/Resend.zig");
 pub const Smtp = @import("Email/Smtp.zig");
 pub const Wasm = @import("Email/Wasm.zig");
 pub const Memory = @import("Email/Memory.zig");
-
-pub const Env = enum {
-    EMAIL_FROM,
-
-    pub fn key(self: Env) []const u8 {
-        return @tagName(self);
-    }
-};
 
 pub const Provider = enum {
     resend,
@@ -104,7 +94,7 @@ pub const Attachment = struct {
 };
 
 pub const Message = struct {
-    from: ?Address = null,
+    from: Address,
     to: []const Address = &.{},
     cc: []const Address = &.{},
     bcc: []const Address = &.{},
@@ -118,8 +108,7 @@ pub const Message = struct {
     idempotency_key: ?[]const u8 = null,
 
     pub fn validate(m: Message) Error!void {
-        const from = m.from orelse return error.InvalidMessage;
-        try from.validate();
+        try m.from.validate();
         if (m.to.len + m.cc.len + m.bcc.len == 0) return error.InvalidMessage;
         for ([_][]const Address{ m.to, m.cc, m.bcc }) |list| for (list) |a| try a.validate();
         if (m.reply_to) |a| try a.validate();
@@ -134,7 +123,7 @@ pub const Message = struct {
     // Deep copy into `arena`.
     pub fn clone(m: Message, arena: std.mem.Allocator) std.mem.Allocator.Error!Message {
         var out = m;
-        if (m.from) |a| out.from = try cloneAddress(arena, a);
+        out.from = try cloneAddress(arena, m.from);
         out.to = try cloneAddresses(arena, m.to);
         out.cc = try cloneAddresses(arena, m.cc);
         out.bcc = try cloneAddresses(arena, m.bcc);
@@ -170,10 +159,8 @@ pub const Sent = struct {
 };
 
 pub fn send(e: Email, gpa: std.mem.Allocator, message: Message) Error!Sent {
-    var m = message;
-    if (m.from == null) m.from = e.from;
-    try m.validate();
-    return e.vtable.send(e.userdata, gpa, m);
+    try message.validate();
+    return e.vtable.send(e.userdata, gpa, message);
 }
 
 fn hasLineBreak(s: []const u8) bool {

@@ -158,9 +158,9 @@ pub const AppOptions = struct {
             server: ?CacheServerOptions = null,
         };
 
-        // `zx.ai`. Only the provider is a build option; key, base URL and models
-        // come from env (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`,
-        // `OPENAI_IMAGE_MODEL`, or the `ANTHROPIC_*` equivalents).
+        // `zx.ai`. Only the provider is a build option; key and base URL come from
+        // env (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, or the `ANTHROPIC_*` equivalents).
+        // The model is passed per call.
         pub const AiOptions = struct {
             pub const Provider = enum { openai, anthropic };
             pub const AiServerOptions = struct {
@@ -173,9 +173,6 @@ pub const AppOptions = struct {
             server: ?AiServerOptions = null,
         };
 
-        // `zx.flag`. Only the provider is a build option; credentials and endpoints
-        // come from env (`OFREP_URL`, `OFREP_API_KEY`, or `CLOUDFLARE_ACCOUNT_ID`,
-        // `FLAGSHIP_APP_ID`, `CLOUDFLARE_API_TOKEN`, `FLAGSHIP_BASE_URL`, `FLAGSHIP_BINDING`).
         pub const FlagOptions = struct {
             pub const Provider = enum { ofrep, flagship, kv };
             pub const FlagServerOptions = struct {
@@ -188,10 +185,6 @@ pub const AppOptions = struct {
             server: ?FlagServerOptions = null,
         };
 
-        // `zx.email`. Only the provider is a build option; credentials and endpoints
-        // come from env (`RESEND_API_KEY`, `RESEND_BASE_URL`, `SMTP_*`, `EMAIL_FROM`,
-        // `EMAIL_BINDING`). `.wasm` uses the edge host binding (e.g. `new Ziex({ email: "EMAIL" })`)
-        // and keeps messages in memory, logged, on native. `.smtp` is native-only.
         pub const EmailOptions = struct {
             pub const Provider = enum { resend, smtp, wasm, memory };
             pub const EmailServerOptions = struct {
@@ -204,9 +197,6 @@ pub const AppOptions = struct {
             server: ?EmailServerOptions = null,
         };
 
-        // `zx.bucket`. Only the provider is a build option (null picks fs natively /
-        // wasm on the edge). Credentials and endpoints come from env (`S3_*` /
-        // `AWS_*`, `BUCKET_BINDING`).
         pub const BucketOptions = struct {
             pub const Provider = enum { fs, wasm, s3 };
             pub const BucketServerOptions = struct {

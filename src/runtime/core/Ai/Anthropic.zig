@@ -15,7 +15,6 @@ pub const default_base_url = "https://api.anthropic.com/v1";
 pub const Env = enum {
     ANTHROPIC_API_KEY,
     ANTHROPIC_BASE_URL,
-    ANTHROPIC_MODEL,
 
     pub fn key(self: Env) []const u8 {
         return @tagName(self);
@@ -25,7 +24,6 @@ pub const Env = enum {
 pub const env = struct {
     pub const api_key = Env.ANTHROPIC_API_KEY;
     pub const base_url = Env.ANTHROPIC_BASE_URL;
-    pub const model = Env.ANTHROPIC_MODEL;
 };
 
 const version = "2023-06-01";

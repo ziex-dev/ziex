@@ -68,7 +68,7 @@ pub const Message = struct {
             .contentId = a.content_id,
         };
         return std.json.Stringify.valueAlloc(arena, Message{
-            .from = .{ .a = m.from.? },
+            .from = .{ .a = m.from },
             .to = try list(arena, m.to),
             .cc = try list(arena, m.cc),
             .bcc = try list(arena, m.bcc),

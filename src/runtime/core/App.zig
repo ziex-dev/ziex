@@ -266,8 +266,6 @@ const Resolved = struct {
     host: ?[]const u8 = null,
     ai_api_key: ?[]const u8 = null,
     ai_base_url: ?[]const u8 = null,
-    ai_model: ?[]const u8 = null,
-    ai_image_model: ?[]const u8 = null,
 };
 
 var resolved: Resolved = .{};
@@ -453,17 +451,11 @@ fn initSecrets(alloc: std.mem.Allocator, inita: zx.Init) !void {
 fn initAi(alloc: std.mem.Allocator, inita: zx.Init) void {
     resolved.ai_api_key = envVar(alloc, AiProvider.env.api_key.key());
     resolved.ai_base_url = envVar(alloc, AiProvider.env.base_url.key());
-    resolved.ai_model = envVar(alloc, AiProvider.env.model.key());
-    if (comptime @hasDecl(AiProvider.env, "image_model")) {
-        resolved.ai_image_model = envVar(alloc, AiProvider.env.image_model.key());
-    }
     ai_provider = .{
         .io = inita.io,
         .api_key = resolved.ai_api_key,
         .base_url = resolved.ai_base_url orelse AiProvider.default_base_url,
-        .model = resolved.ai_model,
     };
-    if (comptime @hasField(AiProvider, "image_model")) ai_provider.image_model = resolved.ai_image_model;
     zx.ai = ai_provider.ai();
 }
 
@@ -518,12 +510,6 @@ fn initEmail(alloc: std.mem.Allocator, inita: zx.Init) void {
     } else unreachable;
 
     zx.email = email_backend.email();
-
-    const from = envVar(env, zx.Email.Env.EMAIL_FROM.key()) orelse return;
-    zx.email.from = zx.Email.Address.parse(from) catch {
-        std.log.scoped(.zx_email).warn("invalid sender address: {s}", .{from});
-        return;
-    };
 }
 
 fn initBucket(alloc: std.mem.Allocator, inita: zx.Init, datadir: []const u8) !void {
@@ -594,8 +580,6 @@ fn freeResolved(alloc: std.mem.Allocator) void {
         zx.ai = .failing;
         if (resolved.ai_api_key) |s| alloc.free(s);
         if (resolved.ai_base_url) |s| alloc.free(s);
-        if (resolved.ai_model) |s| alloc.free(s);
-        if (resolved.ai_image_model) |s| alloc.free(s);
     }
 
     // Feature ==> zx.flag

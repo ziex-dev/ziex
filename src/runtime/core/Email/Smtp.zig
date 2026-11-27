@@ -82,7 +82,7 @@ fn send(userdata: ?*anyopaque, gpa: std.mem.Allocator, m: Email.Message) Email.E
         .local_name = s.local_name,
         .insecure = s.insecure,
         .auth = auth,
-        .from = m.from.?.email,
+        .from = m.from.email,
         .to = rcpts,
         .msg = raw,
     });
@@ -616,7 +616,7 @@ fn encodeMessage(arena: std.mem.Allocator, m: Email.Message) Email.Error![]u8 {
     var w: std.Io.Writer.Allocating = .init(arena);
     errdefer w.deinit();
 
-    try writeHeader(&w.writer, "From", try fmtAddress(arena, m.from.?));
+    try writeHeader(&w.writer, "From", try fmtAddress(arena, m.from));
     if (m.to.len > 0) try writeHeader(&w.writer, "To", try fmtList(arena, m.to));
     if (m.cc.len > 0) try writeHeader(&w.writer, "Cc", try fmtList(arena, m.cc));
     if (m.reply_to) |a| try writeHeader(&w.writer, "Reply-To", try fmtAddress(arena, a));

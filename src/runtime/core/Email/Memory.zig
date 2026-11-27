@@ -50,7 +50,7 @@ fn send(userdata: ?*anyopaque, gpa: std.mem.Allocator, message: Email.Message) E
     const n = m.messages.items.len;
 
     if (m.log) std.log.scoped(.zx_email).info("#{d} {f} -> {d} recipient(s): {s}", .{
-        n, message.from.?, message.to.len + message.cc.len + message.bcc.len, message.subject,
+        n, message.from, message.to.len + message.cc.len + message.bcc.len, message.subject,
     });
     return .{ .id = try std.fmt.allocPrint(gpa, "memory-{d}", .{n}) };
 }

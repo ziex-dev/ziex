@@ -66,7 +66,7 @@ fn send(userdata: ?*anyopaque, gpa: std.mem.Allocator, m: Email.Message) Email.E
     };
 
     const payload = try std.json.Stringify.valueAlloc(arena, Body{
-        .from = try formatAddress(arena, m.from.?),
+        .from = try formatAddress(arena, m.from),
         .to = try formatList(arena, m.to),
         .cc = try formatList(arena, m.cc),
         .bcc = try formatList(arena, m.bcc),

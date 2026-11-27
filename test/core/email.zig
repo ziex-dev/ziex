@@ -81,10 +81,6 @@ test "message > invalid messages fail before sending" {
     const email = memory.email();
 
     var m = hello;
-    m.from = null;
-    try std.testing.expectError(error.InvalidMessage, email.send(gpa, m));
-
-    m = hello;
     m.to = &.{};
     try std.testing.expectError(error.InvalidMessage, email.send(gpa, m));
 
@@ -108,6 +104,10 @@ test "message > invalid messages fail before sending" {
     m.cc = &.{.{ .email = "nope" }};
     try std.testing.expectError(error.InvalidAddress, email.send(gpa, m));
 
+    m = hello;
+    m.from = .{ .email = "nope" };
+    try std.testing.expectError(error.InvalidAddress, email.send(gpa, m));
+
     try std.testing.expectEqual(0, memory.sent().len);
 }
 
@@ -124,16 +124,15 @@ test "message > bcc alone is a recipient" {
 
 // --- Memory --- //
 
-test "memory > keeps copies and applies the default sender" {
+test "memory > keeps copies" {
     var memory: Email.Memory = .init(gpa, io);
     defer memory.deinit();
-    var email = memory.email();
-    email.from = .{ .email = "noreply@acme.dev" };
+    const email = memory.email();
 
     {
         var subject = "Welcome".*;
         var m = hello;
-        m.from = null;
+        m.from = .{ .email = "noreply@acme.dev" };
         m.subject = &subject;
         m.attachments = &.{.{ .filename = "a.txt", .content = "abc" }};
         const sent = try email.send(gpa, m);
@@ -144,13 +143,13 @@ test "memory > keeps copies and applies the default sender" {
 
     const last = memory.last().?;
     try std.testing.expectEqualStrings("Welcome", last.subject);
-    try std.testing.expectEqualStrings("noreply@acme.dev", last.from.?.email);
+    try std.testing.expectEqualStrings("noreply@acme.dev", last.from.email);
     try std.testing.expectEqualStrings("a@b.dev", last.to[0].email);
     try std.testing.expectEqualStrings("abc", last.attachments[0].content);
 
     const second = try email.send(gpa, hello);
     defer second.deinit(gpa);
-    try std.testing.expectEqualStrings("hi@acme.dev", memory.last().?.from.?.email);
+    try std.testing.expectEqualStrings("hi@acme.dev", memory.last().?.from.email);
     try std.testing.expectEqual(2, memory.sent().len);
 
     memory.clear();
