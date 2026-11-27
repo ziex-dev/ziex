@@ -10,10 +10,10 @@ test.describe('Realtime Chat Example', () => {
     await page.goto('/examples/realtime');
     // expect: Chat UI loads with name input and join button.
     await expect(page.getByRole('textbox', { name: /Enter your name/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Join Chat' })).toBeVisible();
-    // 2. Enter a name and click 'Join Chat'
+    await expect(page.getByRole('button', { name: 'Join room' })).toBeVisible();
+    // 2. Enter a name and click 'Join room'
     await page.getByRole('textbox', { name: /Enter your name/ }).fill('TestUser');
-    await page.getByRole('button', { name: 'Join Chat' }).click();
+    await page.getByRole('button', { name: 'Join room' }).click();
     // Optionally, assert user joins chat
   });
 });

@@ -10,7 +10,7 @@ test.describe('Examples Overview', () => {
     await expect(directory.getByRole('heading', { name: 'Data & APIs' })).toBeVisible();
     await expect(directory.getByRole('heading', { name: 'Forms & Actions' })).toBeVisible();
     await expect(page.getByRole('link', { name: /Counter.*zx\.State/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Database.*zx\.db/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /DB \(server\).*zx\.Db\.Wasm/ })).toBeVisible();
   });
 
   test('sidebar links navigate to example applications', async ({ page }) => {
