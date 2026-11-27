@@ -5,7 +5,7 @@ const Body = struct {
     from: []const u8,
     to: []const []const u8 = &.{},
     cc: []const []const u8 = &.{},
-    reply_to: ?[]const u8 = null,
+    reply_to: []const []const u8 = &.{},
     subject: []const u8,
     text: ?[]const u8 = null,
     html: ?[]const u8 = null,
@@ -14,7 +14,7 @@ const Body = struct {
 };
 
 // Replies with an id that echoes what was received:
-// `<from>|<to,...>|<cc,...>|<reply_to>|<subject>|<X-Tag>|<idempotency-key>|<filename>=<decoded content>`.
+// `<from>|<to,...>|<cc,...>|<reply_to,...>|<subject>|<X-Tag>|<idempotency-key>|<filename>=<decoded content>`.
 pub fn POST(ctx: zx.RouteContext) !void {
     const auth = ctx.request.headers.get("authorization") orelse "";
     if (!std.mem.eql(u8, auth, "Bearer test-key")) {
@@ -46,7 +46,7 @@ pub fn POST(ctx: zx.RouteContext) !void {
         body.from,
         try std.mem.join(ctx.arena, ",", body.to),
         try std.mem.join(ctx.arena, ",", body.cc),
-        body.reply_to orelse "",
+        try std.mem.join(ctx.arena, ",", body.reply_to),
         body.subject,
         tag,
         ctx.request.headers.get("idempotency-key") orelse "",

@@ -165,7 +165,7 @@ test "wasm > encodes the Cloudflare send() shape" {
     const json = try Email.Wasm.Message.encode(arena_state.allocator(), .{
         .from = .{ .email = "hi@acme.dev", .name = "Acme" },
         .to = &.{ .{ .email = "a@b.dev" }, .{ .email = "c@d.dev", .name = "C" } },
-        .reply_to = .{ .email = "support@acme.dev" },
+        .reply_to = &.{.{ .email = "support@acme.dev" }},
         .subject = "Hello",
         .html = "<p>hi</p>",
         .headers = &.{.{ .name = "X-Tag", .value = "welcome" }},
@@ -176,6 +176,22 @@ test "wasm > encodes the Cloudflare send() shape" {
     });
     try std.testing.expectEqualStrings(
         \\{"from":{"email":"hi@acme.dev","name":"Acme"},"to":["a@b.dev",{"email":"c@d.dev","name":"C"}],"replyTo":"support@acme.dev","subject":"Hello","html":"<p>hi</p>","headers":{"X-Tag":"welcome"},"attachments":[{"content":"aGVsbG8=","filename":"a.txt","type":"text/plain","disposition":"attachment"},{"content":"cG5n","filename":"logo.png","type":"application/octet-stream","disposition":"inline","contentId":"logo"}]}
+    , json);
+}
+
+test "wasm > joins several reply-to addresses" {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+
+    const json = try Email.Wasm.Message.encode(arena_state.allocator(), .{
+        .from = .{ .email = "hi@acme.dev" },
+        .to = &.{.{ .email = "a@b.dev" }},
+        .reply_to = &.{ .{ .email = "support@acme.dev", .name = "Support" }, .{ .email = "help@acme.dev" } },
+        .subject = "Hello",
+        .text = "hi",
+    });
+    try std.testing.expectEqualStrings(
+        \\{"from":"hi@acme.dev","to":["a@b.dev"],"replyTo":"\"Support\" <support@acme.dev>, help@acme.dev","subject":"Hello","text":"hi"}
     , json);
 }
 
@@ -201,7 +217,7 @@ test "resend > sends and returns the id" {
                 .from = .{ .email = "hi@acme.dev", .name = "Acme" },
                 .to = &.{ .{ .email = "a@b.dev" }, .{ .email = "c@d.dev" } },
                 .cc = &.{.{ .email = "e@f.dev", .name = "E" }},
-                .reply_to = .{ .email = "support@acme.dev" },
+                .reply_to = &.{ .{ .email = "support@acme.dev" }, .{ .email = "help@acme.dev" } },
                 .subject = "Hello",
                 .html = "<p>hi</p>",
                 .headers = &.{.{ .name = "X-Tag", .value = "welcome" }},
@@ -210,7 +226,7 @@ test "resend > sends and returns the id" {
             });
             defer sent.deinit(gpa);
             try std.testing.expectEqualStrings(
-                "\"Acme\" <hi@acme.dev>|a@b.dev,c@d.dev|\"E\" <e@f.dev>|support@acme.dev|Hello|welcome|welcome/42|a.txt=hello",
+                "\"Acme\" <hi@acme.dev>|a@b.dev,c@d.dev|\"E\" <e@f.dev>|support@acme.dev,help@acme.dev|Hello|welcome|welcome/42|a.txt=hello",
                 sent.id.?,
             );
         }

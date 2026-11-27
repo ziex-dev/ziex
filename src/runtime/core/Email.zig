@@ -98,7 +98,7 @@ pub const Message = struct {
     to: []const Address = &.{},
     cc: []const Address = &.{},
     bcc: []const Address = &.{},
-    reply_to: ?Address = null,
+    reply_to: []const Address = &.{},
     subject: []const u8,
     text: ?[]const u8 = null,
     html: ?[]const u8 = null,
@@ -110,8 +110,7 @@ pub const Message = struct {
     pub fn validate(m: Message) Error!void {
         try m.from.validate();
         if (m.to.len + m.cc.len + m.bcc.len == 0) return error.InvalidMessage;
-        for ([_][]const Address{ m.to, m.cc, m.bcc }) |list| for (list) |a| try a.validate();
-        if (m.reply_to) |a| try a.validate();
+        for ([_][]const Address{ m.to, m.cc, m.bcc, m.reply_to }) |list| for (list) |a| try a.validate();
         if (hasLineBreak(m.subject)) return error.InvalidMessage;
         if (m.text == null and m.html == null) return error.InvalidMessage;
         for (m.headers) |h| {
@@ -127,7 +126,7 @@ pub const Message = struct {
         out.to = try cloneAddresses(arena, m.to);
         out.cc = try cloneAddresses(arena, m.cc);
         out.bcc = try cloneAddresses(arena, m.bcc);
-        if (m.reply_to) |a| out.reply_to = try cloneAddress(arena, a);
+        out.reply_to = try cloneAddresses(arena, m.reply_to);
         out.subject = try arena.dupe(u8, m.subject);
         out.text = try dupeOpt(arena, m.text);
         out.html = try dupeOpt(arena, m.html);

@@ -619,7 +619,7 @@ fn encodeMessage(arena: std.mem.Allocator, m: Email.Message) Email.Error![]u8 {
     try writeHeader(&w.writer, "From", try fmtAddress(arena, m.from));
     if (m.to.len > 0) try writeHeader(&w.writer, "To", try fmtList(arena, m.to));
     if (m.cc.len > 0) try writeHeader(&w.writer, "Cc", try fmtList(arena, m.cc));
-    if (m.reply_to) |a| try writeHeader(&w.writer, "Reply-To", try fmtAddress(arena, a));
+    if (m.reply_to.len > 0) try writeHeader(&w.writer, "Reply-To", try fmtList(arena, m.reply_to));
     try writeHeader(&w.writer, "Subject", m.subject);
     try writeHeader(&w.writer, "MIME-Version", "1.0");
     for (m.headers) |h| try writeHeader(&w.writer, h.name, h.value);

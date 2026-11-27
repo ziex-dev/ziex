@@ -36,12 +36,28 @@ const Address = struct {
     }
 };
 
+// `send()` takes one Reply-To, so several go as one RFC 5322 address list.
+const ReplyTo = struct {
+    list: []const Email.Address,
+
+    pub fn jsonStringify(self: ReplyTo, jw: *std.json.Stringify) std.json.Stringify.Error!void {
+        if (self.list.len == 1) return jw.write(Address{ .a = self.list[0] });
+        var buf: [1024]u8 = undefined;
+        var w: std.Io.Writer = .fixed(&buf);
+        for (self.list, 0..) |a, i| {
+            if (i > 0) w.writeAll(", ") catch return error.WriteFailed;
+            w.print("{f}", .{a}) catch return error.WriteFailed;
+        }
+        try jw.write(w.buffered());
+    }
+};
+
 pub const Message = struct {
     from: Address,
     to: ?[]const Address,
     cc: ?[]const Address,
     bcc: ?[]const Address,
-    replyTo: ?Address,
+    replyTo: ?ReplyTo,
     subject: []const u8,
     text: ?[]const u8,
     html: ?[]const u8,
@@ -72,7 +88,7 @@ pub const Message = struct {
             .to = try list(arena, m.to),
             .cc = try list(arena, m.cc),
             .bcc = try list(arena, m.bcc),
-            .replyTo = if (m.reply_to) |a| .{ .a = a } else null,
+            .replyTo = if (m.reply_to.len > 0) .{ .list = m.reply_to } else null,
             .subject = m.subject,
             .text = m.text,
             .html = m.html,
