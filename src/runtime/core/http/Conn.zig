@@ -345,8 +345,9 @@ fn wsIsSubscribed(_: ?*anyopaque, topic: []const u8) bool {
     return wasm_ext.ws.isSubscribed(topic);
 }
 
-fn wsSetPublishToSelf(_: ?*anyopaque, _: bool) void {
-    // Edge pub/sub fan-out always includes topic subscribers (see createWebSocketDO).
+fn wsSetPublishToSelf(_: ?*anyopaque, value: bool) void {
+    if (comptime !is_wasm) return;
+    wasm_ext.ws.setPublishToSelf(value);
 }
 
 const QueryCache = struct {

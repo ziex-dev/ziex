@@ -65,6 +65,7 @@ pub const Op = enum(u32) {
     bucket_upload_finish,
     bucket_upload_abort,
     worker_post,
+    ws_set_publish_to_self,
 };
 
 // Returned by hosts that don't implement an op.

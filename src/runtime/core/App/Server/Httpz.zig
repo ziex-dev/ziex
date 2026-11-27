@@ -23,9 +23,14 @@ const Devtool = @import("Devtool.zig");
 const PubSub = @import("PubSub.zig");
 const Pipeline = @import("Pipeline.zig");
 
+fn onPublishFramed(ctx: *anyopaque, framed: []const u8) anyerror!void {
+    const conn: *httpz.websocket.Conn = @ptrCast(@alignCast(ctx));
+    try conn.writeFramed(framed);
+}
+
 fn onPublish(ctx: *anyopaque, message: []const u8) anyerror!void {
     const conn: *httpz.websocket.Conn = @ptrCast(@alignCast(ctx));
-    try conn.write(message);
+    try conn.writeText(message);
 }
 
 pub const token = "ziex/httpz";
@@ -1173,7 +1178,7 @@ fn Handler(comptime Ctx: type) type {
                     .ws_allocator = ctx.allocator,
                     .io = ctx.io,
                     .upgrade_data = ctx.upgrade_data,
-                    .subscriber = PubSub.Subscriber.init(ctx.allocator, ctx.io, conn, onPublish),
+                    .subscriber = PubSub.Subscriber.initFramed(ctx.allocator, ctx.io, conn, onPublishFramed, onPublish),
                 };
             }
 

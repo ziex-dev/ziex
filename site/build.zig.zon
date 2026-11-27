@@ -14,6 +14,11 @@
             .hash = "dusty-0.3.1-Qdw7RkH1IQBOa3m2yEhRHPW8J-q--UWYwobluQpxqM8q",
             .lazy = true,
         },
+        .zio = .{
+            .url = "git+https://github.com/lalinsky/zio?ref=main#e7180c7ef4e15e8f7b80a808ecbb2a9c7b342cac",
+            .hash = "zio-0.20.1-xHbVVO4XMAAQvF7lyz8sHZEcxO8pCNE7pww-qKHNFUOX",
+            .lazy = true,
+        },
         .branding = .{
             .url = "git+https://github.com/ziex-dev/branding.git#351a992d01f38303c5ccb479250241481b43e627",
             .hash = "N-V-__8AAHMUmwDsRB5yB9XEGz4Z4kxOtPsLjV46IIlLgpck",

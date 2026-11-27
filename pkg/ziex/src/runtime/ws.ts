@@ -9,11 +9,14 @@ export type WsState = {
     messageQueue: Uint8Array[];
     // `null` means closed.
     recvResolve: ((bytes: Uint8Array | null) => void) | null;
-    // Pub/sub, set by sticky handlers.
+    /** Fired when the guest calls `ws_upgrade` (may be after earlier JSPI suspensions). */
+    upgradeResolve: (() => void) | null;
+    // Pub/sub, set by sticky handlers (Cloudflare DO / edge host).
     subscribe?: (topic: string) => void;
     unsubscribe?: (topic: string) => void;
     publish?: (topic: string, data: Uint8Array) => number;
     isSubscribed?: (topic: string) => boolean;
+    setPublishToSelf?: (value: boolean) => void;
 };
 
 export function newWsState(): WsState {
@@ -23,7 +26,27 @@ export function newWsState(): WsState {
         pendingWrites: [],
         messageQueue: [],
         recvResolve: null,
+        upgradeResolve: null,
     };
+}
+
+/**
+ * Resolves when the guest upgrades to WebSocket, or when `done` settles without
+ * upgrading. Needed because JSPI may suspend on KV/IO *before* `ws_upgrade`.
+ */
+export function waitForUpgrade(ws: WsState, done: Promise<unknown>): Promise<void> {
+    if (ws.upgraded) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            if (ws.upgradeResolve === finish) ws.upgradeResolve = null;
+            resolve();
+        };
+        ws.upgradeResolve = finish;
+        done.then(finish, finish);
+    });
 }
 
 export function deliverToWasm(ws: WsState, data: Uint8Array | null): void {
@@ -55,7 +78,12 @@ export function createWsHandlers(mem: () => WebAssembly.Memory, ws: WsState): Ha
     };
 
     return {
-        ws_upgrade: () => { ws.upgraded = true; },
+        ws_upgrade: () => {
+            ws.upgraded = true;
+            const resolve = ws.upgradeResolve;
+            ws.upgradeResolve = null;
+            resolve?.();
+        },
         ws_write: (ptr, len, binary) => {
             const data = binary ? readBytes(ptr, len).slice() : readStr(ptr, len);
             if (ws.server) ws.server.send(data);
@@ -71,6 +99,7 @@ export function createWsHandlers(mem: () => WebAssembly.Memory, ws: WsState): Ha
         ws_publish: (topic_ptr, topic_len, data_ptr, data_len) =>
             ws.publish?.(readStr(topic_ptr, topic_len), readBytes(data_ptr, data_len).slice()) ?? 0,
         ws_is_subscribed: (ptr, len) => ws.isSubscribed?.(readStr(ptr, len)) ? 1 : 0,
+        ws_set_publish_to_self: (value) => { ws.setPublishToSelf?.(value !== 0); },
     };
 }
 

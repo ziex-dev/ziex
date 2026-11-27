@@ -1,5 +1,5 @@
 import { newHttpState, toResponse } from "./http";
-import { attachWebSocket, deliverToWasm, newWsState, type WsState } from "./ws";
+import { attachWebSocket, deliverToWasm, newWsState, waitForUpgrade, type WsState } from "./ws";
 import { defaultKV, instantiate, isProcExit, type ImportsFactory } from "./instance";
 import { serveReused, supportsReuse } from "./reuse";
 import { hasJspi, promising } from "./jspi";
@@ -98,8 +98,8 @@ export async function run({
     const { instance } = instantiate({ module, request, stdinData, env, kv, db, email, bucket, imports, wasi, http, ws });
     const done = start(instance, ws);
 
-    // start() runs synchronously until the first suspension (`ws_recv` for sockets),
-    // so an upgrade is already visible here.
+    // JSPI may suspend on KV/IO before `ws_upgrade`; wait for the upgrade signal.
+    await waitForUpgrade(ws, done);
     if (ws.upgraded) {
         const { client } = attachWebSocket(ws);
         ctx?.waitUntil(done);

@@ -234,12 +234,18 @@ pub fn build(b: *std.Build) !void {
                 },
             },
         },
-        .cli = .{ .optimize = optimize, .log_level = log_level },
+        .cli = .{ .optimize = .debug, .log_level = log_level },
     });
     zx.addImport("cli_args", ziex_dep.module("cli_args"));
     if (!target.result.cpu.arch.isWasm() and server_backend == .dusty) {
         if (b.lazyDependency("dusty", .{ .target = target, .optimize = optimize, .use_tls = false })) |dusty_dep| {
-            zx.addImport("dusty", dusty_dep.module("dusty"));
+            const dusty_mod = dusty_dep.module("dusty");
+            if (b.lazyDependency("zio", .{ .target = target, .optimize = optimize })) |zio_dep| {
+                const zio_mod = zio_dep.module("zio");
+                dusty_mod.addImport("zio", zio_mod);
+                zx.addImport("zio", zio_mod);
+            }
+            zx.addImport("dusty", dusty_mod);
         }
     }
 

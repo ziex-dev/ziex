@@ -1,5 +1,5 @@
 import { newHttpState } from "../../runtime/http";
-import { acceptWebSocketPair, deliverToWasm, newWsState, type WsState } from "../../runtime/ws";
+import { acceptWebSocketPair, deliverToWasm, newWsState, waitForUpgrade, type WsState } from "../../runtime/ws";
 import { defaultKV, instantiate, isProcExit, type ImportsFactory } from "../../runtime/instance";
 import { hasJspi, promising } from "../../runtime/jspi";
 import type { KVNamespace } from "../../runtime/kv";
@@ -7,34 +7,67 @@ import type { Database } from "../../runtime/db";
 import type { EmailBinding } from "../../runtime/email";
 import type { BucketBinding } from "../../runtime/bucket";
 
-type ConnState = WsState & { topics: Set<string> };
+type ConnState = WsState & {
+    topics: Set<string>;
+    /** Bun default: publish() excludes the sender unless configured. */
+    publishToSelf: boolean;
+};
 
-const textDecoder = new TextDecoder();
+const textDecoder = new TextDecoder("utf-8", { fatal: true });
+
+/** Text frame when payload is valid UTF-8; otherwise a binary frame. */
+function frameFor(data: Uint8Array): string | Uint8Array {
+    try {
+        return textDecoder.decode(data);
+    } catch {
+        return data;
+    }
+}
+
+function send(sock: WebSocket, payload: string | Uint8Array): boolean {
+    try {
+        sock.send(payload);
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 function newConnection(connections: Map<WebSocket, ConnState>): ConnState {
     const conn: ConnState = {
         ...newWsState(),
         topics: new Set(),
-        subscribe: (topic) => conn.topics.add(topic),
-        unsubscribe: (topic) => conn.topics.delete(topic),
+        publishToSelf: false,
+        subscribe: (topic) => {
+            if (topic.length === 0 || topic.length > 256) return;
+            if (conn.topics.size >= 128) return;
+            conn.topics.add(topic);
+        },
+        unsubscribe: (topic) => {
+            conn.topics.delete(topic);
+        },
         isSubscribed: (topic) => conn.topics.has(topic),
+        setPublishToSelf: (value) => {
+            conn.publishToSelf = value;
+        },
         publish: (topic, data) => {
+            if (topic.length === 0 || topic.length > 256) return 0;
+
             let count = 0;
-            const text = textDecoder.decode(data);
+            const payload = frameFor(data);
+
             for (const [sock, other] of connections) {
                 if (!other.topics.has(topic)) continue;
-                try {
-                    sock.send(text);
-                    count++;
-                } catch {
-                    /* closed */
-                }
+                if (other === conn && !conn.publishToSelf) continue;
+                if (send(sock, payload)) count++;
             }
-            // Publishing from `socket_open`: deliver on attach.
-            if (!conn.server && conn.topics.has(topic)) {
-                conn.pendingWrites.push(text);
+
+            // Pre-attach (`socket_open`): this conn is not in `connections` yet.
+            if (!conn.server && conn.publishToSelf && conn.topics.has(topic)) {
+                conn.pendingWrites.push(payload);
                 count++;
             }
+
             return count;
         },
     };
@@ -49,11 +82,7 @@ function attachConnection(conn: ConnState): WebSocket {
     // Flush after the 101 is returned so the client has completed the handshake.
     queueMicrotask(() => {
         for (const data of pending) {
-            try {
-                server.send(data as string | BufferSource);
-            } catch {
-                /* closed */
-            }
+            send(server, data as string | Uint8Array);
         }
     });
 
@@ -106,18 +135,21 @@ export function createStatefulFetch(
                 ws: conn,
             });
 
-            // Runs synchronously until the first Suspending import (`ws_recv`).
+            // Runs until the first Suspending import (often KV/cache before upgrade).
             const done = promising!(instance.exports._start as () => void)()
                 .then(() => {}, (e: unknown) => {
                     if (!isProcExit(e)) console.error("[StatefulFetch] WASM error:", e);
                 })
                 .finally(() => {
                     if (conn.server) this.connections.delete(conn.server);
+                    conn.topics.clear();
                     deliverToWasm(conn, null);
                 });
 
+            // JSPI may suspend on KV/IO before `ws_upgrade`; don't await `done`
+            // (that is the whole socket lifetime).
+            await waitForUpgrade(conn, done);
             if (!conn.upgraded) {
-                await done;
                 return new Response("WebSocket upgrade expected", { status: 426 });
             }
 

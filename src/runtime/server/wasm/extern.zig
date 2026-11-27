@@ -45,6 +45,10 @@ pub const ws = struct {
         if (!is_wasm) return false;
         return host.call(.ws_is_subscribed, .{topic}) > 0;
     }
+
+    pub fn setPublishToSelf(value: bool) void {
+        if (is_wasm) _ = host.call(.ws_set_publish_to_self, .{value});
+    }
 };
 
 pub const http = struct {

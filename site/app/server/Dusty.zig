@@ -266,7 +266,13 @@ pub fn Backend(comptime H: type) type {
                     .io = ctx.server.io,
                     .subscriber = undefined,
                 };
-                conn.subscriber = Pipeline.PubSub.Subscriber.init(ctx.server.allocator, ctx.server.io, &conn, Ws.onPublish);
+                conn.subscriber = Pipeline.PubSub.Subscriber.initFramed(
+                    ctx.server.allocator,
+                    ctx.server.io,
+                    &conn,
+                    Ws.onPublishFramed,
+                    Ws.onPublish,
+                );
                 defer conn.subscriber.unsubscribeAll();
 
                 const sock = conn.socket();
@@ -355,6 +361,20 @@ const Ws = struct {
 
     fn setPublishToSelf(userdata: ?*anyopaque, value: bool) void {
         of(userdata).subscriber.publish_to_self = value;
+    }
+
+    fn onPublishFramed(ctx: *anyopaque, framed: []const u8) anyerror!void {
+        const self = of(ctx);
+        const ws = self.ws;
+        try ws.write_mutex.lock(self.io);
+        defer ws.write_mutex.unlock(self.io);
+        if (ws.closed) return error.EndOfStream;
+        ws.transport.writer.writeAll(framed) catch |err| switch (err) {
+            error.WriteFailed => return ws.transport.getWriteError() orelse error.Unexpected,
+        };
+        ws.transport.writer.flush() catch |err| switch (err) {
+            error.WriteFailed => return ws.transport.getWriteError() orelse error.Unexpected,
+        };
     }
 
     fn onPublish(ctx: *anyopaque, message: []const u8) anyerror!void {

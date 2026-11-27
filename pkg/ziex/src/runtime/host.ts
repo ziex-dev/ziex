@@ -63,6 +63,7 @@ export const ops = [
     "bucket_upload_finish",
     "bucket_upload_abort",
     "worker_post",
+    "ws_set_publish_to_self",
 ] as const;
 
 export type Op = (typeof ops)[number];

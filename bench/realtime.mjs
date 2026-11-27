@@ -1,6 +1,6 @@
 const env = "process" in globalThis ? process.env : "Deno" in globalThis ? Deno.env.toObject() : {};
 
-const SERVER = env.SERVER || "ws://0.0.0.0:3000/about/api";
+const SERVER = env.SERVER || "ws://127.0.0.1:3000/sandbox/api";
 const WebSocket = globalThis.WebSocket || (await import("ws")).WebSocket;
 const LOG_MESSAGES = env.LOG_MESSAGES === "1";
 const CLIENTS_TO_WAIT_FOR = parseInt(env.CLIENTS_COUNT || "", 10) || 32;

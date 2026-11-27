@@ -426,7 +426,7 @@ pub fn Backend(comptime H: type) type {
                     .io = ctx.server.io,
                     .subscriber = undefined,
                 };
-                conn.subscriber = Pipeline.PubSub.Subscriber.init(ctx.server.allocator, ctx.server.io, &conn, Ws.onPublish);
+                conn.subscriber = Pipeline.PubSub.Subscriber.initFramed(ctx.server.allocator, ctx.server.io, &conn, Ws.onPublishFramed, Ws.onPublish);
                 defer conn.subscriber.unsubscribeAll();
 
                 const sock = conn.socket();
@@ -527,6 +527,14 @@ const Ws = struct {
 
     fn setPublishToSelf(userdata: ?*anyopaque, value: bool) void {
         of(userdata).subscriber.publish_to_self = value;
+    }
+
+    fn onPublishFramed(ctx: *anyopaque, framed: []const u8) anyerror!void {
+        const self = of(ctx);
+        self.write_mu.lockUncancelable(self.io);
+        defer self.write_mu.unlock(self.io);
+        try self.ws.output.writeAll(framed);
+        try self.ws.output.flush();
     }
 
     fn onPublish(ctx: *anyopaque, message: []const u8) anyerror!void {
