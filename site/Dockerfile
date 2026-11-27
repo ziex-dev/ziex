@@ -1,4 +1,4 @@
-FROM alpine:3.22.2 AS build
+FROM alpine:3.24.4 AS build
 
 # Install Zig
 ARG ZIG_VER=0.17.0
@@ -24,22 +24,17 @@ COPY pkg ./pkg
 COPY templates ./templates
 
 COPY site/build.zig site/build.zig.zon ./site/
-RUN cd site && zig build --fetch
+RUN cd site && zig build zx -- version
 
 # App
-RUN cd site && zig build pg
-
 COPY site/app ./site/app
 COPY site/component ./site/component
 COPY pkg/ui ./pkg/ui
 COPY bench/ziex/app/pages/js-framework-benchmark/csr ./bench/ziex/app/pages/js-framework-benchmark/csr
-RUN cd site && zig build -Doptimize=ReleaseSmall
+RUN cd site && zig build zx -- build --release=safe
 
 # Run App
-FROM alpine:3.22.2
-
-# Fonts
-RUN apk add --no-cache font-inter font-croscore
+FROM alpine:3.24.4
 
 WORKDIR /app
 COPY --from=build /build/site/zig-out/bin/ziex_dev /app/ziex_dev
