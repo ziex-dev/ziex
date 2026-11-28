@@ -3,24 +3,25 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const upstream = b.dependency("sqlite", .{});
 
     const translate_c = b.addTranslateC(.{
-        .root_source_file = b.path("vendor/sqlite/sqlite3.h"),
+        .root_source_file = upstream.path("sqlite3.h"),
         .target = target,
         .optimize = optimize,
     });
 
-    const sqlite = translate_c.addModule("sqlite");
-    sqlite.addIncludePath(b.path("vendor/sqlite"));
+    const c = translate_c.createModule();
+    c.addIncludePath(upstream.path("."));
 
     // Browser: no libc or OS layer. Headers are stubs; zx supplies the VFS and `errno`.
     const browser = target.result.cpu.arch.isWasm() and target.result.os.tag == .freestanding;
     if (browser) {
-        sqlite.addIncludePath(b.path("wasm/include"));
+        c.addIncludePath(b.path("wasm/include"));
         // Zig's own libc for malloc and the string functions. Built for WASI because that
         // gates its string exports; nothing linked from it uses WASI imports.
         // As a file: `addObject` would make every exe linking sqlite also link libc.
-        sqlite.addObjectFile(b.addObject(.{ .name = "zigc", .root_module = b.createModule(.{
+        c.addObjectFile(b.addObject(.{ .name = "zigc", .root_module = b.createModule(.{
             .root_source_file = b.graph.path(.zig_lib, "c.zig"),
             .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi }),
             .optimize = optimize,
@@ -28,8 +29,8 @@ pub fn build(b: *std.Build) void {
         }) }).getEmittedBin());
     }
 
-    sqlite.addCSourceFile(.{
-        .file = b.path("vendor/sqlite/sqlite3.c"),
+    c.addCSourceFile(.{
+        .file = upstream.path("sqlite3.c"),
         .flags = if (browser) &[_][]const u8{
             "-std=c99",
             // No OS layer: the VFS is zx's (Db/Sqlite/web.zig), registered from `sqlite3_os_init`.
@@ -65,4 +66,14 @@ pub fn build(b: *std.Build) void {
             "-DHAVE_USLEEP=0",
         },
     });
+
+    const sqlite = b.addModule("sqlite", .{
+        .root_source_file = b.path("src/sqlite.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "c", .module = c }},
+    });
+
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = sqlite })).step);
 }

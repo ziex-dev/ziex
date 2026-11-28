@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) !void {
     {
         if (enable_sqlite) {
             const db_sqlite_dep = b.dependency("db_sqlite", .{ .target = target, .optimize = optimize });
-            mod.addImport("sqlite", db_sqlite_dep.module("sqlite"));
+            mod.addImport("db_sqlite", db_sqlite_dep.module("sqlite"));
         }
         if (!is_client) {
             if (enable_postgres) {
@@ -126,7 +126,7 @@ pub fn build(b: *std.Build) !void {
     // --- Steps: Test --- //
     if (b.isRoot()) {
         const mode_test = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
-        mode_test.addImport("sqlite", b.dependency("db_sqlite", .{}).module("sqlite"));
+        mode_test.addImport("db_sqlite", b.dependency("db_sqlite", .{}).module("sqlite"));
         mode_test.addImport("db_postgres", b.dependency("db_postgres", .{}).module("postgres"));
         mode_test.addImport("db_mysql", b.dependency("db_mysql", .{}).module("mysql"));
         mode_test.addOptions("zx_info", options);
@@ -166,16 +166,22 @@ pub fn build(b: *std.Build) !void {
 
         testing_mod.addImport("html_hover", html_hover_mod);
 
-        const testing_mod_tests = b.addTest(.{
-            .root_module = testing_mod,
-            .test_runner = .{ .path = b.path("test/runner.zig"), .mode = .simple },
-        });
-        const test_run = b.addRunArtifact(testing_mod_tests);
-        test_run.step.dependOn(b.getInstallStep());
-
+        // One run over every test binary; test/all.zig prints a single summary.
+        const tests_run = b.addRunArtifact(b.addExecutable(.{
+            .name = "test-all",
+            .root_module = b.createModule(.{ .root_source_file = b.path("test/all.zig"), .target = b.graph.host }),
+        }));
+        tests_run.step.dependOn(b.getInstallStep());
         const test_step = b.step("test", "Run tests");
-        test_step.dependOn(&test_run.step);
+        test_step.dependOn(&tests_run.step);
 
+        addTestRun(b, tests_run, "zx", testing_mod);
+        // The DB packages' own tests; no database server needed
+        addTestRun(b, tests_run, "db-sqlite", b.dependency("db_sqlite", .{ .target = target, .optimize = optimize }).module("sqlite"));
+        addTestRun(b, tests_run, "db-postgres", b.dependency("db_postgres", .{ .target = target, .optimize = optimize }).module("postgres"));
+        addTestRun(b, tests_run, "db-mysql", b.dependency("db_mysql", .{ .target = target, .optimize = optimize }).module("mysql"));
+
+        // Zig's own runner, so `zig build test --fuzz` can fuzz these coverage-guided.
         const fuzz_zx = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
         fuzz_zx.addOptions("zx_info", options);
         _ = @import("src/Build.zig").Testing.configure(b, fuzz_zx, .{
@@ -192,22 +198,6 @@ pub fn build(b: *std.Build) !void {
             .imports = &.{.{ .name = "zx", .module = fuzz_zx }},
         }) });
         test_step.dependOn(&b.addRunArtifact(fuzz_tests).step);
-
-        // protocol/auth/url unit tests for the postgres package; no server needed
-        const pg_unit = b.addTest(.{ .root_module = b.createModule(.{
-            .root_source_file = b.path("pkg/db-postgres/src/postgres.zig"),
-            .target = target,
-            .optimize = optimize,
-        }) });
-        test_step.dependOn(&b.addRunArtifact(pg_unit).step);
-
-        // protocol/auth/url unit tests for the mysql package; no server needed
-        const mysql_unit = b.addTest(.{ .root_module = b.createModule(.{
-            .root_source_file = b.path("pkg/db-mysql/src/mysql.zig"),
-            .target = target,
-            .optimize = optimize,
-        }) });
-        test_step.dependOn(&b.addRunArtifact(mysql_unit).step);
     }
 
     // --- Steps: e2e (Runs e2e step for site/) --- //
@@ -271,3 +261,13 @@ pub const info = .{
     .homepage = build_zon.homepage,
     .minimum_zig_version = build_zon.minimum_zig_version,
 };
+
+// A test binary for `m` (Zig runs only a build's root-module tests) on test/runner.zig, run by
+// test/all.zig; `name` prefixes its tests in the output.
+fn addTestRun(b: *std.Build, run: *std.Build.Step.Run, name: []const u8, m: *std.Build.Module) void {
+    run.addArtifactArg(b.addTest(.{
+        .name = name,
+        .root_module = m,
+        .test_runner = .{ .path = b.path("test/runner.zig"), .mode = .simple },
+    }));
+}

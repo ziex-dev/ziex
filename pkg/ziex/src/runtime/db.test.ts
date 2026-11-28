@@ -41,7 +41,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/runtime/fixture.zig"),
         .target = target,
         .optimize = .ReleaseSmall,
-        .imports = &.{.{ .name = "sqlite", .module = sqlite }},
+        .imports = &.{.{ .name = "db_sqlite", .module = sqlite }},
     }) });
     exe.entry = .disabled;
     exe.rdynamic = true;

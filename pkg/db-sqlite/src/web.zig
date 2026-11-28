@@ -1,11 +1,10 @@
-// SQLite in the browser: a VFS over `Io.Web` files (OPFS).
-// sqlite3.c is built with SQLITE_OS_OTHER (pkg/db-sqlite/build.zig), so it calls
-// `sqlite3_os_init` to register this VFS.
+// SQLite in the browser: a VFS over the `Io` the database is opened with (zx's `Io.Web`, OPFS).
+// sqlite3.c is built with SQLITE_OS_OTHER (build.zig), so it calls `sqlite3_os_init` to register this VFS.
 const std = @import("std");
-const c = @import("sqlite");
-const Web = @import("../../Io/Web.zig");
+const c = @import("c");
 
-const io = Web.io();
+// Set by `open`/`deserialize` before SQLite touches a file.
+pub var io: std.Io = undefined;
 const File = std.Io.File;
 
 // Locking is a no-op: one thread, and tabs don't share the file system mirror.

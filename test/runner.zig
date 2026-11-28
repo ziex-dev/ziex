@@ -36,6 +36,17 @@ pub fn main(init: std.process.Init) !void {
 
     const env = Env.init(allocator, init.minimal.environ);
     defer env.deinit(allocator);
+
+    // `--report`: run by test/all.zig, which prints one summary for every test binary.
+    // Tests are still listed live; results go to stdout as `<status>\t<ns>\t<scope>\t<name>` lines.
+    // `--scope=<binary>` prefixes every test's scope.
+    var report = false;
+    var prefix: ?[]const u8 = null;
+    for (try init.minimal.args.toSlice(allocator)) |arg| {
+        if (std.mem.eql(u8, arg, "--report")) report = true;
+        if (std.mem.startsWith(u8, arg, "--scope=")) prefix = arg["--scope=".len..];
+    }
+    var results: std.Io.Writer.Allocating = .init(allocator);
     fuzz_state.iters = env.fuzz_iters;
     fuzz_state.budget_ns = @as(u64, env.fuzz_ms) * std.time.ns_per_ms;
     fuzz_state.seed = env.fuzz_seed orelse seed: {
@@ -95,6 +106,7 @@ pub fn main(init: std.process.Init) !void {
                 if (std.mem.eql(u8, value, "test") or std.mem.eql(u8, value, "decltest")) {
                     const path = if (count > 1) segments[1..count] else segments[0..count];
                     scope_name = try std.mem.join(allocator, " > ", path);
+                    if (prefix) |p| scope_name = try std.mem.join(allocator, " > ", &.{ p, scope_name });
                     const rest = it.rest();
                     break :blk if (rest.len > 0) rest else name;
                 }
@@ -180,9 +192,10 @@ pub fn main(init: std.process.Init) !void {
         }
 
         const ns_taken = final_ns_taken;
+        if (report) try results.writer.print("{t}\t{d}\t{s}\t{s}\n", .{ status, ns_taken, scope_name, friendly_name });
 
         if (env.verbose) {
-            if (!header_printed) {
+            if (!header_printed and !report) {
                 Printer.fmt("\x1b[1mRunning:\x1b[0m \n", .{});
                 header_printed = true;
             }
@@ -218,6 +231,12 @@ pub fn main(init: std.process.Init) !void {
                 return err;
             };
         }
+    }
+
+    if (report) {
+        try results.writer.print("leak\t{d}\n", .{leak});
+        try std.Io.File.stdout().writeStreamingAll(init.io, results.written());
+        std.process.exit(if (fail == 0) 0 else 1);
     }
 
     const total_tests = pass + fail + skip + todo;

@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "db_mysql", .module = ours },
             .{ .name = "db_postgres", .module = empty },
-            .{ .name = "sqlite", .module = empty },
+            .{ .name = "db_sqlite", .module = empty },
         },
     });
 

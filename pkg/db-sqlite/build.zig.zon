@@ -2,11 +2,16 @@
     .name = .db_sqlite,
     .version = "0.1.0",
     .fingerprint = 0xa9acddbf8d97456d,
-    .dependencies = .{},
+    .dependencies = .{
+        .sqlite = .{
+            .url = "https://sqlite.org/2026/sqlite-amalgamation-3540100.zip",
+            .hash = "N-V-__8AAETTsABEodUZZFAyfdAm9hEyqBXuLw9pRSO0vFh9",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "vendor/sqlite",
+        "src",
         "wasm",
     },
 }

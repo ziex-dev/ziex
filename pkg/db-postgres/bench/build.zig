@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "db_postgres", .module = ours },
             // Db.Sqlite is never used here
-            .{ .name = "sqlite", .module = empty },
+            .{ .name = "db_sqlite", .module = empty },
         },
     });
 
