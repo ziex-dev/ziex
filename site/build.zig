@@ -204,33 +204,7 @@ pub fn build(b: *std.Build) !void {
             .optimize = if (wrangler_cmd == .dev) .debug else optimize,
         }),
     });
-    app_exe.root_module.addImport("initoptions", b.createModule(.{
-        .root_source_file = b.path("../src/build/init/InitOptions.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
-    app_exe.root_module.addImport("tree_sitter", tree_sitter_dep.module("tree_sitter"));
-    app_exe.root_module.addImport("tree_sitter_zx", tree_sitter_zx_dep.module("tree_sitter_zx"));
-    if (target.result.os.tag != .freestanding)
-        app_exe.root_module.addImport("lunasvg", b.dependency("lunasvg", .{ .optimize = optimize, .target = target }).module("lunasvg"));
-    app_exe.root_module.addImport("geist_fonts", addGeistFontsModule(b));
-    app_exe.root_module.addImport("branding", addBrandingModule(b));
-
     app_exe.step.dependOn(pg_step);
-
-    // Asset names the playground worker fetches (see app/pages/playground/worker.zig).
-    // Added before `ziex.init` so the worker wasm gets it too.
-    app_exe.root_module.addImport("playground_assets", b.createModule(.{
-        .root_source_file = b.addWriteFiles().add("playground_assets.zig", b.fmt(
-            \\pub const zig_version = "{s}";
-            \\pub const zx_version = "{s}-{s}";
-            \\
-        , .{ playground_zig_version, ziex.info.version, id })),
-    }));
-
-    const site_opts = b.addOptions();
-    site_opts.addOption(bool, "use_dusty", server_backend == .dusty);
-    app_exe.root_module.addOptions("site_opts", site_opts);
 
     // --- Ziex setup: wires dependencies and adds `zx`/`dev` build steps --- //
     var zx = try ziex.init(b, app_exe, .{
@@ -248,13 +222,39 @@ pub fn build(b: *std.Build) !void {
         },
         .cli = .{ .build = .enabled, .optimize = .debug, .log_level = log_level },
     });
+    // Pure Zig: the same module serves the server, client and worker.
     zx.addImport("cli_args", ziex_dep.module("cli_args"));
+    zx.addImport("initoptions", b.createModule(.{
+        .root_source_file = b.path("../src/build/init/InitOptions.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    zx.addImport("geist_fonts", addGeistFontsModule(b));
+    zx.addImport("branding", addBrandingModule(b));
+    // Asset names the playground worker fetches (see app/pages/playground/worker.zig).
+    zx.addImport("playground_assets", b.createModule(.{
+        .root_source_file = b.addWriteFiles().add("playground_assets.zig", b.fmt(
+            \\pub const zig_version = "{s}";
+            \\pub const zx_version = "{s}-{s}";
+            \\
+        , .{ playground_zig_version, ziex.info.version, id })),
+    }));
+    const site_opts = b.addOptions();
+    site_opts.addOption(bool, "use_dusty", server_backend == .dusty);
+    zx.addImport("site_opts", site_opts.createModule());
+
+    // Server only: C libraries and the server runtime.
+    const server = zx.platform(.server).?;
+    server.addImport("tree_sitter", tree_sitter_dep.module("tree_sitter"));
+    server.addImport("tree_sitter_zx", tree_sitter_zx_dep.module("tree_sitter_zx"));
+    if (target.result.os.tag != .freestanding)
+        server.addImport("lunasvg", b.dependency("lunasvg", .{ .optimize = optimize, .target = target }).module("lunasvg"));
     if (!target.result.cpu.arch.isWasm() and server_backend == .dusty) {
         const dusty_mod = b.dependency("dusty", .{ .target = target, .optimize = optimize, .use_tls = false }).module("dusty");
         const zio_mod = b.dependency("zio", .{ .target = target, .optimize = optimize }).module("zio");
         dusty_mod.addImport("zio", zio_mod);
-        zx.addImport("zio", zio_mod);
-        zx.addImport("dusty", dusty_mod);
+        server.addImport("zio", zio_mod);
+        server.addImport("dusty", dusty_mod);
     }
 
     // --- ZX Components --- //

@@ -113,7 +113,6 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         .static_path = options.static_path,
         .ziex_js_root = ziex_js_root,
         .version = options.version,
-        .server_only_stub_mode = .strict,
         .zig_path = zig_path,
         .zx_module_path = blk: {
             const dep_root = zx_dep.builder.root.root_dir.path orelse ".";
@@ -165,7 +164,10 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     const assetsdir = static_lazypath.path(b, "assets");
 
     // --- ZX Transpilation ---
-    const transpile_store = b.graph.path(.local_cache, CliConstant.ziex_cache_dirname).path(b, CliConstant.transpile_store_dirname);
+    // Keyed by app dir: the local cache may be shared across projects.
+    const transpile_store = b.graph.path(.local_cache, CliConstant.ziex_cache_dirname)
+        .path(b, appCacheKey(b, opts.site_path))
+        .path(b, CliConstant.transpile_store_dirname);
     const transpile_cmd = cliRun(b, zx_cli, opts);
     transpile_cmd.setName("translate-zx");
     transpile_cmd.addArg("transpile");
@@ -351,7 +353,13 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
     exe.root_module.addImport("zx", zx_module);
     if (exe.root_module.resolved_target) |t| {
         if (t.result.os.tag == .wasi) {
-            exe.rdynamic = true;
+            // Export only what the edge host calls, not every symbol (as rdynamic would):
+            // smaller binaries, and the linker can drop unreachable code. Names set on the
+            // exe before `init` are kept; set `exe.rdynamic = true` to export everything.
+            exe.root_module.export_symbol_names = std.mem.concat(b.allocator, []const u8, &.{
+                &wasi_server_exports,
+                exe.root_module.export_symbol_names,
+            }) catch @panic("OOM");
             exe.export_memory = true;
             // Edge runtimes instantiate a fresh memory per request, so the 16 MiB default stack is paid every time.
             if (exe.stack_size == null) exe.stack_size = 2 << 20;
@@ -369,6 +377,16 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         (if (opts.features.sqlite) |s| s.client != null else false);
     var client_root: ?*std.Build.Module = null;
     const clients: ?*Clients = if (build_client_wasm) try b.allocator.create(Clients) else null;
+    var platforms: std.ArrayList(Build.Platform) = .empty;
+    try platforms.append(b.allocator, .{
+        .kind = .server,
+        .build = b,
+        .target = target orelse b.graph.host,
+        .optimize = optimize orelse .debug,
+        .modules = try b.allocator.dupe(*std.Build.Module, &.{ exe.root_module, app_module }),
+        .retarget = null,
+        .libc = null,
+    });
     const manifest_path: LazyPath = if (build_client_wasm) blk: {
         // With fs, main.zig is not the root: with libc linked, std would export a C entry for its `pub fn main`.
         const app_main = b.createModule(.{
@@ -395,23 +413,9 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         wasm_exe.root_module.strip = !is_dev_build;
         if (incremental) wasm_exe.incremental = true;
 
-        // Create a site-specific wasm module (same approach as server module)
+        // The client gets only what `Build.addImport` / `Platform.addImport` give it;
+        // imports put on `exe` before `init` stay on the server.
         var wasm_imports: std.ArrayList(std.Build.Module.Import) = .empty;
-        for (user_imports.items) |import| {
-            if (std.mem.eql(u8, import.name, "zx")) continue;
-
-            const requires_libc = try moduleRequiresLibC(b.allocator, import.module);
-            const wasm_module = if (requires_libc)
-                makeServerOnlyStubModule(b, import.name, opts.server_only_stub_mode)
-            else
-                import.module;
-
-            try wasm_imports.append(b.allocator, .{ .name = import.name, .module = wasm_module });
-            app_main.addImport(import.name, wasm_module);
-        }
-
-        const user_wasm_imports = b.allocator.dupe(std.Build.Module.Import, wasm_imports.items) catch @panic("OOM");
-
         var wasm_import_it = zx_wasm_module.?.import_table.iterator();
         while (wasm_import_it.next()) |entry| {
             try wasm_imports.append(b.allocator, .{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
@@ -439,17 +443,23 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         const zons = b.addWriteFiles();
         transpile_cmd.addArg("--client-dir");
         transpile_cmd.addDirectoryArg2(zons.getDirectory(), .{});
+        const client_retarget = Retarget.create(b, zx_module, wasm_app_module, wasm_target, wasm_optimize);
         clients.?.* = .{
             .b = b,
             .zons = zons,
-            .zx = zx_module,
             .app = app_module,
-            .wasm_zx = wasm_app_module,
             .wasm_app = wasm_meta_module,
-            .target = wasm_target,
-            .optimize = wasm_optimize,
-            .stub_mode = opts.server_only_stub_mode,
+            .retarget = client_retarget,
         };
+        try platforms.append(b.allocator, .{
+            .kind = .client,
+            .build = b,
+            .target = wasm_target,
+            .optimize = wasm_optimize orelse .debug,
+            .modules = try b.allocator.dupe(*std.Build.Module, &.{ app_main, wasm_meta_module, wasm_app_module }),
+            .retarget = client_retarget,
+            .libc = addWasmLibc(b, zx_dep, wasm_target, wasm_optimize orelse .debug),
+        });
         // Client/wasm builds must not analyze Httpz (no httpz module on that dep).
         const wasm_app_opts = addAppOpts(b, .{
             .base_path = opts.base_path,
@@ -474,7 +484,6 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         if (worker_paths.len > 0) {
             const zx_worker = zx_worker_module.?;
             var worker_imports: std.ArrayList(std.Build.Module.Import) = .empty;
-            try worker_imports.appendSlice(b.allocator, user_wasm_imports);
             var it = zx_worker.import_table.iterator();
             while (it.next()) |entry| try worker_imports.append(b.allocator, .{ .name = entry.key_ptr.*, .module = entry.value_ptr.* });
             const worker_zx = b.createModule(.{
@@ -484,7 +493,6 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
                 .imports = worker_imports.items,
             });
             var worker_app_imports: std.ArrayList(std.Build.Module.Import) = .empty;
-            try worker_app_imports.appendSlice(b.allocator, user_wasm_imports);
             try worker_app_imports.append(b.allocator, .{ .name = "zx", .module = worker_zx });
             const worker_app = b.createModule(.{
                 .root_source_file = transpile_store.path(b, "app.zig"),
@@ -492,6 +500,15 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
             });
             worker_zx.addImport("app", worker_app);
             worker_zx.addOptions("app_opts", wasm_app_opts);
+            try platforms.append(b.allocator, .{
+                .kind = .worker,
+                .build = b,
+                .target = wasm_target,
+                .optimize = wasm_optimize orelse .debug,
+                .modules = try b.allocator.dupe(*std.Build.Module, &.{ worker_app, worker_zx }),
+                .retarget = Retarget.create(b, zx_module, worker_zx, wasm_target, wasm_optimize),
+                .libc = addWasmLibc(b, zx_dep, wasm_target, wasm_optimize orelse .debug),
+            });
             for (worker_paths, 0..) |rel, i| {
                 const worker = addWorker(b, rel, wasm_target, wasm_optimize, worker_zx, worker_app);
                 worker.root_module.strip = !is_dev_build;
@@ -682,84 +699,100 @@ pub fn init(b: *std.Build, exe: *std.Build.Step.Compile, options: InitOptions) !
         },
         .transformer = .{ .b = b, .userdata = injections },
         .clients = clients,
+        .platforms = platforms.items,
     };
 }
 
+/// Registers `.zx` component modules with the client so their client components hydrate.
 const Clients = struct {
     const Module = std.Build.Module;
 
     b: *std.Build,
     zons: *std.Build.Step.WriteFile,
-    zx: *Module,
     app: *Module,
-    wasm_zx: *Module,
     wasm_app: *Module,
-    target: std.Build.ResolvedTarget,
-    optimize: ?std.lang.Optimize,
-    stub_mode: ServerOnlyStubMode,
+    retarget: *Retarget,
     added: std.AutoHashMapUnmanaged(*Module, void) = .empty,
-    wasm: std.AutoHashMapUnmanaged(*Module, *Module) = .empty,
-    clones: std.ArrayList(struct { src: *Module, dst: *Module }) = .empty,
 
     fn add(self: *Clients, mod: *Module) void {
         const b = self.b;
-        self.syncAll();
         if (self.added.contains(mod)) return;
         const root = mod.root_source_file orelse return;
-        if (root != .generated or !self.usesZx(mod)) return;
+        if (root != .generated or !self.retarget.usesZx(mod)) return;
 
         const name = b.fmt("__zx_client_module_{d}", .{self.added.count()});
         self.added.put(b.allocator, mod, {}) catch @panic("OOM");
         self.app.addImport(name, mod);
-        self.wasm_app.addImport(name, self.toWasm(name, mod));
+        self.wasm_app.addImport(name, self.retarget.get(mod));
         _ = self.zons.addCopyFile(root.dirname().path(b, "__zx_client.zon"), b.fmt("{s}.zon", .{name}));
     }
+};
 
-    fn toWasm(self: *Clients, name: []const u8, mod: *Module) *Module {
+/// Maps server modules to a wasm platform's. Modules that reach the server `zx` are
+/// cloned with that platform's `zx` in its place; all others are shared as they are.
+const Retarget = struct {
+    const Module = std.Build.Module;
+
+    b: *std.Build,
+    zx: *Module,
+    to_zx: *Module,
+    target: std.Build.ResolvedTarget,
+    optimize: ?std.lang.Optimize,
+    map: std.AutoHashMapUnmanaged(*Module, *Module) = .empty,
+    clones: std.ArrayList(struct { src: *Module, dst: *Module }) = .empty,
+
+    fn create(b: *std.Build, zx: *Module, to_zx: *Module, target: std.Build.ResolvedTarget, optimize: ?std.lang.Optimize) *Retarget {
+        const self = b.allocator.create(Retarget) catch @panic("OOM");
+        self.* = .{ .b = b, .zx = zx, .to_zx = to_zx, .target = target, .optimize = optimize };
+        return self;
+    }
+
+    fn get(self: *Retarget, mod: *Module) *Module {
+        self.syncAll();
+        return self.map1(mod);
+    }
+
+    fn map1(self: *Retarget, mod: *Module) *Module {
         const b = self.b;
-        if (mod == self.zx) return self.wasm_zx;
-        if (self.wasm.get(mod)) |m| return m;
-
+        if (mod == self.zx) return self.to_zx;
+        if (self.map.get(mod)) |m| return m;
         if (!self.usesZx(mod)) {
-            const libc = moduleRequiresLibC(b.allocator, mod) catch @panic("OOM");
-            const m = if (libc) makeServerOnlyStubModule(b, name, self.stub_mode) else mod;
-            self.wasm.put(b.allocator, mod, m) catch @panic("OOM");
-            return m;
+            self.map.put(b.allocator, mod, mod) catch @panic("OOM");
+            return mod;
         }
-
         const m = b.createModule(.{
             .root_source_file = mod.root_source_file,
             .target = self.target,
             .optimize = self.optimize,
         });
-        self.wasm.put(b.allocator, mod, m) catch @panic("OOM");
+        self.map.put(b.allocator, mod, m) catch @panic("OOM");
         self.clones.append(b.allocator, .{ .src = mod, .dst = m }) catch @panic("OOM");
         self.sync(mod, m);
         return m;
     }
 
-    fn sync(self: *Clients, src: *Module, dst: *Module) void {
+    fn sync(self: *Retarget, src: *Module, dst: *Module) void {
         var it = src.import_table.iterator();
         while (it.next()) |e| {
             if (dst.import_table.contains(e.key_ptr.*)) continue;
-            dst.addImport(e.key_ptr.*, self.toWasm(e.key_ptr.*, e.value_ptr.*));
+            dst.addImport(e.key_ptr.*, self.map1(e.value_ptr.*));
         }
     }
 
-    fn syncAll(self: *Clients) void {
+    fn syncAll(self: *Retarget) void {
         var i: usize = 0;
         while (i < self.clones.items.len) : (i += 1) {
             self.sync(self.clones.items[i].src, self.clones.items[i].dst);
         }
     }
 
-    fn usesZx(self: *Clients, mod: *Module) bool {
+    fn usesZx(self: *Retarget, mod: *Module) bool {
         var seen: std.AutoHashMapUnmanaged(*Module, void) = .empty;
         defer seen.deinit(self.b.allocator);
         return self.reaches(mod, &seen);
     }
 
-    fn reaches(self: *Clients, mod: *Module, seen: *std.AutoHashMapUnmanaged(*Module, void)) bool {
+    fn reaches(self: *Retarget, mod: *Module, seen: *std.AutoHashMapUnmanaged(*Module, void)) bool {
         if (mod == self.zx) return true;
         if ((seen.getOrPut(self.b.allocator, mod) catch @panic("OOM")).found_existing) return false;
         var it = mod.import_table.iterator();
@@ -769,6 +802,37 @@ const Clients = struct {
         return false;
     }
 };
+
+/// The libc `Platform.linkLibc` gives C code in a freestanding wasm: Zig's own libc
+/// (zigc, from the running Zig's `lib/c.zig`) built for wasm32-wasi, plus `wasm_libc.zig`
+/// for what zigc doesn't have yet. Both are pure Zig; no wasi-libc is linked.
+fn addWasmLibc(b: *std.Build, zx_dep: *std.Build.Dependency, target: std.Build.ResolvedTarget, optimize: std.lang.Optimize) *std.Build.Step.Compile {
+    const zigc = b.addObject(.{
+        .name = "zigc",
+        .root_module = b.createModule(.{
+            .root_source_file = std.Build.LazyPath.zig_lib.path(b, "c.zig"),
+            .target = b.resolveTargetQuery(.{ .cpu_arch = target.result.cpu.arch, .os_tag = .wasi }),
+            .optimize = optimize,
+            // zigc only exports the functions that depend on errno (malloc) when linking libc.
+            .link_libc = true,
+        }),
+    });
+    const libc = b.addLibrary(.{
+        .name = "zx-wasm-libc",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = zx_dep.path("src/build/wasm_libc.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    libc.root_module.addObject(zigc);
+    return libc;
+}
+
+/// What the wasi edge host calls on a server wasm, besides `_start` and `memory`
+/// (see `pkg/ziex/src/runtime`).
+const wasi_server_exports = [_][]const u8{ "__zx_serve", "__zx_cb", "__zx_alloc", "__zx_free" };
 
 /// Resolved init state passed to CLI/asset helpers.
 const Resolved = struct {
@@ -783,7 +847,6 @@ const Resolved = struct {
     ziex_js_root: LazyPath,
     element_injections: []const AddElementOptions = &.{},
     version: ?[]const u8 = null,
-    server_only_stub_mode: ServerOnlyStubMode = .strict,
     zig_path: []const u8,
     /// Absolute/cwd-relative path to the ziex `src/root.zig` module for LSP.
     zx_module_path: []const u8,
@@ -967,6 +1030,17 @@ fn addWorkerAsset(
     return href;
 }
 
+fn appCacheKey(b: *std.Build, site_path: std.Build.LazyPath) []const u8 {
+    const arena = b.graph.arena;
+    const root, const sub = switch (site_path) {
+        .src_path => |sp| .{ sp.owner.root, sp.sub_path },
+        else => .{ b.root, "" },
+    };
+    const rel = std.Io.Dir.path.join(arena, &.{ if (root.sub_path.len == 0) "." else root.sub_path, sub }) catch @panic("OOM");
+    const abs = root.root_dir.handle.realPathFileAlloc(b.graph.io, rel, arena) catch rel;
+    return b.fmt("{x}", .{std.hash.Wyhash.hash(0, abs)});
+}
+
 fn routeRoots(b: *std.Build, site_path: std.Build.LazyPath) []const u8 {
     const io = b.graph.io;
     const owner = site_path.src_path.owner;
@@ -1001,43 +1075,6 @@ fn routeRoots(b: *std.Build, site_path: std.Build.LazyPath) []const u8 {
     return out.items;
 }
 
-fn moduleRequiresLibCRec(module: *std.Build.Module, visited: *std.AutoHashMap(*std.Build.Module, void)) !bool {
-    if (visited.contains(module)) return false;
-    try visited.put(module, {});
-
-    if ((module.link_libc orelse false) or (module.link_libcpp orelse false)) {
-        return true;
-    }
-
-    var it = module.import_table.iterator();
-    while (it.next()) |entry| {
-        if (try moduleRequiresLibCRec(entry.value_ptr.*, visited)) {
-            return true;
-        }
-    }
-
-    for (module.link_objects.items) |obj| {
-        switch (obj) {
-            .system_lib => |lib| {
-                if (std.mem.eql(u8, lib.name, "c") or
-                    std.mem.eql(u8, lib.name, "stdc++") or
-                    std.mem.eql(u8, lib.name, "c++"))
-                {
-                    return true;
-                }
-            },
-            .other_step => |compile_step| {
-                if (try moduleRequiresLibCRec(compile_step.root_module, visited)) {
-                    return true;
-                }
-            },
-            else => {},
-        }
-    }
-
-    return false;
-}
-
 // Forwards the root decls std reads from the app's main.zig.
 const client_root_source =
     \\const std = @import("std");
@@ -1068,65 +1105,6 @@ fn withFdHandles(b: *std.Build, compile: *std.Build.Step.Compile) void {
         \\haiku_dir=
         \\
     ));
-}
-
-fn moduleRequiresLibC(allocator: std.mem.Allocator, module: *std.Build.Module) !bool {
-    var visited = std.AutoHashMap(*std.Build.Module, void).init(allocator);
-    defer visited.deinit();
-    return moduleRequiresLibCRec(module, &visited);
-}
-
-fn makeServerOnlyStubModule(b: *std.Build, name: []const u8, mode: ServerOnlyStubMode) *std.Build.Module {
-    const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding, .abi = .none });
-    const contents = switch (mode) {
-        .strict => b.fmt(
-            \\// Auto-generated by ziex: strict server-only stub for `{s}`.
-            \\//
-            \\// This module is intentionally unavailable in wasm builds.
-            \\comptime {{
-            \\    @compileError(
-            \\        "'{s}' is a server-only module and cannot be used from client " ++
-            \\        "(wasm) code. Guard its usage with `if (builtin.target.cpu.arch " ++
-            \\        "!= .wasm32)` or move it behind a server-only import boundary.",
-            \\    );
-            \\}}
-            \\
-        , .{ name, name }),
-        .lazy => b.fmt(
-            \\// Auto-generated by ziex: server-only stub for `{s}`.
-            \\//
-            \\// This module links libc/libc++ and cannot be compiled for the
-            \\// wasm32-freestanding client build. Ziex has substituted this stub
-            \\// so that `@import("{s}")` still resolves on the client, letting
-            \\// the same source file compile for both server and client.
-            \\//
-            \\// Guard any usage of this module behind a comptime target check,
-            \\// e.g.:
-            \\//
-            \\//     const builtin = @import("builtin");
-            \\//     if (builtin.target.cpu.arch != .wasm32) {{
-            \\//         // ... use the module here ...
-            \\//     }}
-            \\//
-            \\// This lazy mode keeps shared imports compiling; unknown members on
-            \\// this stub will still produce Zig's default "no member named" error.
-            \\const __ziex_server_only_msg =
-            \\    "'{s}' is a server-only module and cannot be used from client " ++
-            \\    "(wasm) code. Guard its usage with `if (builtin.target.cpu.arch " ++
-            \\    "!= .wasm32)` or move it behind a server-only import boundary.";
-            \\
-            \\pub const __ziex_server_only = @compileError(__ziex_server_only_msg);
-            \\
-        , .{ name, name, name }),
-    };
-
-    const wf = b.addWriteFiles();
-    const stub_path = wf.add(b.fmt("ziex_server_only_stub_{s}.zig", .{name}), contents);
-
-    return b.createModule(.{
-        .root_source_file = stub_path,
-        .target = wasm_target,
-    });
 }
 
 fn findZxInPath(b: *std.Build, expected_version: []const u8) ?[]const u8 {
@@ -1304,6 +1282,79 @@ pub const Build = struct {
 
     clients: ?*Clients,
 
+    /// Every platform this build compiles the app for: always `.server`, plus `.client`
+    /// when the client wasm is built and `.worker` when the app has a `worker.zig`.
+    platforms: []const Platform,
+
+    /// One compilation of the app. Loop over `Build.platforms` to give each its own
+    /// imports, e.g. to keep a C-backed module on the server or build it per target:
+    ///
+    ///     for (ziex_b.platforms) |p| {
+    ///         if (p.kind == .client) continue;
+    ///         const dep = b.dependency("foo", .{ .target = p.target, .optimize = p.optimize });
+    ///         p.linkLibc(dep.module("foo"));
+    ///         p.addImport("foo", dep.module("foo"));
+    ///     }
+    pub const Platform = struct {
+        pub const Kind = enum { server, client, worker };
+
+        kind: Kind,
+        build: *std.Build,
+        target: std.Build.ResolvedTarget,
+        optimize: std.lang.Optimize,
+        /// The modules an import is added to.
+        modules: []const *std.Build.Module,
+        /// Null on the server, which uses modules as they are.
+        retarget: ?*Retarget,
+        /// Null on the server, which links the target's real libc.
+        libc: ?*std.Build.Step.Compile,
+
+        /// Add `mod` to this platform's app under `name`.
+        pub fn addImport(self: Platform, name: []const u8, mod: *std.Build.Module) void {
+            const m = if (self.retarget) |r| r.get(mod) else mod;
+            for (self.modules) |dst| dst.addImport(name, m);
+        }
+
+        /// Make C code linked under `mod` (built for this platform's `target`) work here.
+        /// No-op on the server. Client and worker wasm are freestanding with no libc, so the
+        /// C compiles against wasi-libc headers and `mod` links ziex's small libc: allocator,
+        /// string and wide-char functions, with stdio and printf as no-ops.
+        pub fn linkLibc(self: Platform, mod: *std.Build.Module) void {
+            const libc = self.libc orelse return;
+            const b = self.build;
+            const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
+            var seen: std.AutoHashMapUnmanaged(*std.Build.Module, void) = .empty;
+            defer seen.deinit(b.allocator);
+            useWasiHeaders(b, mod, wasi, &seen);
+            mod.linkLibrary(libc);
+        }
+
+        fn useWasiHeaders(
+            b: *std.Build,
+            mod: *std.Build.Module,
+            wasi: std.Build.ResolvedTarget,
+            seen: *std.AutoHashMapUnmanaged(*std.Build.Module, void),
+        ) void {
+            if ((seen.getOrPut(b.allocator, mod) catch @panic("OOM")).found_existing) return;
+            for (mod.link_objects.items) |obj| switch (obj) {
+                .other_step => |step| {
+                    const root = step.root_module;
+                    if (root.root_source_file == null and (root.link_libc orelse false)) root.resolved_target = wasi;
+                    useWasiHeaders(b, root, wasi, seen);
+                },
+                else => {},
+            };
+            var it = mod.import_table.iterator();
+            while (it.next()) |e| useWasiHeaders(b, e.value_ptr.*, wasi, seen);
+        }
+    };
+
+    /// The platform of `kind`, or null when this build doesn't compile it.
+    pub fn platform(self: Build, kind: Platform.Kind) ?Platform {
+        for (self.platforms) |p| if (p.kind == kind) return p;
+        return null;
+    }
+
     /// Transpile a `.zx` component file and return a Zig module wired to this
     /// app's canonical `zx` module.
     pub fn addComponent(self: Build, opts: build_zig.TranslatedZx.Options) *std.Build.Module {
@@ -1325,15 +1376,10 @@ pub const Build = struct {
         self.addImport(name, mod);
     }
 
-    /// Add an import to app's root module and generated `app` module under `name`.
+    /// Add `mod` under `name` to the app on every platform: server, client and worker.
+    /// Use `platforms` to add to only some, or a different module per platform.
     pub fn addImport(self: Build, name: []const u8, mod: *std.Build.Module) void {
-        self.app.exe.root_module.addImport(name, mod);
-        self.app.module.addImport(name, mod);
+        for (self.platforms) |p| p.addImport(name, mod);
         if (self.clients) |c| c.add(mod);
     }
-};
-
-const ServerOnlyStubMode = enum {
-    lazy,
-    strict,
 };
