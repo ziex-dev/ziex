@@ -186,11 +186,14 @@ fn callHost(comptime op: host.Op, q: Query, bindings: Db.Bindings) !?HostBytes {
 
     var ptr: [*]u8 = undefined;
     const n = host.wait(op, .{ q.binding_name, q.sql, bindings_bytes, &ptr });
-    // `-2 - len`: the query failed and the host wrote its message (len bytes) to `ptr`
+    // `-2 - len`: the query failed; `ptr` holds its SQL offset (i32 LE, -1 if unknown) and message
     if (n <= -2) {
-        const message = ptr[0..@intCast(-2 - n)];
-        defer if (message.len > 0) std.heap.wasm_allocator.free(message);
-        if (q.diagnostics) |d| d.set(message, null);
+        const payload = ptr[0..@intCast(-2 - n)];
+        defer if (payload.len > 0) std.heap.wasm_allocator.free(payload);
+        if (q.diagnostics) |d| if (payload.len >= 4) {
+            const offset = std.mem.readInt(i32, payload[0..4], .little);
+            d.set(payload[4..], if (offset < 0) null else @intCast(offset));
+        };
     }
     if (n < 0) return error.QueryFailed;
     if (n == 0) return null;

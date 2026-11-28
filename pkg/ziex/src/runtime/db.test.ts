@@ -6,6 +6,7 @@ import { join, relative } from "node:path";
 import { createFsHandlers, Vfs, type Store } from "./fs";
 import { createHostImports } from "./host";
 import { createIoHandlers } from "./io";
+import { promising } from "./jspi";
 
 const repo = realpathSync(new URL("../../../../", import.meta.url).pathname);
 
@@ -85,8 +86,9 @@ async function instantiate(wasm: Uint8Array, vfs: Vfs) {
     const { instance } = await WebAssembly.instantiate(wasm, { __zx: host });
     const ex = instance.exports as Record<string, () => number> & { memory: WebAssembly.Memory };
     memory = ex.memory;
-    return (name: string) => {
-        const rc = ex[name]!();
+    return async (name: string) => {
+        // With JSPI, the fs imports suspend, so exports must be entered through `promising`.
+        const rc = Number(await (promising ? promising(ex[name]!) : ex[name]!)());
         return rc === 0 ? "" : new TextDecoder().decode(new Uint8Array(memory.buffer, ex.errPtr!() >>> 0, ex.errLen!()));
     };
 }

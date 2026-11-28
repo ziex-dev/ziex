@@ -46,6 +46,20 @@ export interface Database {
     prepare(query: string): PreparedStatement;
 }
 
+/**
+ * A query error's message and SQL byte offset (-1 if unknown). Drivers may set a numeric
+ * `offset` on the error; otherwise D1's `D1_ERROR: <message> at offset <n>: SQLITE_<code>`
+ * shape is unwrapped.
+ */
+export function queryError(e: unknown): { message: string; offset: number } {
+    const raw = e instanceof Error ? e.message : String(e);
+    const own = (e as { offset?: unknown } | null)?.offset;
+    const d1 = /^D1_\w+: (.*?)(?: at offset (\d+))?(?:: SQLITE_\w+)?$/s.exec(raw);
+    const message = d1 ? d1[1]! : raw;
+    if (typeof own === "number") return { message, offset: own };
+    return { message, offset: d1?.[2] ? Number(d1[2]) : -1 };
+}
+
 /** Host ops for SQL database bindings. */
 export function createDbHandlers(
     bindings: Record<string, Database>,
@@ -89,14 +103,19 @@ export function createDbHandlers(
         return { db_open: fail, db_run: fail, db_get: fail, db_all: fail, db_values: fail };
     }
 
-    // A thrown query error returns `-2 - len` with its message written to `out_ptr`.
+    // A thrown query error returns `-2 - len` with `out_ptr` set to `len` bytes: the SQL offset
+    // (i32 LE, -1 if unknown) followed by the message.
     type Handler = (...args: number[]) => Promise<number>;
     const guarded = (fn: Handler): Handler => async (...args) => {
         try {
             return await fn(...args);
         } catch (e) {
-            const message = new TextEncoder().encode(e instanceof Error ? e.message : String(e));
-            const n = writeBytesOut(getMemory, allocRef, args[6]!, message);
+            const { message, offset } = queryError(e);
+            const text = new TextEncoder().encode(message);
+            const payload = new Uint8Array(4 + text.length);
+            new DataView(payload.buffer).setInt32(0, offset, true);
+            payload.set(text, 4);
+            const n = writeBytesOut(getMemory, allocRef, args[6]!, payload);
             return n < 0 ? -1 : -2 - n;
         }
     };
