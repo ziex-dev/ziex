@@ -1,0 +1,58 @@
+pub fn Page(ctx: zx.PageContext) zx.Component {
+    return (
+        <main @allocator={ctx.arena} class="example-page">
+            <header class="example-header">
+                <h1>SQLite Studio (client)</h1>
+                <p>zx.Db.Sqlite running in a Web Worker, persisted to OPFS.</p>
+            </header>
+            <Studio @client />
+        </main>
+    );
+}
+
+pub const Studio = studio_ui.Editor(Local).Studio;
+
+// Everything runs in the worker; calls go through `studio_ui.queue` (they suspend the page).
+const Local = struct {
+    pub const input_id = "sqlite-client-input";
+
+    var s: studio_ui.States = undefined;
+    var loaded = false;
+
+    pub fn selectTable(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
+        return gpa.print("SELECT * FROM \"{s}\" LIMIT 100;", .{name});
+    }
+
+    pub fn handlers(_: anytype, states: studio_ui.States) studio_ui.Handlers {
+        if (zx.platform.isClient()) {
+            s = states;
+            if (!loaded) {
+                loaded = true;
+                studio_ui.queue.push(&refresh);
+            }
+        }
+        return .{ .check = studio_ui.queued(check), .run = studio_ui.queued(run), .refresh = studio_ui.queued(refresh) };
+    }
+
+    fn check() void {
+        s.diagnostic.set(repl.check(zx.allocator, s.text.get()) catch |err| .{ .message = @errorName(err) });
+    }
+
+    fn run() void {
+        defer s.running.set(false);
+        const results = repl.run(zx.allocator, s.query.get()) catch |err|
+            return s.results.set(zx.allocator.dupe(studio.Result, &.{.{ .err = .{ .message = @errorName(err) } }}) catch &.{});
+        s.results.set(results);
+        refresh();
+    }
+
+    fn refresh() void {
+        s.tables.set(repl.schema(zx.allocator) catch |err| return zx.log.err("sqlite schema: {t}", .{err}));
+    }
+};
+
+const repl = zx.worker(@import("worker.zig"));
+const studio_ui = @import("../../studio.zx");
+const studio = @import("../../studio_lib.zig");
+const zx = @import("zx");
+const std = @import("std");

@@ -7,7 +7,11 @@
 const std = @import("std");
 
 /// zigc's malloc sets it through `std.c._errno`, which wasi-libc would otherwise define.
-export threadlocal var errno: c_int = 0;
+var errno: c_int = 0;
+
+comptime {
+    @export(&errno, .{ .name = "errno", .linkage = .weak, .visibility = .hidden });
+}
 
 fn abort() callconv(.c) noreturn {
     @trap();

@@ -47,6 +47,10 @@
             .hash = "zio-0.20.1-xHbVVO4XMAAQvF7lyz8sHZEcxO8pCNE7pww-qKHNFUOX",
             .lazy = true,
         },
+        .tree_sitter_sql = .{
+            .url = "https://github.com/DerekStride/tree-sitter-sql/releases/download/v0.3.13/tree-sitter-sql-v0.3.13.tar.gz",
+            .hash = "N-V-__8AAFJ13QI-GmmJ6y3Xrf2grq3VaQbIpxM0eVwVjVNL",
+        },
     },
     .paths = .{
         "build.zig",

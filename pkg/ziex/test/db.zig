@@ -38,13 +38,13 @@ export fn write() i32 {
             defer db.deinit();
             _ = try db.run("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT, score REAL, data BLOB)", .empty);
             _ = try db.run("INSERT INTO notes (body, score, data) VALUES (?1, ?2, ?3)", .{ "héllo ✓", 1.5, Db.Value{ .blob = &.{ 0, 0xff, 0x80 } } });
-            try db.transaction({}, struct {
+            try db.transaction(.{}, {}, struct {
                 fn cb(_: void, tx: Db) !void {
                     var i: i64 = 0;
                     while (i < 500) : (i += 1) _ = try tx.run("INSERT INTO notes (body, score) VALUES (?1, ?2)", .{ "bulk", i });
                 }
             }.cb);
-            db.transaction({}, struct {
+            db.transaction(.{}, {}, struct {
                 fn cb(_: void, tx: Db) !void {
                     _ = try tx.run("DELETE FROM notes", .empty);
                     return error.Rollback;

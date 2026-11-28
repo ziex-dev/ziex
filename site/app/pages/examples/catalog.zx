@@ -19,10 +19,10 @@ pub const rendering = [_]SidebarProps.Section{
 
 pub const data_and_apis = [_]SidebarProps.Section{
     // .{ .title = "Database", .href = "/examples/db", .tags = &.{ "zx.db", "zx.db.row" } },
-    .{ .title = "DB (client)", .href = "/examples/sqlite", .tags = &.{ "zx.Db.Sqlite", "zx.worker" } },
-    // .{ .title = "DB (server)", .href = "/examples/d1", .tags = &.{ "zx.Db.Wasm", "D1", "zx.server.Action" } },
-    // .{ .title = "Db.Postgres", .href = "/examples/postgres", .tags = &.{ "zx.Db.Postgres", "zx.server.Action" } },
-    // .{ .title = "Db.Mysql", .href = "/examples/mysql", .tags = &.{ "zx.Db.Mysql", "zx.server.Action" } },
+    .{ .title = "DB (client)", .href = "/examples/sqlite/client", .tags = &.{ "zx.Db.Sqlite", "zx.worker" } },
+    // .{ .title = "DB (server)", .href = "/examples/sqlite/server", .tags = &.{ "zx.Db.Wasm", "D1", "zx.server.Event" } },
+    // .{ .title = "Db.Postgres", .href = "/examples/postgres", .tags = &.{ "zx.Db.Postgres", "zx.server.Event" } },
+    // .{ .title = "Db.Mysql", .href = "/examples/mysql", .tags = &.{ "zx.Db.Mysql", "zx.server.Event" } },
 
     .{ .title = "KV", .href = "/examples/kv", .tags = &.{ "zx.kv", "zx.State" } },
     .{ .title = "AI", .href = "/examples/ai", .tags = &.{ "zx.ai.gen.text", "zx.ai.gen.image" } },

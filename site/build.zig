@@ -247,6 +247,15 @@ pub fn build(b: *std.Build) !void {
     const server = zx.platform(.server).?;
     server.addImport("tree_sitter", tree_sitter_dep.module("tree_sitter"));
     server.addImport("tree_sitter_zx", tree_sitter_zx_dep.module("tree_sitter_zx"));
+    // The SQL studio tokenizes in a Web Worker (app/pages/examples/studio/worker.zig).
+    if (zx.platform(.worker)) |worker| {
+        const ts_mod = ziex_dep.builder.dependency("tree_sitter", .{ .target = worker.target, .optimize = worker.optimize }).module("tree_sitter");
+        const sql_mod = addTreeSitterSqlModule(b, worker.target, worker.optimize);
+        worker.linkLibc(ts_mod);
+        worker.linkLibc(sql_mod);
+        worker.addImport("tree_sitter", ts_mod);
+        worker.addImport("tree_sitter_sql", sql_mod);
+    }
     if (target.result.os.tag != .freestanding)
         server.addImport("lunasvg", b.dependency("lunasvg", .{ .optimize = optimize, .target = target }).module("lunasvg"));
     if (!target.result.cpu.arch.isWasm() and server_backend == .dusty) {
@@ -439,6 +448,32 @@ fn addGeistFontsModule(b: *std.Build) *std.Build.Module {
     return b.createModule(.{
         .root_source_file = root,
     });
+}
+
+fn addTreeSitterSqlModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.Optimize) *std.Build.Module {
+    const dep = b.dependency("tree_sitter_sql", .{});
+    const lib = b.addLibrary(.{
+        .name = "tree-sitter-sql",
+        .linkage = .static,
+        .root_module = b.createModule(.{ .target = target, .optimize = optimize, .link_libc = true }),
+    });
+    lib.root_module.addIncludePath(dep.path("src"));
+    lib.root_module.addCSourceFiles(.{ .root = dep.path("src"), .files = &.{ "parser.c", "scanner.c" }, .flags = &.{"-std=c11"} });
+
+    const mod = b.createModule(.{
+        .root_source_file = b.addWriteFiles().add("root.zig",
+            \\extern fn tree_sitter_sql() callconv(.c) *const anyopaque;
+            \\
+            \\pub fn language() *const anyopaque {
+            \\    return tree_sitter_sql();
+            \\}
+            \\
+        ),
+        .target = target,
+        .optimize = optimize,
+    });
+    mod.linkLibrary(lib);
+    return mod;
 }
 
 fn addBrandingModule(b: *std.Build) *std.Build.Module {

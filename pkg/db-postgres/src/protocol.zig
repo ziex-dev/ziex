@@ -277,6 +277,8 @@ pub const ErrorFields = struct {
     message: []const u8 = "",
     detail: []const u8 = "",
     hint: []const u8 = "",
+    // 1-based character position of the error in the query
+    position: []const u8 = "",
     /// Server source routine, e.g. `RevalidateCachedQuery`; never translated.
     routine: []const u8 = "",
 
@@ -296,6 +298,7 @@ pub const ErrorFields = struct {
                 'M' => out.message = value,
                 'D' => out.detail = value,
                 'H' => out.hint = value,
+                'P' => out.position = value,
                 'R' => out.routine = value,
                 else => {},
             }

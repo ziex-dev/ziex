@@ -3,10 +3,17 @@ const std = @import("std");
 const zx = @import("zx");
 const studio = @import("../studio_lib.zig");
 
-pub const Result = studio.Result;
 pub const title = "MySQL Studio";
-pub const subtitle = "zx.Db.Mysql over a server action. Press Ctrl/⌘+Enter to run.";
+pub const subtitle = "zx.Db.Mysql over server events.";
 pub const input_id = "mysql-input";
+pub const check = studio.check;
+pub const schema_sql =
+    \\SELECT table_name AS tbl, column_name AS col, column_type AS type,
+    \\  is_nullable = 'YES' AS nullable, column_key = 'PRI' AS pk
+    \\FROM information_schema.columns
+    \\WHERE table_schema = DATABASE()
+    \\ORDER BY table_name, ordinal_position
+;
 
 var mu: std.Io.Mutex = .init;
 var cached: ?zx.Db = null;
@@ -15,32 +22,20 @@ pub fn selectTable(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
     return gpa.print("SELECT * FROM `{s}` LIMIT 100;", .{name});
 }
 
-pub fn bootstrap(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) ![]const []const u8 {
-    var database = try open(gpa, io);
-    return tables(arena, &database);
-}
+const persistent = studio.persistent;
 
-pub fn exec(gpa: std.mem.Allocator, io: std.Io, sql: []const u8) Result {
-    var database = open(gpa, io) catch |err| return .{ .err = @errorName(err) };
-    return studio.exec(&database, gpa, sql);
-}
-
-pub fn listTables(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) ![]const []const u8 {
-    var database = try open(gpa, io);
-    return tables(arena, &database);
-}
-
-fn open(gpa: std.mem.Allocator, io: std.Io) !zx.Db {
+pub fn open(io: std.Io) !zx.Db {
     if (comptime !zx.platform.isServer()) return error.Unsupported;
 
     try mu.lock(io);
     defer mu.unlock(io);
     if (cached) |db| return db;
 
-    const url = try zx.secrets.require(gpa, "MYSQL_URL");
-    defer gpa.free(url);
+    const url = try zx.secrets.require(persistent, "MYSQL_URL");
+    defer persistent.free(url);
 
-    var database = try zx.Db.Mysql.open(gpa, io, url, .{});
+    // One connection: concurrent check/run requests queue on it instead of opening more.
+    var database = try zx.Db.Mysql.open(persistent, io, url, .{ .max_pool_size = 1 });
     errdefer database.deinit();
     try seed(&database);
     cached = database;
@@ -61,16 +56,4 @@ fn seed(database: *zx.Db) !void {
         \\  (2, 'Linus', 'linus@example.com'),
         \\  (3, 'Grace', 'grace@example.com')
     , .empty);
-}
-
-fn tables(gpa: std.mem.Allocator, database: *zx.Db) ![]const []const u8 {
-    const rows = try database.all(gpa,
-        \\SELECT table_name AS name
-        \\FROM information_schema.tables
-        \\WHERE table_schema = DATABASE()
-        \\ORDER BY table_name
-    , .empty);
-    const out = try gpa.alloc([]const u8, rows.len);
-    for (rows, out) |row, *name| name.* = try gpa.dupe(u8, row.text("name"));
-    return out;
 }

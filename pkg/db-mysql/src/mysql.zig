@@ -76,7 +76,7 @@ pub fn Backend(Db: type) type {
 
             // connect once so bad URLs and credentials fail here
             const conn = try self.acquire();
-            self.release(conn);
+            self.release(conn, null);
             return self;
         }
 
@@ -126,7 +126,10 @@ pub fn Backend(Db: type) type {
             }
         }
 
-        fn release(self: *Mysql, conn: *Conn) void {
+        // Hands the error `conn` recorded during the caller's call to its `diagnostics`.
+        fn release(self: *Mysql, conn: *Conn, diagnostics: ?*Db.Diagnostics) void {
+            if (conn.last_error) |e| if (diagnostics) |d| d.set(e.message(), e.offset);
+            conn.last_error = null;
             if (self.tx_conn != null) return;
             const s = self.shared;
             // a connection left mid-transaction, mid-result or desynced is not reusable
@@ -146,6 +149,7 @@ pub fn Backend(Db: type) type {
         const Exec = struct {
             owner: *Mysql,
             conn: *Conn,
+            diagnostics: ?*Db.Diagnostics = null,
             /// The connection's scratch arena; params and result column names live here.
             scratch: std.mem.Allocator,
             sql: []const u8,
@@ -163,11 +167,11 @@ pub fn Backend(Db: type) type {
             set_seen: bool = false,
 
             /// Text protocol (COM_QUERY) without bindings, prepared statement with them.
-            fn start(owner: *Mysql, sql: []const u8, rewritten: ?placeholders.Rewritten, bindings: Db.Bindings) !Exec {
+            fn start(owner: *Mysql, sql: []const u8, rewritten: ?placeholders.Rewritten, bindings: Db.Bindings, diagnostics: ?*Db.Diagnostics) !Exec {
                 const conn = try owner.acquire();
-                errdefer owner.release(conn);
+                errdefer owner.release(conn, diagnostics);
                 const scratch = conn.resetScratch();
-                var exec: Exec = .{ .owner = owner, .conn = conn, .scratch = scratch, .sql = sql, .params = &.{}, .binary = bindings != .none };
+                var exec: Exec = .{ .owner = owner, .conn = conn, .scratch = scratch, .sql = sql, .params = &.{}, .binary = bindings != .none, .diagnostics = diagnostics };
                 if (exec.binary) {
                     exec.params = try encodeBindings(scratch, rewritten, bindings);
                     try conn.sendExecute(sql, exec.params);
@@ -227,7 +231,7 @@ pub fn Backend(Db: type) type {
 
             fn finish(self: *Exec) void {
                 if (!self.done) self.conn.discard();
-                self.owner.release(self.conn);
+                self.owner.release(self.conn, self.diagnostics);
             }
 
             fn reader(self: *const Exec, body: []const u8) !types.RowReader {
@@ -356,6 +360,7 @@ pub fn Backend(Db: type) type {
             sql: []u8,
             /// Named-placeholder form, used with named bindings.
             rewritten: ?placeholders.Rewritten,
+            diagnostics: ?*Db.Diagnostics,
             /// `?` mixed with `:name`/`@name`: only positional bindings are valid.
             mixed: bool = false,
             /// Filled by `describe` on first metadata access.
@@ -385,7 +390,7 @@ pub fn Backend(Db: type) type {
             }
         };
 
-        fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
+        fn prepare(ud: ?*anyopaque, sql: []const u8, diagnostics: ?*Db.Diagnostics) !Db.Statement {
             const self: *Mysql = @ptrCast(@alignCast(ud));
             const allocator = self.allocator;
 
@@ -396,6 +401,7 @@ pub fn Backend(Db: type) type {
                 .owner = self,
                 .sql = try allocator.dupe(u8, sql),
                 .rewritten = null,
+                .diagnostics = diagnostics,
             };
             errdefer ctx.deinit();
             ctx.rewritten = placeholders.rewrite(allocator, sql) catch |err| switch (err) {
@@ -415,7 +421,7 @@ pub fn Backend(Db: type) type {
             if (ctx.described) return;
             const allocator = ctx.allocator;
             const conn = try ctx.owner.acquire();
-            defer ctx.owner.release(conn);
+            defer ctx.owner.release(conn, ctx.diagnostics);
 
             const stmt = try conn.getStmt(if (ctx.rewritten) |r| r.sql else ctx.sql);
             defer conn.closeEphemeral();
@@ -443,7 +449,7 @@ pub fn Backend(Db: type) type {
             // without parameters, the text protocol also allows multi-statement scripts
             if (bindings == .none) {
                 const conn = try self.acquire();
-                defer self.release(conn);
+                defer self.release(conn, null);
                 const ok = try conn.query(sql);
                 return .{ .changes = @intCast(ok.affected_rows), .last_insert_id = @bitCast(ok.last_insert_id) };
             }
@@ -454,7 +460,7 @@ pub fn Backend(Db: type) type {
         }
 
         fn runExec(self: *Mysql, sql: []const u8, rewritten: ?placeholders.Rewritten, bindings: Db.Bindings) !Db.RunResult {
-            var exec = try Exec.start(self, sql, rewritten, bindings);
+            var exec = try Exec.start(self, sql, rewritten, bindings, null);
             defer exec.finish();
             while (try exec.nextRow()) |_| {}
             return .{ .changes = @intCast(exec.changes), .last_insert_id = @bitCast(exec.last_insert_id) };
@@ -465,7 +471,7 @@ pub fn Backend(Db: type) type {
             if (self.tx_conn != null) return Db.Error.InvalidState;
 
             const conn = try self.acquire();
-            defer self.release(conn);
+            defer self.release(conn, null);
 
             _ = try conn.query(switch (mode) {
                 .deferred, .immediate => "START TRANSACTION",
@@ -502,7 +508,7 @@ pub fn Backend(Db: type) type {
 
         fn startExec(ctx: *StatementCtx, bindings: Db.Bindings) !Exec {
             const resolved = try ctx.resolve(bindings);
-            return Exec.start(ctx.owner, resolved.sql, resolved.rewritten, bindings);
+            return Exec.start(ctx.owner, resolved.sql, resolved.rewritten, bindings, ctx.diagnostics);
         }
 
         fn stmtAll(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) ![]const Db.Row {

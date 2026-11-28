@@ -1,26 +1,194 @@
-//! Shared SQL studio UI for server-backed examples (`Server(Backend)`).
+//! Shared SQL studio UI: `Editor(Impl)` with server (`Server(Backend)`) or worker transports.
 
-const studio_lib = @import("studio_lib.zig");
-pub const Result = studio_lib.Result;
+const studio = @import("studio_lib.zig");
+const Result = studio.Result;
+const Table = studio.Table;
+const Diagnostic = studio.Diagnostic;
+const Hover = struct { kind: studio.Kind, name: []const u8, x: i32, y: i32 };
+const Tab = struct { name: []const u8, sql: []const u8 };
+const Saved = struct { tabs: []const Tab, active: usize };
 
-/// Backend contract:
-/// - `input_id`: []const u8
-/// - `selectTable(gpa, name) ![]u8`
-/// - `bootstrap(gpa, arena, io) ![]const []const u8`
-/// - `exec(gpa, io, sql) Result`
-/// - `listTables(gpa, arena, io) ![]const []const u8`
+pub const States = struct {
+    tables: *zx.State([]const Table),
+    results: *zx.State([]const Result),
+    // The live editor text; never bind it to a server event, whose reply would revert newer typing
+    text: *zx.State([]const u8),
+    // The SQL of the latest run, snapshotted from `text`
+    query: *zx.State([]const u8),
+    running: *zx.State(bool),
+    diagnostic: *zx.State(?Diagnostic),
+};
+
+// Called with the triggering event; for `check` that's the editor's input, whose value is the SQL.
+pub const Handlers = struct {
+    check: zx.EventHandler,
+    run: zx.EventHandler,
+    refresh: zx.EventHandler,
+};
+
+// Worker and client KV calls suspend the page's wasm, so they must start from a top-level entry
+// (a timer, not an event that may be nested) and never overlap. Jobs pushed meanwhile run after,
+// once each: a burst of keystrokes is one tokenize of the latest text.
+pub const queue = struct {
+    var jobs: [8]*const fn () void = undefined;
+    var len: usize = 0;
+    var busy = false;
+
+    pub fn push(job: *const fn () void) void {
+        for (jobs[0..len]) |j| if (j == job) return;
+        if (len == jobs.len) return;
+        jobs[len] = job;
+        len += 1;
+        if (busy) return;
+        busy = true;
+        _ = zx.client.setTimeout(&pump, .fromMilliseconds(0));
+    }
+
+    fn pump() void {
+        defer busy = false;
+        while (len > 0) {
+            const job = jobs[0];
+            std.mem.copyForwards(*const fn () void, jobs[0 .. len - 1], jobs[1..len]);
+            len -= 1;
+            job();
+        }
+    }
+};
+
+pub fn queued(comptime job: fn () void) zx.EventHandler {
+    return .wrap(struct {
+        fn f() void {
+            queue.push(&job);
+        }
+    }.f);
+}
+
+// Backend contract:
+// - `input_id`: []const u8
+// - `schema_sql`: []const u8, see `studio.schema`
+// - `open(io) !zx.Db`
+// - `check(db, arena, sql) ?anyerror`
+// - `selectTable(gpa, name) ![]u8`
 pub fn Server(comptime Backend: type) type {
     return struct {
-        var filter: *zx.State([]const u8) = undefined;
-        var lines: *zx.State(usize) = undefined;
-        var cursor: *zx.State([2]usize) = undefined;
+        pub const Studio = Editor(@This()).Studio;
+        pub const input_id = Backend.input_id;
+        pub const selectTable = Backend.selectTable;
 
-        pub fn Studio(ctx: *zx.ComponentCtx(struct { tables: []const []const u8 })) zx.Component {
-            const tables = ctx.state([]const []const u8, ctx.props.tables);
-            const result = ctx.state(?Result, null);
-            filter = ctx.state([]const u8, "");
-            lines = ctx.state(usize, 1);
-            cursor = ctx.state([2]usize, .{ 1, 1 });
+        pub fn handlers(ctx: anytype, s: States) Handlers {
+            return .{
+                .check = ctx.sbind(onCheck, .{ .diagnostic = s.diagnostic }),
+                .run = ctx.sbind(onRun, .{ .query = s.query, .tables = s.tables, .results = s.results, .running = s.running }),
+                .refresh = ctx.sbind(onRefresh, .{ .tables = s.tables }),
+            };
+        }
+
+        pub fn onCheck(e: *zx.server.Event.Stateful) void {
+            var state = e.state(?Diagnostic);
+            const ev = e.inner;
+            var database = Backend.open(ev.io) catch |err| return state.set(.{ .message = @errorName(err) });
+            state.set(studio.diagnose(&database, ev.arena, e.value() orelse "", Backend.check));
+        }
+
+        pub fn onRun(e: *zx.server.Event.Stateful) void {
+            const src = e.state([]const u8);
+            var schema_state = e.state([]const Table);
+            var results = e.state([]const Result);
+            var running = e.state(bool);
+            defer running.set(false);
+            const ev = e.inner;
+
+            var database = Backend.open(ev.io) catch |err|
+                return results.set(ev.arena.dupe(Result, &.{.{ .err = .{ .message = @errorName(err) } }}) catch &.{});
+            results.set(studio.execAll(&database, ev.arena, ev.io, src.get()));
+            if (schema(ev.arena, ev.io)) |t| schema_state.set(t) else |_| {}
+        }
+
+        pub fn onRefresh(e: *zx.server.Event.Stateful) void {
+            var schema_state = e.state([]const Table);
+            const ev = e.inner;
+            if (schema(ev.arena, ev.io)) |t| {
+                schema_state.set(t);
+            } else |err| {
+                zx.log.err("{s} schema: {t}", .{ Backend.input_id, err });
+            }
+        }
+
+        pub fn schema(arena: std.mem.Allocator, io: std.Io) ![]const Table {
+            var database = try Backend.open(io);
+            return studio.schema(&database, arena, Backend.schema_sql);
+        }
+    };
+}
+
+// Impl contract:
+// - `input_id`: []const u8
+// - `selectTable(gpa, name) ![]u8`
+// - `handlers(ctx, States) Handlers`
+pub fn Editor(comptime Impl: type) type {
+    return struct {
+        const tokenizer = zx.worker(@import("studio/worker.zig"));
+        const store_key = "studio:" ++ Impl.input_id;
+        const first_tab: []const Tab = &.{.{ .name = "Query 1", .sql = "" }};
+
+        // Render uses its own `Ui`; these copies are for client handlers only (the browser is
+        // single-threaded, while the server renders requests concurrently).
+        var ui: Ui = undefined;
+        var on: Handlers = undefined;
+        var loaded = false;
+
+        const Ui = struct {
+            tables: *zx.State([]const Table),
+            results: *zx.State([]const Result),
+            text: *zx.State([]const u8),
+            query: *zx.State([]const u8),
+            running: *zx.State(bool),
+            diagnostic: *zx.State(?Diagnostic),
+            tokens: *zx.State([]const studio.Token),
+            caret: *zx.State(usize),
+            pick: *zx.State(?usize),
+            hover: *zx.State(?Hover),
+            filter: *zx.State([]const u8),
+            tabs: *zx.State([]const Tab),
+            active: *zx.State(usize),
+            // null: follow the latest run (its first error, else its last result)
+            result_tab: *zx.State(?usize),
+        };
+
+        pub fn Studio(ctx: *zx.ComponentCtx(struct { tables: []const Table = &.{} })) zx.Component {
+            const u: Ui = .{
+                .tables = ctx.state([]const Table, ctx.props.tables),
+                .results = ctx.state([]const Result, &.{}),
+                .text = ctx.state([]const u8, ""),
+                .query = ctx.state([]const u8, ""),
+                .running = ctx.state(bool, false),
+                .diagnostic = ctx.state(?Diagnostic, null),
+                .tokens = ctx.state([]const studio.Token, &.{}),
+                .caret = ctx.state(usize, 0),
+                .pick = ctx.state(?usize, null),
+                .hover = ctx.state(?Hover, null),
+                .filter = ctx.state([]const u8, ""),
+                .tabs = ctx.state([]const Tab, first_tab),
+                .active = ctx.state(usize, 0),
+                .result_tab = ctx.state(?usize, null),
+            };
+            const handlers = Impl.handlers(ctx, .{ .tables = u.tables, .results = u.results, .text = u.text, .query = u.query, .running = u.running, .diagnostic = u.diagnostic });
+            if (zx.platform.isClient()) {
+                ui = u;
+                on = handlers;
+                if (!loaded) {
+                    loaded = true;
+                    queue.push(&load);
+                }
+            }
+
+            const src = u.text.get();
+            const before = src[0..@min(u.caret.get(), src.len)];
+            const line = std.mem.count(u8, before, "\n");
+            const lines = std.mem.count(u8, src, "\n") + 1;
+            const col = before.len - (if (std.mem.findScalarLast(u8, before, '\n')) |i| i + 1 else 0);
+            const completion = suggestions(u);
+            const err = u.diagnostic.get();
 
             return (
                 <div @allocator={ctx.allocator} class="studio">
@@ -28,49 +196,66 @@ pub fn Server(comptime Backend: type) type {
                         <input class="studio-search" type="search" placeholder="Search..." oninput={onFilter} />
                         <div class="studio-sidebar-bar">
                             <span>Tables</span>
-                            <button class="studio-icon-button" title="Refresh" aria-label="Refresh" onclick={ctx.bind(onRefresh)}>↻</button>
+                            <button class="studio-icon-button" title="Refresh" aria-label="Refresh" onclick={handlers.refresh}>↻</button>
                         </div>
                         <ul class="studio-tables">
-                            {for (tables.get()) |name| (
-                                <TableRow name={name} filter={filter.get()} />
+                            {for (u.tables.get()) |t| (
+                                <TableRow name={t.name} filter={u.filter.get()} />
                             )}
                         </ul>
                     </aside>
 
                     <section class="studio-main">
-                        <div class="studio-tabs">
-                            <span class="studio-tab">Query</span>
+                        <div class="studio-tabs" role="tablist">
+                            {for (u.tabs.get(), 0..) |t, i| (
+                                <QueryTab name={t.name} index={i} active={i == u.active.get()} />
+                            )}
+                            <button class="studio-tab-add" type="button" title="New query" aria-label="New query" onclick={onAddTab}>+</button>
                         </div>
-                        <form class="studio-query" action={ctx.bind(onRun)}>
-                            <div class="studio-editor">
-                                <div class="studio-gutter" aria-hidden="true">
-                                    {for (0..lines.get()) |i| (<div>{i + 1}</div>)}
-                                </div>
+                        <div class="studio-editor">
+                            <div class="studio-gutter" aria-hidden="true">
+                                {for (0..lines) |i| (<div>{i + 1}</div>)}
+                            </div>
+                            <div class="studio-code">
+                                <Highlight text={src} tokens={u.tokens.get()} err={err} />
                                 <textarea
-                                    id={Backend.input_id}
-                                    name="sql"
+                                    id={Impl.input_id}
                                     spellcheck="false"
+                                    wrap="off"
                                     placeholder="SELECT * FROM users;"
                                     onkeydown={onKeyDown}
-                                    oninput={onCursor}
+                                    oninput={onInput}
                                     onkeyup={onCursor}
                                     onclick={onCursor}
+                                    onblur={onBlur}
+                                    onmousemove={onHover}
+                                    onmouseleave={onLeave}
                                 ></textarea>
+                                {if (completion.items.len > 0) (
+                                    <Suggestions items={completion.items} active={u.pick.get().? % completion.items.len} line={line} col={col - (u.caret.get() - completion.start)} />
+                                )}
                             </div>
-                            <div class="studio-toolbar">
-                                <span>Ln {cursor.get()[0]} Col {cursor.get()[1]}</span>
-                                <button class="studio-run" type="submit">▶ Run</button>
+                        </div>
+                        <div class="studio-toolbar">
+                            <span>Ln {line + 1} Col {col + 1}</span>
+                            {if (err) |d| (<span class="studio-error studio-diagnostic" title={d.message}>⚠ {d.message}</span>)}
+                            <div class="studio-actions">
+                                <kbd class="studio-shortcut">{shortcut()}</kbd>
+                                <button class="studio-run" disabled={u.running.get()} aria-busy={u.running.get()} onclick={onRun}>
+                                    <span class={if (u.running.get()) "studio-run-icon spinning" else "studio-run-icon"} aria-hidden="true"></span>Run
+                                </button>
                             </div>
-                        </form>
-                        <ResultView result={result.get()} />
+                        </div>
+                        <Results results={u.results.get()} selected={u.result_tab.get()} src={src} />
                     </section>
+                    {if (u.hover.get()) |h| (<HoverCard hover={h} tables={u.tables.get()} />)}
                 </div>
             );
         }
 
         fn TableRow(ctx: *zx.ComponentCtx(struct { name: []const u8, filter: []const u8 })) zx.Component {
             const name = ctx.props.name;
-            const hidden = ctx.props.filter.len > 0 and !studio_lib.containsIgnoreCase(name, ctx.props.filter);
+            const hidden = ctx.props.filter.len > 0 and !studio.containsIgnoreCase(name, ctx.props.filter);
             const value = name;
             return (
                 <li @allocator={ctx.allocator} {hidden}>
@@ -81,98 +266,372 @@ pub fn Server(comptime Backend: type) type {
             );
         }
 
-        const RunInput = struct { sql: []const u8 };
-
-        pub fn onRun(a: *zx.server.Action.Stateful) void {
-            var tables = a.state([]const []const u8);
-            var result = a.state(?Result);
-            _ = a.state([]const u8);
-            _ = a.state(usize);
-            _ = a.state([2]usize);
-
-            const data = a.data(RunInput);
-            const sql = std.mem.trim(u8, data.sql, " \t\r\n;");
-            if (sql.len == 0) return;
-
-            result.set(Backend.exec(a.inner.allocator, a.inner.io, sql));
-            if (Backend.listTables(a.inner.allocator, a.inner.arena, a.inner.io)) |names| {
-                tables.set(names);
-            } else |_| {}
+        fn QueryTab(ctx: *zx.ComponentCtx(struct { name: []const u8, index: usize, active: bool })) zx.Component {
+            const value = ctx.allocator.print("{d}", .{ctx.props.index}) catch "";
+            return (
+                <div @allocator={ctx.allocator} class={if (ctx.props.active) "studio-tab active" else "studio-tab"} role="tab">
+                    <button type="button" {value} onclick={onSelectTab}>{ctx.props.name}</button>
+                    <button type="button" class="studio-tab-close" title="Close" aria-label="Close" {value} onclick={onCloseTab}>×</button>
+                </div>
+            );
         }
 
-        pub fn onRefresh(e: *zx.server.Event.Stateful) void {
-            var tables = e.state([]const []const u8);
-            _ = e.state(?Result);
-            _ = e.state([]const u8);
-            _ = e.state(usize);
-            _ = e.state([2]usize);
+        fn Results(ctx: *zx.ComponentCtx(struct { results: []const Result, selected: ?usize, src: []const u8 })) zx.Component {
+            const all = ctx.props.results;
+            if (all.len == 0) return (<div @allocator={ctx.allocator} class="studio-results studio-results-empty"></div>);
+            const shown = @min(ctx.props.selected orelse for (all, 0..) |r, i| {
+                if (r.err != null) break i;
+            } else all.len - 1, all.len - 1);
+            return (
+                <div @allocator={ctx.allocator} class="studio-results">
+                    {if (all.len > 1) (
+                        <div class="studio-tabs studio-result-tabs" role="tablist">
+                            {for (all, 0..) |r, i| (
+                                <div class={resultTabClass(r, i == shown)} role="tab">
+                                    <button type="button" title={r.sql} value={ctx.allocator.print("{d}", .{i}) catch ""} onclick={onResultTab}>Result {i + 1}</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <ResultView result={all[shown]} src={ctx.props.src} />
+                </div>
+            );
+        }
 
-            if (Backend.listTables(e.inner.allocator, e.inner.arena, e.inner.io)) |names| {
-                tables.set(names);
-            } else |err| {
-                zx.log.err("{s} tables: {t}", .{ Backend.input_id, err });
-            }
+        fn Suggestions(ctx: *zx.ComponentCtx(struct { items: []const studio.Suggestion, active: usize, line: usize, col: usize })) zx.Component {
+            const p = ctx.props;
+            return (
+                <ul @allocator={ctx.allocator} class="studio-suggest" style=`top: calc({p.line + 1} * 1.5em + .6rem); left: calc({p.col}ch + .5rem)`>
+                    {for (p.items, 0..) |s, i| (
+                        <li>
+                            <button type="button" class={if (i == p.active) "active" else ""} value={ctx.allocator.print("{d}", .{i}) catch ""} onmousedown={onPick}>
+                                <span class={tokenClass(s.kind, false)}>{s.label}</span>
+                                <small>{s.detail}</small>
+                            </button>
+                        </li>
+                    )}
+                </ul>
+            );
         }
 
         fn onFilter(e: zx.client.Event) void {
-            filter.set(zx.allocator.dupe(u8, e.value() orelse "") catch return);
+            ui.filter.set(zx.allocator.dupe(u8, e.value() orelse "") catch return);
         }
 
         fn onOpenTable(e: zx.client.Event) void {
             const name = e.value() orelse return;
-            const sql = Backend.selectTable(zx.allocator, name) catch return;
-            const input = editor() orelse return;
-            input.ref.set("value", js.string(sql)) catch return;
-            updateCursor();
-            submitForm();
+            const sql = Impl.selectTable(zx.allocator, name) catch return;
+            replace(0, ui.text.get().len, sql);
+            onRun(e);
+        }
+
+        fn onRun(e: zx.client.Event) void {
+            if (ui.running.get()) return;
+            ui.running.set(true);
+            ui.result_tab.set(null);
+            ui.query.set(ui.text.get());
+            on.run.callback(on.run.context, e);
+        }
+
+        fn onInput(e: zx.client.Event) void {
+            sync();
+            ui.pick.set(0);
+            const list = zx.allocator.dupe(Tab, ui.tabs.get()) catch return;
+            list[@min(ui.active.get(), list.len - 1)].sql = ui.text.get();
+            ui.tabs.set(list);
+            queue.push(&save);
+            queue.push(&tokenize);
+            on.check.callback(on.check.context, e);
+        }
+
+        fn onSelectTab(e: zx.client.Event) void {
+            const i = index(e) orelse return;
+            if (i == ui.active.get()) return;
+            open(ui.tabs.get(), i);
+        }
+
+        fn onAddTab(_: zx.client.Event) void {
+            const list = ui.tabs.get();
+            var n: usize = list.len + 1;
+            const name = while (true) : (n += 1) {
+                const candidate = zx.allocator.print("Query {d}", .{n}) catch return;
+                for (list) |t| {
+                    if (std.mem.eql(u8, t.name, candidate)) break;
+                } else break candidate;
+            };
+            const next = std.mem.concat(zx.allocator, Tab, &.{ list, &.{.{ .name = name, .sql = "" }} }) catch return;
+            open(next, next.len - 1);
+        }
+
+        fn onCloseTab(e: zx.client.Event) void {
+            const i = index(e) orelse return;
+            const list = ui.tabs.get();
+            if (list.len == 1) return open(first_tab, 0);
+            const next = std.mem.concat(zx.allocator, Tab, &.{ list[0..i], list[i + 1 ..] }) catch return;
+            const current = ui.active.get();
+            open(next, if (current > i or current == next.len) current - 1 else current);
+        }
+
+        fn onResultTab(e: zx.client.Event) void {
+            ui.result_tab.set(index(e) orelse return);
         }
 
         fn onKeyDown(e: zx.client.Event) void {
             const k = e.as(zx.client.events.KeyboardEvent, zx.allocator);
-            if (!std.mem.eql(u8, k.key, "Enter") or !(k.ctrl_key or k.meta_key)) return;
+            const key = k.key;
+            if (std.mem.eql(u8, key, "Enter") and (k.ctrl_key or k.meta_key)) {
+                e.preventDefault();
+                return onRun(e);
+            }
+
+            const completion = suggestions(ui);
+            const n = completion.items.len;
+            if (n == 0) return;
+            const i = ui.pick.get().? % n;
+            if (std.mem.eql(u8, key, "ArrowDown")) {
+                ui.pick.set((i + 1) % n);
+            } else if (std.mem.eql(u8, key, "ArrowUp")) {
+                ui.pick.set((i + n - 1) % n);
+            } else if (std.mem.eql(u8, key, "Enter") or std.mem.eql(u8, key, "Tab")) {
+                accept(completion, i);
+            } else if (std.mem.eql(u8, key, "Escape")) {
+                ui.pick.set(null);
+            } else return;
             e.preventDefault();
-            submitForm();
+        }
+
+        fn onPick(e: zx.client.Event) void {
+            e.preventDefault(); // keep focus in the editor
+            const i = index(e) orelse return;
+            const completion = suggestions(ui);
+            if (i < completion.items.len) accept(completion, i);
         }
 
         fn onCursor(_: zx.client.Event) void {
-            updateCursor();
+            sync();
         }
 
-        fn submitForm() void {
-            const input = editor() orelse return;
-            const form = input.ref.get(js.Object, "form") catch return;
-            defer form.deinit();
-            form.call(void, "requestSubmit", .{}) catch {};
+        fn onBlur(_: zx.client.Event) void {
+            ui.pick.set(null);
         }
 
-        fn updateCursor() void {
+        fn onHover(e: zx.client.Event) void {
+            const m = e.as(zx.client.events.MouseEvent, zx.allocator);
+            const next = hoverAt(m.client_x, m.client_y);
+            const same = if (ui.hover.get()) |h| next != null and h.kind == next.?.kind and std.mem.eql(u8, h.name, next.?.name) else next == null;
+            if (!same) ui.hover.set(next);
+        }
+
+        fn onLeave(_: zx.client.Event) void {
+            if (ui.hover.get() != null) ui.hover.set(null);
+        }
+
+        fn tokenize() void {
+            if (comptime !zx.platform.isClient()) return;
+            ui.tokens.set(tokenizer.tokenize(zx.allocator, ui.text.get()) catch |err| return zx.log.err("tokenize: {t}", .{err}));
+        }
+
+        fn save() void {
+            zx.kv.putAs(store_key, Saved{ .tabs = ui.tabs.get(), .active = ui.active.get() }, .{}) catch |err| zx.log.warn("save queries: {t}", .{err});
+        }
+
+        fn load() void {
+            const saved = (zx.kv.as(zx.allocator, store_key, Saved) catch null) orelse return;
+            if (saved.tabs.len > 0) open(saved.tabs, @min(saved.active, saved.tabs.len - 1));
+        }
+
+        fn open(list: []const Tab, i: usize) void {
+            ui.tabs.set(list);
+            ui.active.set(i);
+            setEditor(list[i].sql);
+            queue.push(&save);
+        }
+
+        // A synthetic `input` re-syncs, re-tokenizes and re-checks like typing does.
+        fn setEditor(sql: []const u8) void {
             const input = editor() orelse return;
-            const text = input.ref.getAlloc(js.String, zx.allocator, "value") catch return;
-            const pos: usize = @intFromFloat(input.ref.get(f64, "selectionStart") catch 0);
-            const before = text[0..@min(pos, text.len)];
-            const line_start = if (std.mem.findScalarLast(u8, before, '\n')) |i| i + 1 else 0;
-            lines.set(std.mem.count(u8, text, "\n") + 1);
-            cursor.set(.{ std.mem.count(u8, before, "\n") + 1, before.len - line_start + 1 });
+            input.ref.set("value", js.string(sql)) catch return;
+            const Event = js.global.get(js.Object, "Event") catch return;
+            defer Event.deinit();
+            const event = Event.new(.{ js.string("input"), .{ .bubbles = true } }) catch return;
+            defer event.deinit();
+            _ = input.ref.call(bool, "dispatchEvent", .{event}) catch {};
+        }
+
+        fn suggestions(u: Ui) studio.Completion {
+            const S = struct {
+                threadlocal var buf: [8]studio.Suggestion = undefined;
+            };
+            if (u.pick.get() == null) return .{ .start = 0, .items = &.{} };
+            return studio.complete(&S.buf, u.tables.get(), u.text.get(), u.caret.get());
+        }
+
+        fn accept(completion: studio.Completion, i: usize) void {
+            replace(completion.start, ui.caret.get(), completion.items[i].label);
+            ui.pick.set(null);
+        }
+
+        // execCommand keeps native undo and fires `input`, which re-syncs and re-checks.
+        fn replace(start: usize, end: usize, str: []const u8) void {
+            const input = editor() orelse return;
+            input.focus() catch {};
+            input.ref.call(void, "setSelectionRange", .{ start, end }) catch return;
+            const document = zx.client.Document.init(zx.allocator);
+            _ = document.ref.call(bool, "execCommand", .{ js.string("insertText"), false, js.string(str) }) catch {};
+        }
+
+        // The highlight layer sits under the textarea; elementsFromPoint sees through it.
+        fn hoverAt(x: i32, y: i32) ?Hover {
+            const document = zx.client.Document.init(zx.allocator);
+            const hits = document.ref.call(js.Object, "elementsFromPoint", .{ x, y }) catch return null;
+            defer hits.deinit();
+            for (0..hits.value.len()) |i| {
+                const el: js.Object = .{ .value = hits.value.at(i) };
+                defer el.deinit();
+                const class = el.getAlloc(js.String, zx.allocator, "className") catch continue;
+                defer zx.allocator.free(class);
+                const kind: studio.Kind = if (std.mem.startsWith(u8, class, "tok-table")) .table else if (std.mem.startsWith(u8, class, "tok-column")) .column else continue;
+                const content = el.getAlloc(js.String, zx.allocator, "textContent") catch return null;
+                const name = studio.unquote(content);
+                const known = switch (kind) {
+                    .table => studio.findTable(ui.tables.get(), name) != null,
+                    else => for (ui.tables.get()) |t| {
+                        if (t.column(name) != null) break true;
+                    } else false,
+                };
+                if (!known) {
+                    zx.allocator.free(content);
+                    return null;
+                }
+                return .{ .kind = kind, .name = name, .x = x, .y = y };
+            }
+            return null;
+        }
+
+        fn sync() void {
+            const input = editor() orelse return;
+            ui.text.set(input.ref.getAlloc(js.String, zx.allocator, "value") catch return);
+            ui.caret.set(@intFromFloat(input.ref.get(f64, "selectionStart") catch 0));
         }
 
         fn editor() ?zx.client.Document.HTMLElement {
             if (!zx.platform.isClient()) return null;
             const document = zx.client.Document.init(zx.allocator);
-            return document.getElementById(Backend.input_id) catch null;
+            return document.getElementById(Impl.input_id) catch null;
         }
     };
 }
 
-pub fn ResultView(ctx: *zx.ComponentCtx(struct { result: ?Result })) zx.Component {
-    const r = ctx.props.result orelse return (<div @allocator={ctx.allocator} class="studio-results studio-results-empty"></div>);
-    if (r.err) |err| return (
-        <div @allocator={ctx.allocator} class="studio-results">
-            <p class="studio-status studio-error">Error: {err}</p>
+// ⌘↵ on Apple platforms, Ctrl↵ elsewhere; the server can't tell, so it renders ⌘↵.
+fn shortcut() []const u8 {
+    const S = struct {
+        var label: ?[]const u8 = null;
+    };
+    if (!zx.platform.isClient()) return "⌘↵";
+    if (S.label) |l| return l;
+    const navigator = js.global.get(js.Object, "navigator") catch return "⌘↵";
+    defer navigator.deinit();
+    const agent = navigator.getAlloc(js.String, zx.allocator, "userAgent") catch return "⌘↵";
+    defer zx.allocator.free(agent);
+    S.label = if (std.mem.find(u8, agent, "Mac") != null) "⌘↵" else "Ctrl↵";
+    return S.label.?;
+}
+
+fn index(e: zx.client.Event) ?usize {
+    return std.fmt.parseInt(usize, e.value() orelse return null, 10) catch null;
+}
+
+fn resultTabClass(r: Result, selected: bool) []const u8 {
+    if (r.err != null) return if (selected) "studio-tab active failed" else "studio-tab failed";
+    return if (selected) "studio-tab active" else "studio-tab";
+}
+
+const Line = struct { label: []const u8, column: studio.Column };
+
+fn hoverLines(gpa: std.mem.Allocator, tables: []const Table, kind: studio.Kind, name: []const u8) []const Line {
+    var lines: std.ArrayList(Line) = .empty;
+    for (tables) |t| switch (kind) {
+        .table => if (std.ascii.eqlIgnoreCase(t.name, name)) {
+            for (t.columns) |c| lines.append(gpa, .{ .label = c.name, .column = c }) catch break;
+        },
+        .column => if (t.column(name)) |c| lines.append(gpa, .{ .label = t.name, .column = c }) catch break,
+        else => {},
+    };
+    return lines.items;
+}
+
+fn HoverCard(ctx: *zx.ComponentCtx(struct { hover: Hover, tables: []const Table })) zx.Component {
+    const h = ctx.props.hover;
+    const lines = hoverLines(ctx.allocator, ctx.props.tables, h.kind, h.name);
+    return (
+        <div @allocator={ctx.allocator} class="studio-hover" style=`left: {h.x + 12}px; top: {h.y + 18}px`>
+            <div class="studio-hover-title">
+                <span class="tok-keyword">{@tagName(h.kind)}</span> <span class={tokenClass(h.kind, false)}>{h.name}</span>
+            </div>
+            {for (lines) |l| (
+                <div class="studio-hover-row">
+                    <span>{l.label}</span>
+                    <code>{l.column.type}</code>
+                    <small>{if (l.column.pk) "PK" else if (l.column.nullable) "NULL" else "NOT NULL"}</small>
+                </div>
+            )}
         </div>
     );
+}
+
+const Span = struct { text: []const u8, class: []const u8 = "" };
+
+fn Highlight(ctx: *zx.ComponentCtx(struct { text: []const u8, tokens: []const studio.Token, err: ?Diagnostic })) zx.Component {
+    const src = ctx.props.text;
+    const err = ctx.props.err;
+    var spans: std.ArrayList(Span) = .empty;
+    var pos: usize = 0;
+    // Tokens may lag behind the text by a keystroke; clamp so they never misalign.
+    for (ctx.props.tokens) |t| {
+        const start = @min(t.start, src.len);
+        const end = @min(t.end, src.len);
+        if (start < pos or end <= start) continue;
+        const bad = if (err) |d| start < d.end and d.start < end else false;
+        if (start > pos) spans.append(ctx.allocator, .{ .text = src[pos..start] }) catch break;
+        spans.append(ctx.allocator, .{ .text = src[start..end], .class = tokenClass(t.kind, bad) }) catch break;
+        pos = end;
+    }
+    // The trailing space gives a final empty line its height.
+    spans.appendSlice(ctx.allocator, &.{ .{ .text = src[pos..] }, .{ .text = " " } }) catch {};
+    return (
+        <pre @allocator={ctx.allocator} class="studio-highlight" aria-hidden="true">{for (spans.items) |s| (<span class={s.class}>{s.text}</span>)}</pre>
+    );
+}
+
+fn tokenClass(kind: studio.Kind, squiggle: bool) []const u8 {
+    return switch (kind) {
+        inline else => |k| if (squiggle) "tok-" ++ @tagName(k) ++ " squiggle" else "tok-" ++ @tagName(k),
+    };
+}
+
+fn elapsed(gpa: std.mem.Allocator, micros: u64) []const u8 {
+    const ms = @as(f64, @floatFromInt(micros)) / std.time.us_per_ms;
+    return (if (ms < 1) gpa.print("{d:.2} ms", .{ms}) else if (ms < 1000) gpa.print("{d:.0} ms", .{ms}) else gpa.print("{d:.2} s", .{ms / 1000})) catch "";
+}
+
+fn ResultView(ctx: *zx.ComponentCtx(struct { result: Result, src: []const u8 })) zx.Component {
+    const r = ctx.props.result;
+    if (r.err) |err| {
+        const before = ctx.props.src[0..@min(err.start, ctx.props.src.len)];
+        const line = std.mem.count(u8, before, "\n") + 1;
+        const col = before.len - (if (std.mem.findScalarLast(u8, before, '\n')) |i| i + 1 else 0) + 1;
+        return (
+            <div @allocator={ctx.allocator} class="studio-results">
+                <div class="studio-result-error">
+                    <strong>Error</strong> <small>Ln {line}, Col {col}</small>
+                    <pre>{err.message}</pre>
+                </div>
+            </div>
+        );
+    }
     if (r.columns.len == 0) return (
         <div @allocator={ctx.allocator} class="studio-results">
-            <p class="studio-status">Query OK, {r.changes} row(s) changed</p>
+            <div class="studio-status"><span>Query OK, {r.changes} row(s) changed</span><span>{elapsed(ctx.allocator, r.micros)}</span></div>
         </div>
     );
     return (
@@ -189,7 +648,7 @@ pub fn ResultView(ctx: *zx.ComponentCtx(struct { result: ?Result })) zx.Componen
                     </tbody>
                 </table>
             </div>
-            <p class="studio-status">{r.rows.len} row(s)</p>
+            <div class="studio-status"><span>{r.rows.len} row(s)</span><span>{elapsed(ctx.allocator, r.micros)}</span></div>
         </div>
     );
 }

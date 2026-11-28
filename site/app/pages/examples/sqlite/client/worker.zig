@@ -2,9 +2,7 @@
 // The database lives in OPFS, so it survives reloads.
 const std = @import("std");
 const zx = @import("zx");
-const studio = @import("../studio_lib.zig");
-
-pub const Result = studio.Result;
+const studio = @import("../../studio_lib.zig");
 
 var db: zx.Db = undefined;
 
@@ -25,14 +23,19 @@ pub fn init() !void {
     , .empty);
 }
 
-// Runs one statement; SQL errors come back in `err` so the page can show them.
-pub fn exec(gpa: std.mem.Allocator, sql: []const u8) !Result {
-    return studio.exec(&db, gpa, sql);
+pub fn run(gpa: std.mem.Allocator, src: []const u8) ![]const studio.Result {
+    return studio.execAll(&db, gpa, zx.Io.Web.io(), src);
 }
 
-pub fn tables(gpa: std.mem.Allocator) ![]const []const u8 {
-    const rows = try db.all(gpa, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name", .empty);
-    const out = try gpa.alloc([]const u8, rows.len);
-    for (rows, out) |row, *name| name.* = row.text("name");
-    return out;
+pub fn schema(gpa: std.mem.Allocator) ![]const studio.Table {
+    return studio.schema(&db, gpa,
+        \\SELECT m.name AS tbl, p.name AS col, p.type AS type, NOT p."notnull" AS nullable, p.pk > 0 AS pk
+        \\FROM sqlite_master m JOIN pragma_table_info(m.name) p
+        \\WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'
+        \\ORDER BY m.name, p.cid
+    );
+}
+
+pub fn check(gpa: std.mem.Allocator, src: []const u8) !?studio.Diagnostic {
+    return studio.diagnose(&db, gpa, src, studio.check);
 }

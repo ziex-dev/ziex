@@ -34,7 +34,6 @@ test "api > module surface compiles" {
     _ = Db.row;
     _ = Db.rows;
     _ = Db.transaction;
-    _ = Db.transactionWith;
     _ = Db.close;
 
     _ = Db.Sqlite.open;
@@ -93,7 +92,7 @@ test "api > statement get/all/values and metadata" {
         \\FROM users
         \\WHERE name = $name
         \\ORDER BY id
-    );
+    , .{});
     defer statement.deinit();
 
     try std.testing.expectEqual(@as(usize, 1), try statement.paramCount());
@@ -159,7 +158,7 @@ test "api > statement typed row and rows" {
         \\SELECT id, name, score
         \\FROM users
         \\WHERE name = $name
-    );
+    , .{});
     defer one_stmt.deinit();
 
     const typed_row = (try one_stmt.row(alloc, UserRow, .{ .name = "Ada" })).?;
@@ -171,7 +170,7 @@ test "api > statement typed row and rows" {
         \\SELECT id, name
         \\FROM users
         \\ORDER BY id
-    );
+    , .{});
     defer many_stmt.deinit();
 
     const typed_rows = try many_stmt.rows(alloc, UserName, .{});
@@ -199,7 +198,7 @@ test "api > statement run with named bindings" {
         \\)
     , .empty);
 
-    var statement = try database.prepare("INSERT INTO users (name, score) VALUES ($name, $score)");
+    var statement = try database.prepare("INSERT INTO users (name, score) VALUES ($name, $score)", .{});
     defer statement.deinit();
 
     const result = try statement.run(.{ .name = "Grace", .score = 8.25 });
@@ -224,10 +223,10 @@ test "api > transaction commit and rollback" {
         \\)
     , .empty);
 
-    try database.transactionWith(.immediate, {}, insertCommittedUser);
+    try database.transaction(.{ .mode = .immediate }, {}, insertCommittedUser);
     try std.testing.expectEqual(@as(i64, 1), try countUsers(&database));
 
-    const rollback_result = database.transactionWith(.exclusive, {}, insertThenFail);
+    const rollback_result = database.transaction(.{ .mode = .exclusive }, {}, insertThenFail);
     try std.testing.expectError(error.ExpectedRollback, rollback_result);
     try std.testing.expectEqual(@as(i64, 1), try countUsers(&database));
 }
@@ -410,7 +409,7 @@ test "api > explicit bindings positional and named slices" {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    var positional_stmt = try database.prepare("SELECT name FROM users WHERE score > ?1 ORDER BY id");
+    var positional_stmt = try database.prepare("SELECT name FROM users WHERE score > ?1 ORDER BY id", .{});
     defer positional_stmt.deinit();
 
     const positional = Db.Bindings.fromPositional(&.{.{ .float = 9.0 }});
@@ -418,7 +417,7 @@ test "api > explicit bindings positional and named slices" {
     try std.testing.expectEqual(@as(usize, 1), positional_rows.len);
     try expectTextField(positional_rows[0], "name", "Ada");
 
-    var named_stmt = try database.prepare("SELECT name FROM users WHERE name = $who");
+    var named_stmt = try database.prepare("SELECT name FROM users WHERE name = $who", .{});
     defer named_stmt.deinit();
 
     const named = Db.Bindings.fromNamed(&.{.{ .name = "$who", .value = .{ .text = "Grace" } }});
@@ -434,7 +433,7 @@ test "api > prepared statement reused with different bindings" {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    var statement = try database.prepare("SELECT id FROM users WHERE name = $name");
+    var statement = try database.prepare("SELECT id FROM users WHERE name = $name", .{});
     defer statement.deinit();
 
     const ada = (try statement.get(alloc, .{ .name = "Ada" })).?;
@@ -453,7 +452,7 @@ test "api > statement iterate yields rows then null" {
     var database = try openSeededDatabase();
     defer database.deinit();
 
-    var statement = try database.prepare("SELECT name FROM users ORDER BY id");
+    var statement = try database.prepare("SELECT name FROM users ORDER BY id", .{});
     defer statement.deinit();
 
     var it = try statement.iterate(.{});
@@ -475,7 +474,7 @@ test "api > iterate fully drained via loop frees every row" {
     var database = try openSeededDatabase();
     defer database.deinit();
 
-    var statement = try database.prepare("SELECT id FROM users ORDER BY id");
+    var statement = try database.prepare("SELECT id FROM users ORDER BY id", .{});
     defer statement.deinit();
 
     var it = try statement.iterate(.{});
@@ -495,7 +494,7 @@ test "api > iterate abandoned early frees the in-flight row" {
     var database = try openSeededDatabase();
     defer database.deinit();
 
-    var statement = try database.prepare("SELECT id FROM users ORDER BY id");
+    var statement = try database.prepare("SELECT id FROM users ORDER BY id", .{});
     defer statement.deinit();
 
     var it = try statement.iterate(.{});
@@ -512,7 +511,7 @@ test "api > statement to string returns the prepared sql" {
     _ = try database.run("CREATE TABLE t (id INTEGER PRIMARY KEY)", .empty);
 
     const sql = "SELECT id FROM t WHERE id = $id";
-    var statement = try database.prepare(sql);
+    var statement = try database.prepare(sql, .{});
     defer statement.deinit();
 
     const rendered = try statement.toString(std.testing.allocator);
@@ -555,10 +554,10 @@ test "api > plain and deferred transactions commit" {
         \\)
     , .empty);
 
-    try database.transaction({}, insertCommittedUser);
+    try database.transaction(.{}, {}, insertCommittedUser);
     try std.testing.expectEqual(@as(i64, 1), try countUsers(&database));
 
-    try database.transactionWith(.deferred, {}, insertCommittedUser);
+    try database.transaction(.{ .mode = .deferred }, {}, insertCommittedUser);
     try std.testing.expectEqual(@as(i64, 2), try countUsers(&database));
 }
 
@@ -581,7 +580,7 @@ test "api > transaction passes typed context" {
         }
     }.call;
 
-    try database.transaction(Ctx{ .name = "Linus", .score = 7.0 }, insert);
+    try database.transaction(.{}, Ctx{ .name = "Linus", .score = 7.0 }, insert);
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -593,7 +592,7 @@ test "api > invalid sql surfaces an error" {
     var database = try openTestDatabase();
     defer database.deinit();
 
-    try std.testing.expectError(error.Error, database.prepare("SELECT this is not valid sql"));
+    try std.testing.expectError(error.Error, database.prepare("SELECT this is not valid sql", .{}));
     try std.testing.expectError(error.Error, database.run("NOT A STATEMENT", .empty));
 }
 
@@ -615,7 +614,7 @@ fn requireClosedStatement() !void {
 test "api > failing connection returns closed" {
     const database = Db.failing;
 
-    try std.testing.expectError(Db.Error.Closed, database.prepare("SELECT 1"));
+    try std.testing.expectError(Db.Error.Closed, database.prepare("SELECT 1", .{}));
     try std.testing.expectError(Db.Error.Closed, database.run("SELECT 1", .empty));
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -708,7 +707,7 @@ test "api > named bindings resolve across all sigils" {
     };
 
     for (cases) |case| {
-        var statement = try database.prepare(case.sql);
+        var statement = try database.prepare(case.sql, .{});
         defer statement.deinit();
 
         const named = Db.Bindings.fromNamed(&.{.{ .name = case.name, .value = .{ .text = "Ada" } }});
@@ -717,14 +716,14 @@ test "api > named bindings resolve across all sigils" {
     }
 
     // A bare name (no sigil) resolves against the statement's `$` parameter.
-    var bare_stmt = try database.prepare("SELECT id FROM users WHERE name = $who");
+    var bare_stmt = try database.prepare("SELECT id FROM users WHERE name = $who", .{});
     defer bare_stmt.deinit();
     const bare = Db.Bindings.fromNamed(&.{.{ .name = "who", .value = .{ .text = "Grace" } }});
     const bare_row = (try bare_stmt.get(alloc, bare)).?;
     try expectIntField(bare_row, "id", 2);
 
     // An unknown named parameter is rejected rather than silently ignored.
-    var miss_stmt = try database.prepare("SELECT id FROM users WHERE name = $who");
+    var miss_stmt = try database.prepare("SELECT id FROM users WHERE name = $who", .{});
     defer miss_stmt.deinit();
     const missing = Db.Bindings.fromNamed(&.{.{ .name = "$nope", .value = .{ .text = "Ada" } }});
     try std.testing.expectError(Db.Error.InvalidBindings, miss_stmt.get(alloc, missing));

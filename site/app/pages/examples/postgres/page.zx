@@ -4,9 +4,10 @@ const P = @import("../studio.zx").Server(db);
 pub const Studio = P.Studio;
 pub const onRun = P.onRun;
 pub const onRefresh = P.onRefresh;
+pub const onCheck = P.onCheck;
 
 pub fn Page(ctx: zx.PageContext) !zx.Component {
-    const initial = db.bootstrap(ctx.allocator, ctx.arena, ctx.io) catch &.{};
+    const initial = P.schema(ctx.arena, ctx.io) catch &.{};
     return (
         <main @allocator={ctx.arena} class="example-page">
             <header class="example-header">

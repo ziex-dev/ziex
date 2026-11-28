@@ -76,7 +76,7 @@ pub fn Backend(Db: type) type {
 
             // connect once so bad URLs and credentials fail here
             const conn = try self.acquire();
-            self.release(conn);
+            self.release(conn, null);
             return self;
         }
 
@@ -126,7 +126,10 @@ pub fn Backend(Db: type) type {
             }
         }
 
-        fn release(self: *Postgres, conn: *Conn) void {
+        // Hands the error `conn` recorded during the caller's call to its `diagnostics`.
+        fn release(self: *Postgres, conn: *Conn, diagnostics: ?*Db.Diagnostics) void {
+            if (conn.last_error) |e| if (diagnostics) |d| d.set(e.message(), e.offset);
+            conn.last_error = null;
             if (self.tx_conn != null) return;
             const s = self.shared;
             // a connection left mid-transaction or desynced is not reusable
@@ -146,6 +149,7 @@ pub fn Backend(Db: type) type {
         const Exec = struct {
             owner: *Postgres,
             conn: *Conn,
+            diagnostics: ?*Db.Diagnostics = null,
             /// The connection's scratch arena; params and uncached columns live here.
             scratch: std.mem.Allocator,
             sql: []const u8,
@@ -158,13 +162,13 @@ pub fn Backend(Db: type) type {
             rows_seen: bool = false,
             retried: bool = false,
 
-            fn start(owner: *Postgres, sql: []const u8, rewritten: ?placeholders.Rewritten, bindings: Db.Bindings) !Exec {
+            fn start(owner: *Postgres, sql: []const u8, rewritten: ?placeholders.Rewritten, bindings: Db.Bindings, diagnostics: ?*Db.Diagnostics) !Exec {
                 const conn = try owner.acquire();
-                errdefer owner.release(conn);
+                errdefer owner.release(conn, diagnostics);
                 const scratch = conn.resetScratch();
                 const params = try encodeBindings(scratch, rewritten, bindings);
                 try conn.sendExtended(sql, params.oids, params.values);
-                var exec: Exec = .{ .owner = owner, .conn = conn, .scratch = scratch, .sql = sql, .params = params };
+                var exec: Exec = .{ .owner = owner, .conn = conn, .scratch = scratch, .sql = sql, .params = params, .diagnostics = diagnostics };
                 if (conn.batch_columns) |cols| try exec.setColumns(cols, true);
                 return exec;
             }
@@ -209,7 +213,7 @@ pub fn Backend(Db: type) type {
 
             fn finish(self: *Exec) void {
                 if (!self.done) self.conn.discard();
-                self.owner.release(self.conn);
+                self.owner.release(self.conn, self.diagnostics);
             }
 
             /// Column names copied once, to be shared by every row of one result.
@@ -357,6 +361,7 @@ pub fn Backend(Db: type) type {
             owner: *Postgres,
             sql: []u8,
             rewritten: ?placeholders.Rewritten,
+            diagnostics: ?*Db.Diagnostics,
             /// Filled by `describe` on first metadata access.
             column_names: [][]const u8 = &.{},
             column_types: []Db.ColumnType = &.{},
@@ -376,7 +381,7 @@ pub fn Backend(Db: type) type {
             }
         };
 
-        fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
+        fn prepare(ud: ?*anyopaque, sql: []const u8, diagnostics: ?*Db.Diagnostics) !Db.Statement {
             const self: *Postgres = @ptrCast(@alignCast(ud));
             const allocator = self.allocator;
 
@@ -387,6 +392,7 @@ pub fn Backend(Db: type) type {
                 .owner = self,
                 .sql = try allocator.dupe(u8, sql),
                 .rewritten = null,
+                .diagnostics = diagnostics,
             };
             errdefer ctx.deinit();
             ctx.rewritten = try rewriteSql(allocator, sql);
@@ -400,7 +406,7 @@ pub fn Backend(Db: type) type {
             if (ctx.described) return;
             const allocator = ctx.allocator;
             const conn = try ctx.owner.acquire();
-            defer ctx.owner.release(conn);
+            defer ctx.owner.release(conn, ctx.diagnostics);
             try conn.sendDescribe(ctx.execSql());
 
             var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -440,7 +446,7 @@ pub fn Backend(Db: type) type {
             // without parameters, the simple protocol also allows multi-statement scripts
             if (bindings == .none) {
                 const conn = try self.acquire();
-                defer self.release(conn);
+                defer self.release(conn, null);
                 return .{ .changes = @intCast(try conn.simpleQuery(sql)) };
             }
 
@@ -450,7 +456,7 @@ pub fn Backend(Db: type) type {
         }
 
         fn runExec(self: *Postgres, sql: []const u8, rewritten: ?placeholders.Rewritten, bindings: Db.Bindings) !Db.RunResult {
-            var exec = try Exec.start(self, sql, rewritten, bindings);
+            var exec = try Exec.start(self, sql, rewritten, bindings, null);
             defer exec.finish();
             while (try exec.nextRow()) |_| {}
             // Postgres has no last-insert id; use RETURNING
@@ -462,7 +468,7 @@ pub fn Backend(Db: type) type {
             if (self.tx_conn != null) return Db.Error.InvalidState;
 
             const conn = try self.acquire();
-            defer self.release(conn);
+            defer self.release(conn, null);
 
             _ = try conn.simpleQuery(switch (mode) {
                 .deferred, .immediate => "BEGIN",
@@ -503,7 +509,7 @@ pub fn Backend(Db: type) type {
 
         fn stmtAll(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) ![]const Db.Row {
             const ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-            var exec = try Exec.start(ctx.owner, ctx.execSql(), ctx.rewritten, bindings);
+            var exec = try Exec.start(ctx.owner, ctx.execSql(), ctx.rewritten, bindings, ctx.diagnostics);
             defer exec.finish();
 
             var names: ?[]const []const u8 = null;
@@ -522,7 +528,7 @@ pub fn Backend(Db: type) type {
 
         fn stmtGet(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) !?Db.Row {
             const ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-            var exec = try Exec.start(ctx.owner, ctx.execSql(), ctx.rewritten, bindings);
+            var exec = try Exec.start(ctx.owner, ctx.execSql(), ctx.rewritten, bindings, ctx.diagnostics);
             defer exec.finish();
 
             const body = try exec.nextRow() orelse return null;
@@ -542,7 +548,7 @@ pub fn Backend(Db: type) type {
 
         fn stmtValues(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) ![]const []const Db.Value {
             const ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-            var exec = try Exec.start(ctx.owner, ctx.execSql(), ctx.rewritten, bindings);
+            var exec = try Exec.start(ctx.owner, ctx.execSql(), ctx.rewritten, bindings, ctx.diagnostics);
             defer exec.finish();
 
             var rows: std.ArrayList([]const Db.Value) = .empty;
@@ -576,7 +582,7 @@ pub fn Backend(Db: type) type {
             errdefer allocator.destroy(iter);
             iter.* = .{
                 .allocator = allocator,
-                .exec = try Exec.start(ctx.owner, ctx.execSql(), ctx.rewritten, bindings),
+                .exec = try Exec.start(ctx.owner, ctx.execSql(), ctx.rewritten, bindings, ctx.diagnostics),
                 .blobs = .init(allocator),
             };
             return .{ .userdata = iter, .next_fn = &iterateNext, .deinit_fn = &iterateDeinit };

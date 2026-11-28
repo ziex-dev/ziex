@@ -57,7 +57,7 @@ test "api > statement get/all/values and metadata" {
     var database = try openSeeded();
     defer database.deinit();
 
-    var stmt = try database.prepare("SELECT id, name, score FROM users WHERE score > ? ORDER BY id");
+    var stmt = try database.prepare("SELECT id, name, score FROM users WHERE score > ? ORDER BY id", .{});
     defer stmt.deinit();
     try t.expectEqual(@as(usize, 1), try stmt.paramCount());
     try t.expectEqualStrings("name", (try stmt.columnNames())[1]);
@@ -83,7 +83,7 @@ test "api > statement get/all/values and metadata" {
     try t.expectEqual(@as(i64, 1), values[0][0].integer);
 
     // no bindings runs over the text protocol
-    var plain = try database.prepare("SELECT id, name FROM users ORDER BY id");
+    var plain = try database.prepare("SELECT id, name FROM users ORDER BY id", .{});
     defer plain.deinit();
     const text_rows = try plain.all(a, .{});
     try t.expectEqual(@as(usize, 2), text_rows.len);
@@ -191,7 +191,7 @@ test "api > iterate drained and abandoned" {
     var database = try openTestDatabase();
     defer database.deinit();
 
-    var stmt = try database.prepare("SELECT n FROM (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) x WHERE n > ?");
+    var stmt = try database.prepare("SELECT n FROM (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) x WHERE n > ?", .{});
     defer stmt.deinit();
 
     var it = try stmt.iterate(.{0});
@@ -214,7 +214,7 @@ test "api > iterate drained and abandoned" {
 test "api > iterate formats dates per row" {
     var database = try openTestDatabase();
     defer database.deinit();
-    var stmt = try database.prepare("SELECT CAST('2024-01-05' AS DATE) AS d, CAST(18446744073709551615 AS UNSIGNED) - n AS big FROM (SELECT 1 AS n UNION ALL SELECT 2) x WHERE n > ?");
+    var stmt = try database.prepare("SELECT CAST('2024-01-05' AS DATE) AS d, CAST(18446744073709551615 AS UNSIGNED) - n AS big FROM (SELECT 1 AS n UNION ALL SELECT 2) x WHERE n > ?", .{});
     defer stmt.deinit();
     var it = try stmt.iterate(.{0});
     defer it.deinit();
@@ -245,14 +245,14 @@ fn countUsers(database: Db) !i64 {
 test "api > transaction commit and rollback" {
     var database = try openSeeded();
     defer database.deinit();
-    try t.expectError(error.Boom, database.transaction({}, insertThenFail));
+    try t.expectError(error.Boom, database.transaction(.{}, {}, insertThenFail));
     try t.expectEqual(@as(i64, 2), try countUsers(database));
 
-    try database.transactionWith(.immediate, {}, insertOk);
+    try database.transaction(.{ .mode = .immediate }, {}, insertOk);
     try t.expectEqual(@as(i64, 3), try countUsers(database));
 
     // "Committed" exists now; the failed statement rolls the serializable transaction back
-    try t.expectError(error.ConstraintUnique, database.transactionWith(.exclusive, {}, insertOk));
+    try t.expectError(error.ConstraintUnique, database.transaction(.{ .mode = .exclusive }, {}, insertOk));
     try t.expectEqual(@as(i64, 3), try countUsers(database));
 }
 
@@ -263,7 +263,7 @@ test "api > errors map to shared names" {
     try t.expectError(error.ConstraintUnique, database.run("INSERT INTO users (name, score) VALUES (?, ?)", .{ "Ada", 1.0 }));
     try t.expectError(error.ConstraintNotNull, database.run("INSERT INTO users (name, score) VALUES (?, NULL)", .{"X"}));
     // prepare is lazy; the error surfaces on first execution or metadata access
-    var bad = try database.prepare("SELECT FROM nowhere_table");
+    var bad = try database.prepare("SELECT FROM nowhere_table", .{});
     defer bad.deinit();
     try t.expectError(error.InvalidQuery, bad.columnNames());
     try t.expectError(error.InvalidQuery, bad.all(t.allocator, .{}));
@@ -417,7 +417,7 @@ test "api > statement cache is bounded and can be disabled" {
         var database = try Mysql.open(t.allocator, t.io, url, .{ .max_pool_size = 1 });
         defer database.deinit();
         for (0..3) |_| _ = try database.run("SELECT ? AS v", .{1});
-        var stmt = try database.prepare("SELECT ? AS v, 1 AS w");
+        var stmt = try database.prepare("SELECT ? AS v, 1 AS w", .{});
         defer stmt.deinit();
         try t.expectEqual(@as(usize, 2), (try stmt.columnNames()).len);
         try t.expectEqual(@as(i64, 0), try preparedCount(database));

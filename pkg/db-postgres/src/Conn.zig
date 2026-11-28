@@ -25,6 +25,8 @@ w: protocol.Writer,
 tx_status: u8 = 'I',
 broken: bool = false,
 pending_error: ?anyerror = null,
+// Last ErrorResponse, handed to the caller's `Db.Diagnostics` on release
+last_error: ?LastError = null,
 
 // Named prepared statements, keyed by param OIDs + SQL; LRU-evicted at `cache_cap`.
 cache: std.StringHashMapUnmanaged(CacheEntry) = .empty,
@@ -334,7 +336,22 @@ fn protocolViolation(self: *Conn) anyerror {
     return error.ProtocolViolation;
 }
 
-/// Map an ErrorResponse onto the error names shared with the SQLite backend.
+pub const LastError = struct {
+    offset: ?usize,
+    len: usize,
+    buf: [512]u8,
+
+    fn init(msg: []const u8, offset: ?usize) LastError {
+        var e: LastError = .{ .offset = offset, .len = @min(msg.len, 512), .buf = undefined };
+        @memcpy(e.buf[0..e.len], msg[0..e.len]);
+        return e;
+    }
+
+    pub fn message(self: *const LastError) []const u8 {
+        return self.buf[0..self.len];
+    }
+};
+
 fn serverError(self: *Conn, body: []const u8) anyerror {
     const fields = protocol.ErrorFields.decode(body) catch return self.protocolViolation();
     log.debug("{s} {s}: {s}{s}{s}", .{
@@ -344,6 +361,15 @@ fn serverError(self: *Conn, body: []const u8) anyerror {
         if (fields.detail.len > 0) " - " else "",
         fields.detail,
     });
+    const err = self.classify(fields);
+    const position = std.fmt.parseInt(usize, fields.position, 10) catch 0;
+    // a stale statement is retried transparently; it's not the caller's error
+    if (err != error.StaleStatement) self.last_error = .init(fields.message, if (position > 0) position - 1 else null);
+    return err;
+}
+
+// Map an ErrorResponse onto the error names shared with the SQLite backend.
+fn classify(self: *Conn, fields: protocol.ErrorFields) anyerror {
     const code = fields.code;
     // statement gone (e.g. DEALLOCATE ALL), or its result type changed after DDL
     if (self.batch_hit and (std.mem.eql(u8, code, "26000") or

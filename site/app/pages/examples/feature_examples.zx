@@ -1081,7 +1081,7 @@ pub fn Learn__DbTransaction(ctx: zx.PageContext) !zx.Component {
     , .empty);
     _ = try zx.db.run("INSERT OR REPLACE INTO accounts (id, balance) VALUES (1, 100), (2, 100)", .empty);
 
-    try zx.db.transaction({}, transfer);
+    try zx.db.transaction(.{}, {}, transfer);
 
     const accounts = try zx.db.rows(ctx.arena, Account, "SELECT id, balance FROM accounts ORDER BY id", .{});
 

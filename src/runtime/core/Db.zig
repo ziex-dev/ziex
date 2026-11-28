@@ -37,6 +37,10 @@ pub const TransactionMode = enum {
     exclusive,
 };
 
+pub const TransactionOptions = struct {
+    mode: TransactionMode = .deferred,
+};
+
 pub const ColumnType = enum {
     integer,
     float,
@@ -195,10 +199,33 @@ pub const RunResult = struct {
     changes: usize = 0,
 };
 
+// Filled by a failed statement: the database's own message, e.g. `Unknown column 'age' in
+// 'field list'`, and the byte offset in the SQL it points at, when the backend reports one.
+pub const Diagnostics = struct {
+    buf: [512]u8 = undefined,
+    len: usize = 0,
+    offset: ?usize = null,
+
+    pub fn message(self: *const Diagnostics) ?[]const u8 {
+        return if (self.len == 0) null else self.buf[0..self.len];
+    }
+
+    pub fn set(self: *Diagnostics, msg: []const u8, offset: ?usize) void {
+        self.len = @min(msg.len, self.buf.len);
+        @memcpy(self.buf[0..self.len], msg[0..self.len]);
+        self.offset = offset;
+    }
+};
+
+pub const PrepareOptions = struct {
+    // Must outlive the statement; every failed call on it reports here.
+    diagnostics: ?*Diagnostics = null,
+};
+
 pub const TransactionCallback = *const fn (ctx: *anyopaque, db: *Db) anyerror!void;
 
 pub const VTable = struct {
-    prepare: *const fn (userdata: ?*anyopaque, sql: []const u8) anyerror!Statement,
+    prepare: *const fn (userdata: ?*anyopaque, sql: []const u8, diagnostics: ?*Diagnostics) anyerror!Statement,
     run: *const fn (userdata: ?*anyopaque, sql: []const u8, bindings: Bindings) anyerror!RunResult,
     transaction: *const fn (userdata: ?*anyopaque, mode: TransactionMode, cb_ctx: *anyopaque, cb: TransactionCallback) anyerror!void,
     close: *const fn (userdata: ?*anyopaque, throw_on_error: bool) anyerror!void,
@@ -214,8 +241,8 @@ pub const VTable = struct {
     stmtParamCount: *const fn (stmt: ?*anyopaque) anyerror!usize,
 };
 
-pub fn prepare(self: Db, sql: []const u8) !Statement {
-    return self.vtable.prepare(self.userdata, sql);
+pub fn prepare(self: Db, sql: []const u8, options: PrepareOptions) !Statement {
+    return self.vtable.prepare(self.userdata, sql, options.diagnostics);
 }
 
 /// Execute a statement that returns no rows (INSERT/UPDATE/DELETE/DDL).
@@ -228,37 +255,33 @@ pub fn run(self: Db, sql: []const u8, args: anytype) !RunResult {
 
 /// Prepare `sql` and fetch the first row (or null)
 pub fn get(self: Db, allocator: std.mem.Allocator, sql: []const u8, args: anytype) !?Row {
-    var statement = try self.prepare(sql);
+    var statement = try self.prepare(sql, .{});
     defer statement.deinit();
     return statement.get(allocator, args);
 }
 
 /// Prepare `sql` and fetch all rows
 pub fn all(self: Db, allocator: std.mem.Allocator, sql: []const u8, args: anytype) ![]const Row {
-    var statement = try self.prepare(sql);
+    var statement = try self.prepare(sql, .{});
     defer statement.deinit();
     return statement.all(allocator, args);
 }
 
 /// Prepare `sql` and fetch the first row into `T` (or null)
 pub fn row(self: Db, allocator: std.mem.Allocator, comptime T: type, sql: []const u8, args: anytype) !?T {
-    var statement = try self.prepare(sql);
+    var statement = try self.prepare(sql, .{});
     defer statement.deinit();
     return statement.row(allocator, T, args);
 }
 
 /// Prepare `sql` and fetch all rows into `[]T`
 pub fn rows(self: Db, allocator: std.mem.Allocator, comptime T: type, sql: []const u8, args: anytype) ![]const T {
-    var statement = try self.prepare(sql);
+    var statement = try self.prepare(sql, .{});
     defer statement.deinit();
     return statement.rows(allocator, T, args);
 }
 
-pub fn transaction(self: Db, ctx: anytype, comptime cb: fn (@TypeOf(ctx), Db) anyerror!void) !void {
-    return self.transactionWith(.deferred, ctx, cb);
-}
-
-pub fn transactionWith(self: Db, mode: TransactionMode, ctx: anytype, comptime cb: fn (@TypeOf(ctx), Db) anyerror!void) !void {
+pub fn transaction(self: Db, options: TransactionOptions, ctx: anytype, comptime cb: fn (@TypeOf(ctx), Db) anyerror!void) !void {
     const Ctx = @TypeOf(ctx);
     const Trampoline = struct {
         fn call(raw_ctx: *anyopaque, handle: *Db) anyerror!void {
@@ -267,7 +290,7 @@ pub fn transactionWith(self: Db, mode: TransactionMode, ctx: anytype, comptime c
         }
     };
     var ctx_copy = ctx;
-    return self.vtable.transaction(self.userdata, mode, @ptrCast(&ctx_copy), &Trampoline.call);
+    return self.vtable.transaction(self.userdata, options.mode, @ptrCast(&ctx_copy), &Trampoline.call);
 }
 
 /// Like `deinit`, but returns the error if closing fails.
@@ -470,7 +493,7 @@ fn valueToType(comptime T: type, value: Value) !T {
     };
 }
 
-fn failingPrepare(_: ?*anyopaque, _: []const u8) anyerror!Statement {
+fn failingPrepare(_: ?*anyopaque, _: []const u8, _: ?*Diagnostics) anyerror!Statement {
     return Error.Closed;
 }
 fn failingRun(_: ?*anyopaque, _: []const u8, _: Bindings) anyerror!RunResult {

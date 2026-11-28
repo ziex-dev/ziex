@@ -33,3 +33,6 @@ export const csrBenchPath = isCsrBenchServer ? '/' : '/bench';
 
 /** Site served by workerd (`E2E_RUNTIME=edge`) rather than the native dev server. */
 export const isEdgeRuntime = process.env.E2E_RUNTIME === 'edge';
+
+/** Postgres/MySQL examples need `POSTGRES_URL`/`MYSQL_URL`; their specs run only with `E2E_EXTERNAL_DB=1`. */
+export const withExternalDb = !!process.env.E2E_EXTERNAL_DB;

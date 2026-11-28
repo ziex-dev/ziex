@@ -28,6 +28,8 @@ caps: u32 = 0,
 /// Server status flags from the last OK/EOF packet; see `inTransaction`.
 status: u16 = 0,
 broken: bool = false,
+// Last ERR packet, handed to the caller's `Db.Diagnostics` on release
+last_error: ?LastError = null,
 state: State = .idle,
 /// Rows of the current result set use the binary protocol (prepared statements).
 binary: bool = false,
@@ -420,6 +422,22 @@ pub fn classify(code: u16, sqlstate: []const u8) anyerror {
     };
 }
 
+pub const LastError = struct {
+    offset: ?usize,
+    len: usize,
+    buf: [512]u8,
+
+    fn init(msg: []const u8, offset: ?usize) LastError {
+        var e: LastError = .{ .offset = offset, .len = @min(msg.len, 512), .buf = undefined };
+        @memcpy(e.buf[0..e.len], msg[0..e.len]);
+        return e;
+    }
+
+    pub fn message(self: *const LastError) []const u8 {
+        return self.buf[0..self.len];
+    }
+};
+
 /// ERR packet in command phase: the command is over and the connection stays in sync.
 fn serverError(self: *Conn, body: []const u8) anyerror {
     const err = protocol.decodeErr(body) catch return self.protocolViolation();
@@ -429,6 +447,8 @@ fn serverError(self: *Conn, body: []const u8) anyerror {
     if (self.batch_hit and (err.code == 1243 or err.code == 1615)) return error.StaleStatement;
     const mapped = classify(err.code, err.sqlstate);
     if (mapped == error.Closed) self.broken = true;
+    // MySQL reports no position; the message usually quotes the offending text
+    self.last_error = .init(err.message, null);
     return mapped;
 }
 

@@ -1,11 +1,16 @@
 const std = @import("std");
 const zx = @import("zx");
-const studio = @import("../studio_lib.zig");
+const studio = @import("../../studio_lib.zig");
 
-pub const Result = studio.Result;
-pub const title = "D1 Studio";
-pub const subtitle = "zx.Db.Wasm (Cloudflare D1) over a server action. Press Ctrl/⌘+Enter to run.";
-pub const input_id = "d1-input";
+pub const title = "SQLite Studio (server)";
+pub const subtitle = "zx.Db.Wasm (Cloudflare D1) on wasi, zx.Db.Sqlite natively, over server events.";
+pub const input_id = "sqlite-server-input";
+pub const schema_sql =
+    \\SELECT m.name AS tbl, p.name AS col, p.type AS type, NOT p."notnull" AS nullable, p.pk > 0 AS pk
+    \\FROM sqlite_master m JOIN pragma_table_info(m.name) p
+    \\WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND m.name NOT LIKE '\_cf\_%' ESCAPE '\'
+    \\ORDER BY m.name, p.cid
+;
 
 var mu: std.Io.Mutex = .init;
 var cached: ?zx.Db = null;
@@ -19,22 +24,19 @@ pub fn selectTable(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
     return gpa.print("SELECT * FROM \"{s}\" LIMIT 100;", .{name});
 }
 
-pub fn bootstrap(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) ![]const []const u8 {
-    var database = try open(gpa, io);
-    return tables(arena, &database);
+// D1 prepares lazily, so ask SQLite to compile the statement via EXPLAIN without running it.
+pub fn check(database: *zx.Db, arena: std.mem.Allocator, sql: []const u8, diagnostics: *zx.Db.Diagnostics) ?anyerror {
+    if (comptime zx.platform.os != .wasi) return studio.check(database, arena, sql, diagnostics);
+    const explain = arena.print("EXPLAIN {s}", .{sql}) catch |err| return err;
+    var stmt = database.prepare(explain, .{ .diagnostics = diagnostics }) catch |err| return err;
+    defer stmt.deinit();
+    _ = stmt.all(arena, .empty) catch |err| return err;
+    return null;
 }
 
-pub fn exec(gpa: std.mem.Allocator, io: std.Io, sql: []const u8) Result {
-    var database = open(gpa, io) catch |err| return .{ .err = @errorName(err) };
-    return studio.exec(&database, gpa, sql);
-}
+const persistent = studio.persistent;
 
-pub fn listTables(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) ![]const []const u8 {
-    var database = try open(gpa, io);
-    return tables(arena, &database);
-}
-
-fn open(gpa: std.mem.Allocator, io: std.Io) !zx.Db {
+pub fn open(io: std.Io) !zx.Db {
     if (comptime !zx.platform.isServer()) return error.Unsupported;
 
     try mu.lock(io);
@@ -42,9 +44,9 @@ fn open(gpa: std.mem.Allocator, io: std.Io) !zx.Db {
 
     var database = cached orelse blk: {
         var database: zx.Db = if (comptime zx.platform.os == .wasi)
-            try zx.Db.Wasm.open(gpa, io, "studio", .{})
+            try zx.Db.Wasm.open(persistent, io, "studio", .{})
         else
-            try zx.Db.Sqlite.open(gpa, io, ":memory:", .{});
+            try zx.Db.Sqlite.open(persistent, io, ":memory:", .{});
         try seed(&database);
         cached = database;
         break :blk database;
@@ -53,7 +55,7 @@ fn open(gpa: std.mem.Allocator, io: std.Io) !zx.Db {
     const now: i64 = @intCast(@divFloor(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
     if (now >= next_check) {
         next_check = now + check_every_s;
-        maybeReset(gpa, &database) catch |err| std.log.warn("d1 studio reset failed: {t}", .{err});
+        maybeReset(persistent, &database) catch |err| std.log.warn("d1 studio reset failed: {t}", .{err});
     }
     return database;
 }
@@ -97,15 +99,4 @@ fn seed(database: *zx.Db) !void {
         \\  (2, 'Linus', 'linus@example.com'),
         \\  (3, 'Grace', 'grace@example.com')
     , .empty);
-}
-
-fn tables(gpa: std.mem.Allocator, database: *zx.Db) ![]const []const u8 {
-    const rows = try database.all(gpa,
-        \\SELECT name FROM sqlite_master
-        \\WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-        \\ORDER BY name
-    , .empty);
-    const out = try gpa.alloc([]const u8, rows.len);
-    for (rows, out) |row, *name| name.* = try gpa.dupe(u8, row.text("name"));
-    return out;
 }

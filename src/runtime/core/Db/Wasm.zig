@@ -8,10 +8,21 @@ const host = @import("../../wasm/imports.zig");
 binding_name: []u8,
 allocator: std.mem.Allocator,
 
+const Query = struct {
+    binding_name: []const u8,
+    sql: []const u8,
+    diagnostics: ?*Db.Diagnostics = null,
+};
+
 const StatementCtx = struct {
     binding_name: []u8,
     sql: []u8,
+    diagnostics: ?*Db.Diagnostics,
     allocator: std.mem.Allocator,
+
+    fn query(self: *const StatementCtx) Query {
+        return .{ .binding_name = self.binding_name, .sql = self.sql, .diagnostics = self.diagnostics };
+    }
 
     fn deinit(self: *StatementCtx) void {
         self.allocator.free(self.binding_name);
@@ -52,7 +63,7 @@ fn deinitState(self: *Wasm) void {
     self.allocator.free(self.binding_name);
 }
 
-fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
+fn prepare(ud: ?*anyopaque, sql: []const u8, diagnostics: ?*Db.Diagnostics) !Db.Statement {
     const self: *Wasm = @ptrCast(@alignCast(ud));
     const allocator = self.allocator;
 
@@ -62,6 +73,7 @@ fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
     statement_ctx.* = .{
         .binding_name = try allocator.dupe(u8, self.binding_name),
         .sql = try allocator.dupe(u8, sql),
+        .diagnostics = diagnostics,
         .allocator = allocator,
     };
 
@@ -73,7 +85,7 @@ fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
 
 fn run(ud: ?*anyopaque, sql: []const u8, bindings: Db.Bindings) !Db.RunResult {
     const self: *Wasm = @ptrCast(@alignCast(ud));
-    return runQuery(self.binding_name, sql, bindings);
+    return runQuery(.{ .binding_name = self.binding_name, .sql = sql }, bindings);
 }
 
 fn transaction(_: ?*anyopaque, _: Db.TransactionMode, _: *anyopaque, _: Db.TransactionCallback) !void {
@@ -89,12 +101,12 @@ fn close(ud: ?*anyopaque, _: bool) !void {
 
 fn all(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) ![]const Db.Row {
     const statement_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-    return selectRows(allocator, .db_all, statement_ctx.binding_name, statement_ctx.sql, bindings);
+    return selectRows(allocator, .db_all, statement_ctx.query(), bindings);
 }
 
 fn get(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) !?Db.Row {
     const statement_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-    const rows = try selectRows(allocator, .db_get, statement_ctx.binding_name, statement_ctx.sql, bindings);
+    const rows = try selectRows(allocator, .db_get, statement_ctx.query(), bindings);
     if (rows.len == 0) {
         allocator.free(rows);
         return null;
@@ -106,12 +118,12 @@ fn get(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) !?D
 
 fn runStatement(ud: ?*anyopaque, bindings: Db.Bindings) !Db.RunResult {
     const statement_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-    return runQuery(statement_ctx.binding_name, statement_ctx.sql, bindings);
+    return runQuery(statement_ctx.query(), bindings);
 }
 
 fn values(ud: ?*anyopaque, allocator: std.mem.Allocator, bindings: Db.Bindings) ![]const []const Db.Value {
     const statement_ctx: *StatementCtx = @ptrCast(@alignCast(ud));
-    return selectValues(allocator, statement_ctx.binding_name, statement_ctx.sql, bindings);
+    return selectValues(allocator, statement_ctx.query(), bindings);
 }
 
 fn iterate(_: ?*anyopaque, _: Db.Bindings) !Db.Statement.Iterator {
@@ -166,14 +178,20 @@ fn cloneValue(allocator: std.mem.Allocator, v: Wire.Value) !Db.Value {
     };
 }
 
-fn callHost(comptime op: host.Op, binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) !?HostBytes {
+fn callHost(comptime op: host.Op, q: Query, bindings: Db.Bindings) !?HostBytes {
     var bindings_buf = std.Io.Writer.Allocating.init(std.heap.wasm_allocator);
     defer bindings_buf.deinit();
     try encodeBindings(&bindings_buf.writer, bindings);
     const bindings_bytes = bindings_buf.written();
 
     var ptr: [*]u8 = undefined;
-    const n = host.wait(op, .{ binding_name, sql, bindings_bytes, &ptr });
+    const n = host.wait(op, .{ q.binding_name, q.sql, bindings_bytes, &ptr });
+    // `-2 - len`: the query failed and the host wrote its message (len bytes) to `ptr`
+    if (n <= -2) {
+        const message = ptr[0..@intCast(-2 - n)];
+        defer if (message.len > 0) std.heap.wasm_allocator.free(message);
+        if (q.diagnostics) |d| d.set(message, null);
+    }
     if (n < 0) return error.QueryFailed;
     if (n == 0) return null;
     return .{ .bytes = ptr[0..@intCast(n)] };
@@ -186,8 +204,8 @@ fn mapWire(err: anyerror) anyerror {
     };
 }
 
-fn runQuery(binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) !Db.RunResult {
-    const result = callHost(.db_run, binding_name, sql, bindings) catch |err| switch (err) {
+fn runQuery(q: Query, bindings: Db.Bindings) !Db.RunResult {
+    const result = callHost(.db_run, q, bindings) catch |err| switch (err) {
         error.QueryFailed => return error.RunFailed,
         else => |e| return e,
     };
@@ -209,11 +227,10 @@ fn freeRowValues(allocator: std.mem.Allocator, fields: []const Db.Field) void {
 fn selectRows(
     allocator: std.mem.Allocator,
     comptime op: host.Op,
-    binding_name: []const u8,
-    sql: []const u8,
+    q: Query,
     bindings: Db.Bindings,
 ) ![]const Db.Row {
-    const payload = try callHost(op, binding_name, sql, bindings) orelse return &.{};
+    const payload = try callHost(op, q, bindings) orelse return &.{};
     defer payload.free();
 
     var arena_state = std.heap.ArenaAllocator.init(std.heap.wasm_allocator);
@@ -260,8 +277,8 @@ fn selectRows(
     return rows;
 }
 
-fn selectValues(allocator: std.mem.Allocator, binding_name: []const u8, sql: []const u8, bindings: Db.Bindings) ![]const []const Db.Value {
-    const payload = try callHost(.db_values, binding_name, sql, bindings) orelse return &.{};
+fn selectValues(allocator: std.mem.Allocator, q: Query, bindings: Db.Bindings) ![]const []const Db.Value {
+    const payload = try callHost(.db_values, q, bindings) orelse return &.{};
     defer payload.free();
 
     var arena_state = std.heap.ArenaAllocator.init(std.heap.wasm_allocator);

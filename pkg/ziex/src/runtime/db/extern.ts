@@ -89,10 +89,22 @@ export function createDbHandlers(
         return { db_open: fail, db_run: fail, db_get: fail, db_all: fail, db_values: fail };
     }
 
+    // A thrown query error returns `-2 - len` with its message written to `out_ptr`.
+    type Handler = (...args: number[]) => Promise<number>;
+    const guarded = (fn: Handler): Handler => async (...args) => {
+        try {
+            return await fn(...args);
+        } catch (e) {
+            const message = new TextEncoder().encode(e instanceof Error ? e.message : String(e));
+            const n = writeBytesOut(getMemory, allocRef, args[6]!, message);
+            return n < 0 ? -1 : -2 - n;
+        }
+    };
+
     return {
         db_open: (ns_ptr, ns_len) => binding(readStr(ns_ptr, ns_len)) ? 0 : -1,
 
-        db_run: async (
+        db_run: guarded(async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -107,9 +119,9 @@ export function createDbHandlers(
                 out_ptr,
                 encodeRun(result.meta?.last_row_id ?? 0, result.meta?.changes ?? 0),
             );
-        },
+        }),
 
-        db_get: async (
+        db_get: guarded(async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -123,9 +135,9 @@ export function createDbHandlers(
                 return 0;
             }
             return writeBytesOut(getMemory, allocRef, out_ptr, encodeTableFromRecord(row));
-        },
+        }),
 
-        db_all: async (
+        db_all: guarded(async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -152,9 +164,9 @@ export function createDbHandlers(
                 const rows = records.map((record) => columns.map((col) => record[col]));
                 return writeBytesOut(getMemory, allocRef, out_ptr, encodeTable(columns, rows));
             }
-        },
+        }),
 
-        db_values: async (
+        db_values: guarded(async (
             ns_ptr: number, ns_len: number,
             sql_ptr: number, sql_len: number,
             bindings_ptr: number, bindings_len: number,
@@ -168,6 +180,6 @@ export function createDbHandlers(
                 return 0;
             }
             return writeBytesOut(getMemory, allocRef, out_ptr, encodeValues(rows as unknown[][]));
-        },
+        }),
     };
 }

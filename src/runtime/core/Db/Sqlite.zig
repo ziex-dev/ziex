@@ -113,6 +113,14 @@ const Stmt = struct {
     }
 };
 
+// The error `conn`'s last call left, if any.
+fn report(conn: Conn, diagnostics: *Db.Diagnostics) void {
+    const rc = c.sqlite3_errcode(conn.ptr);
+    if (rc == c.SQLITE_OK or rc == c.SQLITE_ROW or rc == c.SQLITE_DONE) return;
+    const offset = c.sqlite3_error_offset(conn.ptr);
+    diagnostics.set(std.mem.span(c.sqlite3_errmsg(conn.ptr)), if (offset >= 0) @intCast(offset) else null);
+}
+
 const Pool = struct {
     conns: []Conn,
     available: usize,
@@ -194,10 +202,10 @@ fn deinitState(self: *Sqlite) void {
     self.allocator.free(self.path);
 }
 
-fn acquire(self: *Sqlite) !BorrowedConn {
+fn acquire(self: *Sqlite, diagnostics: ?*Db.Diagnostics) !BorrowedConn {
     return switch (self.mode) {
-        .single => .{ .conn = self.conn orelse return Db.Error.InvalidState, .io = self.io },
-        .pooled => .{ .conn = try (self.pool orelse return Db.Error.InvalidState).acquire(self.io), .io = self.io, .pool = self.pool },
+        .single => .{ .conn = self.conn orelse return Db.Error.InvalidState, .io = self.io, .diagnostics = diagnostics },
+        .pooled => .{ .conn = try (self.pool orelse return Db.Error.InvalidState).acquire(self.io), .io = self.io, .pool = self.pool, .diagnostics = diagnostics },
     };
 }
 
@@ -205,8 +213,10 @@ const BorrowedConn = struct {
     conn: Conn,
     io: std.Io,
     pool: ?*Pool = null,
+    diagnostics: ?*Db.Diagnostics = null,
 
     fn deinit(self: *BorrowedConn) void {
+        if (self.diagnostics) |d| report(self.conn, d);
         if (self.pool) |pool| pool.release(self.io, self.conn);
     }
 };
@@ -225,6 +235,7 @@ const StatementCtx = struct {
     allocator: std.mem.Allocator,
     db_ctx: *Sqlite,
     sql: []u8,
+    diagnostics: ?*Db.Diagnostics,
     prototype: ?Stmt = null,
     column_names: [][]const u8,
     column_types: []Db.ColumnType,
@@ -414,7 +425,7 @@ fn deserializeState(allocator: std.mem.Allocator, io: std.Io, bytes: []const u8,
 
 // --- Connection vtable impls --- //
 
-fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
+fn prepare(ud: ?*anyopaque, sql: []const u8, diagnostics: ?*Db.Diagnostics) !Db.Statement {
     const db_ctx: *Sqlite = @ptrCast(@alignCast(ud));
     const allocator = db_ctx.allocator;
 
@@ -424,7 +435,7 @@ fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
     const sql_copy = try allocator.dupe(u8, sql);
     errdefer allocator.free(sql_copy);
 
-    var borrowed = try db_ctx.acquire();
+    var borrowed = try db_ctx.acquire(diagnostics);
     defer borrowed.deinit();
 
     const prepared = try borrowed.conn.prepare(sql_copy);
@@ -437,6 +448,7 @@ fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
         .allocator = allocator,
         .db_ctx = db_ctx,
         .sql = sql_copy,
+        .diagnostics = diagnostics,
         .prototype = if (db_ctx.mode == .single) prepared else null,
         .column_names = meta.column_names,
         .column_types = meta.column_types,
@@ -454,7 +466,7 @@ fn prepare(ud: ?*anyopaque, sql: []const u8) !Db.Statement {
 
 fn run(ud: ?*anyopaque, sql: []const u8, bindings: Db.Bindings) !Db.RunResult {
     const db_ctx: *Sqlite = @ptrCast(@alignCast(ud));
-    var borrowed = try db_ctx.acquire();
+    var borrowed = try db_ctx.acquire(null);
     defer borrowed.deinit();
 
     var stmt = try borrowed.conn.prepare(sql);
@@ -470,7 +482,7 @@ fn run(ud: ?*anyopaque, sql: []const u8, bindings: Db.Bindings) !Db.RunResult {
 
 fn transaction(ud: ?*anyopaque, mode: Db.TransactionMode, callback_ctx: *anyopaque, callback: Db.TransactionCallback) !void {
     const db_ctx: *Sqlite = @ptrCast(@alignCast(ud));
-    var borrowed = try db_ctx.acquire();
+    var borrowed = try db_ctx.acquire(null);
     defer borrowed.deinit();
 
     try switch (mode) {
@@ -519,7 +531,7 @@ fn close(ud: ?*anyopaque, _: bool) !void {
 /// Serialize the database to an in-memory image (SQLite `sqlite3_serialize`).
 /// SQLite-only.
 pub fn serialize(self: *Sqlite, allocator: std.mem.Allocator) ![]u8 {
-    var borrowed = try self.acquire();
+    var borrowed = try self.acquire(null);
     defer borrowed.deinit();
 
     var size: c.sqlite3_int64 = 0;
@@ -542,7 +554,7 @@ pub fn loadExtension(_: *Sqlite, _: []const u8, _: ?[]const u8) !void {
 
 /// Invoke `sqlite3_file_control`. SQLite-only.
 pub fn fileControl(self: *Sqlite, cmd: i32, value: FileControlValue) !void {
-    var borrowed = try self.acquire();
+    var borrowed = try self.acquire(null);
     defer borrowed.deinit();
 
     switch (value) {
@@ -757,7 +769,7 @@ fn freeStatementMeta(allocator: std.mem.Allocator, meta: StatementMeta) void {
 }
 
 fn prepareBoundStatement(stmt_ctx: *StatementCtx, bindings: Db.Bindings) !PreparedExec {
-    var borrowed = try stmt_ctx.db_ctx.acquire();
+    var borrowed = try stmt_ctx.db_ctx.acquire(stmt_ctx.diagnostics);
     errdefer borrowed.deinit();
 
     const stmt = try borrowed.conn.prepare(stmt_ctx.sql);

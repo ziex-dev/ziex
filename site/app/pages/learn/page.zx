@@ -822,9 +822,9 @@ fn Database(allocator: zx.Allocator, props: DatabaseProps) zx.Component {
             <CodeBlock code={props.db_typed} />
 
             <h3>Transactions</h3>
-            <p>Run multiple statements atomically with <code>zx.db.transaction</code>. It takes a context value and a callback that receives that value plus a <code>zx.Db</code> handle:</p>
+            <p>Run multiple statements atomically with <code>zx.db.transaction</code>. It takes options, a context value and a callback that receives that value plus a <code>zx.Db</code> handle:</p>
             <CodeBlock code={props.db_transaction} />
-            <p>If the callback returns an error, the transaction rolls back. Use <code>zx.db.transactionWith</code> to pick an explicit mode (<code>.deferred</code>, <code>.immediate</code>, or <code>.exclusive</code>).</p>
+            <p>If the callback returns an error, the transaction rolls back. Set <code>.mode</code> in the options to pick <code>.deferred</code> (the default), <code>.immediate</code>, or <code>.exclusive</code>.</p>
 
             <div class="callout note">
                 <strong>Backends:</strong>{" "}Ziex uses SQLite on native platforms and Cloudflare D1 on Workers. The same <code>zx.db</code>{" "}API works across both.

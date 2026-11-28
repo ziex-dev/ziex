@@ -47,7 +47,7 @@ test "api > statement get/all/values and metadata" {
     var database = try openSeeded();
     defer database.deinit();
 
-    var stmt = try database.prepare("SELECT id, name, score FROM users WHERE score > $1 ORDER BY id");
+    var stmt = try database.prepare("SELECT id, name, score FROM users WHERE score > $1 ORDER BY id", .{});
     defer stmt.deinit();
     try t.expectEqual(@as(usize, 1), try stmt.paramCount());
     try t.expectEqualStrings("name", (try stmt.columnNames())[1]);
@@ -116,7 +116,7 @@ test "api > iterate drained and abandoned" {
     var database = try openTestDatabase();
     defer database.deinit();
 
-    var stmt = try database.prepare("SELECT g FROM generate_series(1, 5) AS g");
+    var stmt = try database.prepare("SELECT g FROM generate_series(1, 5) AS g", .{});
     defer stmt.deinit();
 
     var it = try stmt.iterate(.{});
@@ -154,10 +154,10 @@ fn countUsers(database: Db) !i64 {
 test "api > transaction commit and rollback" {
     var database = try openSeeded();
     defer database.deinit();
-    try t.expectError(error.Boom, database.transaction({}, insertThenFail));
+    try t.expectError(error.Boom, database.transaction(.{}, {}, insertThenFail));
     try t.expectEqual(@as(i64, 2), try countUsers(database));
 
-    try database.transactionWith(.immediate, {}, insertOk);
+    try database.transaction(.{ .mode = .immediate }, {}, insertOk);
     try t.expectEqual(@as(i64, 3), try countUsers(database));
 }
 
@@ -168,7 +168,7 @@ test "api > errors map to shared names" {
     try t.expectError(error.ConstraintUnique, database.run("INSERT INTO users (name, score) VALUES ($1, $2)", .{ "Ada", 1.0 }));
     try t.expectError(error.ConstraintNotNull, database.run("INSERT INTO users (name, score) VALUES ($1, NULL)", .{"X"}));
     // prepare is lazy on Postgres; the error surfaces on first execution or metadata access
-    var bad = try database.prepare("SELECT FROM nowhere_table");
+    var bad = try database.prepare("SELECT FROM nowhere_table", .{});
     defer bad.deinit();
     try t.expectError(error.InvalidQuery, bad.columnNames());
     try t.expectError(error.InvalidQuery, bad.all(t.allocator, .{}));
@@ -251,7 +251,7 @@ fn preparedCount(database: Db) !i64 {
     var arena: std.heap.ArenaAllocator = .init(t.allocator);
     defer arena.deinit();
     // with caching on, this query is itself one of the cached statements
-    var stmt = try database.prepare("SELECT count(*) AS n FROM pg_prepared_statements");
+    var stmt = try database.prepare("SELECT count(*) AS n FROM pg_prepared_statements", .{});
     defer stmt.deinit();
     return (try stmt.get(arena.allocator(), .{})).?.int("n");
 }
@@ -334,7 +334,7 @@ test "api > cached (binary) results match the first (text) result" {
     try t.expectEqualStrings("1.5", first.text("num"));
 
     // iterator rows (borrowed, binary on hits) agree too
-    var stmt = try database.prepare(sql);
+    var stmt = try database.prepare(sql, .{});
     defer stmt.deinit();
     for (0..2) |_| {
         var it = try stmt.iterate(args);

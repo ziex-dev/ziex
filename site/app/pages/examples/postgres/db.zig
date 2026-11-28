@@ -3,10 +3,23 @@ const std = @import("std");
 const zx = @import("zx");
 const studio = @import("../studio_lib.zig");
 
-pub const Result = studio.Result;
 pub const title = "Postgres Studio";
-pub const subtitle = "zx.Db.Postgres over a server action. Press Ctrl/⌘+Enter to run.";
+pub const subtitle = "zx.Db.Postgres over server events.";
 pub const input_id = "postgres-input";
+pub const check = studio.check;
+pub const schema_sql =
+    \\SELECT c.table_name::text AS tbl, c.column_name::text AS col, c.data_type::text AS type,
+    \\  c.is_nullable = 'YES' AS nullable,
+    \\  EXISTS (
+    \\    SELECT 1 FROM information_schema.table_constraints t
+    \\    JOIN information_schema.key_column_usage k USING (constraint_schema, constraint_name)
+    \\    WHERE t.constraint_type = 'PRIMARY KEY' AND k.table_schema = c.table_schema
+    \\      AND k.table_name = c.table_name AND k.column_name = c.column_name
+    \\  ) AS pk
+    \\FROM information_schema.columns c
+    \\WHERE c.table_schema = 'public'
+    \\ORDER BY c.table_name, c.ordinal_position
+;
 
 var mu: std.Io.Mutex = .init;
 var cached: ?zx.Db = null;
@@ -15,32 +28,20 @@ pub fn selectTable(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
     return gpa.print("SELECT * FROM \"{s}\" LIMIT 100;", .{name});
 }
 
-pub fn bootstrap(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) ![]const []const u8 {
-    var database = try open(gpa, io);
-    return tables(arena, &database);
-}
+const persistent = studio.persistent;
 
-pub fn exec(gpa: std.mem.Allocator, io: std.Io, sql: []const u8) Result {
-    var database = open(gpa, io) catch |err| return .{ .err = @errorName(err) };
-    return studio.exec(&database, gpa, sql);
-}
-
-pub fn listTables(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) ![]const []const u8 {
-    var database = try open(gpa, io);
-    return tables(arena, &database);
-}
-
-fn open(gpa: std.mem.Allocator, io: std.Io) !zx.Db {
+pub fn open(io: std.Io) !zx.Db {
     if (comptime !zx.platform.isServer()) return error.Unsupported;
 
     try mu.lock(io);
     defer mu.unlock(io);
     if (cached) |db| return db;
 
-    const url = try zx.secrets.require(gpa, "POSTGRES_URL");
-    defer gpa.free(url);
+    const url = try zx.secrets.require(persistent, "POSTGRES_URL");
+    defer persistent.free(url);
 
-    var database = try zx.Db.Postgres.open(gpa, io, url, .{});
+    // One connection: concurrent check/run requests queue on it instead of opening more.
+    var database = try zx.Db.Postgres.open(persistent, io, url, .{ .max_pool_size = 1 });
     errdefer database.deinit();
     try seed(&database);
     cached = database;
@@ -62,16 +63,4 @@ fn seed(database: *zx.Db) !void {
         \\  (3, 'Grace', 'grace@example.com')
         \\ON CONFLICT (id) DO NOTHING
     , .empty);
-}
-
-fn tables(gpa: std.mem.Allocator, database: *zx.Db) ![]const []const u8 {
-    const rows = try database.all(gpa,
-        \\SELECT tablename AS name
-        \\FROM pg_catalog.pg_tables
-        \\WHERE schemaname = 'public'
-        \\ORDER BY tablename
-    , .empty);
-    const out = try gpa.alloc([]const u8, rows.len);
-    for (rows, out) |row, *name| name.* = try gpa.dupe(u8, row.text("name"));
-    return out;
 }

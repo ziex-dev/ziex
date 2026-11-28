@@ -99,7 +99,7 @@ fn ZxDb(comptime cached: bool) type {
         }
 
         fn fetch(self: *Self) !u64 {
-            var stmt = try self.db.prepare(fetch_sql);
+            var stmt = try self.db.prepare(fetch_sql, .{});
             defer stmt.deinit();
             var it = try stmt.iterate(.{});
             defer it.deinit();
